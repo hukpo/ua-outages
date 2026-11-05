@@ -1,3 +1,4 @@
+import { dtekProvider } from './dtek.js'
 import type { Provider } from './provider.js'
 import { yasnoProvider } from './yasno.js'
 
@@ -38,6 +39,34 @@ export function createProviders(): Provider[] {
       regionId: 3,
       dsoId: 303,
       hasCities: true,
+    }),
+    dtekProvider({
+      info: {
+        id: 'odesa',
+        name: 'Одеська область',
+        operator: 'ДТЕК Одеські електромережі',
+        website: 'https://www.dtek-oem.com.ua/ua/shutdowns',
+      },
+      code: 'oem',
+      sampleAddress: { city: 'Одеса', street: 'вул. Варненська', house: '1' },
+    }),
+    dtekProvider({
+      info: {
+        id: 'kyiv-region',
+        name: 'Київська область',
+        operator: 'ДТЕК Київські регіональні електромережі',
+        website: 'https://www.dtek-krem.com.ua/ua/shutdowns',
+      },
+      code: 'krem',
+    }),
+    dtekProvider({
+      info: {
+        id: 'donetsk',
+        name: 'Донецька область',
+        operator: 'ДТЕК Донецькі електромережі',
+        website: 'https://www.dtek-dem.com.ua/ua/shutdowns',
+      },
+      code: 'dem',
     }),
   ]
 }

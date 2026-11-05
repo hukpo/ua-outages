@@ -23,7 +23,7 @@ export interface RequestOptions {
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
 
 /** Markers of bot-protection pages served instead of the real content. */
-const BLOCK_MARKERS = ['_Incapsula_Resource', 'cf-browser-verification', 'cf_chl_', 'Attention Required!']
+const BLOCK_MARKERS = ['_Incapsula_Resource', 'Incapsula incident', 'cf-browser-verification', 'cf_chl_', 'Attention Required!']
 
 export class Http {
   private readonly fetchImpl: FetchLike
@@ -39,15 +39,21 @@ export class Http {
   }
 
   async text(url: string, opts: RequestOptions = {}): Promise<string> {
+    return (await this.raw(url, opts)).body
+  }
+
+  /** Body plus response headers (for cookies). */
+  async raw(url: string, opts: RequestOptions = {}): Promise<{ body: string; headers: Headers; status: number }> {
     const res = await this.request(url, opts)
     const body = await res.text()
-    if (BLOCK_MARKERS.some((m) => body.includes(m)))
+    // challenge pages are small; real pages may embed the same scripts, so size matters
+    if (body.length < 20_000 && BLOCK_MARKERS.some((m) => body.includes(m)))
       throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
         region: opts.region,
         url,
         status: res.status,
       })
-    return body
+    return { body, headers: res.headers, status: res.status }
   }
 
   async json<T = unknown>(url: string, opts: RequestOptions = {}): Promise<T> {
