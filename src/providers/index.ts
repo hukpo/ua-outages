@@ -3,9 +3,11 @@ import { dtekProvider } from './dtek.js'
 import { mykolaivProvider } from './mykolaiv.js'
 import { poltavaProvider } from './poltava.js'
 import { kharkivProvider } from './kharkiv.js'
+import { kirovohradProvider } from './kirovohrad.js'
 import type { Provider } from './provider.js'
 import { sumyProvider } from './sumy.js'
 import { zaporizhzhiaProvider } from './zaporizhzhia.js'
+import { zhytomyrProvider } from './zhytomyr.js'
 import { yasnoProvider } from './yasno.js'
 
 /** Built-in providers for every supported region. */
@@ -80,5 +82,7 @@ export function createProviders(): Provider[] {
     zaporizhzhiaProvider(),
     cherkasyProvider(),
     sumyProvider(),
+    zhytomyrProvider(),
+    kirovohradProvider(),
   ]
 }
