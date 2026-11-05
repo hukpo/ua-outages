@@ -62,6 +62,25 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 
 "Address" means the SDK can turn an address into a group. Regions marked "image only" publish the schedule only as a picture; the SDK still finds the group, but `getSchedules` throws `unsupported`.
 
+### Why some regions are missing
+
+Kyiv region and Donetsk (DTEK sites) answer automated clients with a bot check, so these providers report `blocked`. Vinnytsia and Chernihiv keep their data behind a captcha, and Kherson publishes no schedule, so they have no provider. This SDK does not try to get around access controls.
+
+If an operator grants you access (an allowlisted server, an API key, a data-sharing agreement), pass a `fetch` that applies it. Providers make every request through it:
+
+```ts
+const outages = new OutageClient({
+  fetch: (url, init) => {
+    // e.g. route DTEK requests through the server the operator allowlisted for you
+    if (url.startsWith('https://www.dtek-krem.com.ua/'))
+      return fetch(url.replace('https://www.dtek-krem.com.ua', ALLOWLISTED_PROXY), init)
+    return fetch(url, init)
+  },
+})
+```
+
+The same option works for proxies, caching, logging and tests. When an operator opens its data publicly, as YASNO did for Kyiv and Dnipro, support follows; issues and contacts at operators are welcome.
+
 ## API
 
 ### `new OutageClient(options?)`
