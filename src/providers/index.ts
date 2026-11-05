@@ -1,8 +1,10 @@
+import { cherkasyProvider } from './cherkasy.js'
 import { dtekProvider } from './dtek.js'
 import { mykolaivProvider } from './mykolaiv.js'
 import { poltavaProvider } from './poltava.js'
 import { kharkivProvider } from './kharkiv.js'
 import type { Provider } from './provider.js'
+import { sumyProvider } from './sumy.js'
 import { zaporizhzhiaProvider } from './zaporizhzhia.js'
 import { yasnoProvider } from './yasno.js'
 
@@ -76,5 +78,7 @@ export function createProviders(): Provider[] {
     poltavaProvider(),
     kharkivProvider(),
     zaporizhzhiaProvider(),
+    cherkasyProvider(),
+    sumyProvider(),
   ]
 }
