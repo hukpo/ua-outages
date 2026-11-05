@@ -31,7 +31,10 @@ const pad = (n: number) => String(n).padStart(2, '0')
 export function findUaDate(text: string, now: Date): string | null {
   const lower = text.toLowerCase()
   const named = new RegExp(`(\\d{1,2})\\s+(${Object.keys(MONTHS).join('|')})(?:\\s+(\\d{4}))?`).exec(lower)
-  const numeric = /\b(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\b/.exec(lower)
+  // two-digit month only: "3.1" is a group, not 3 January; skip impossible ones like "21.25"
+  const numeric = [...lower.matchAll(/\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b/g)].find(
+    (m) => Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[1]) >= 1 && Number(m[1]) <= 31,
+  )
   const pickFirst = named && numeric ? (named.index <= numeric.index ? 'named' : 'numeric') : named ? 'named' : numeric ? 'numeric' : null
   if (!pickFirst) return null
   const [day, month, year] =
@@ -77,10 +80,11 @@ export function parseGroupLines(text: string, kind: 'off' | 'maybe' = 'off'): Re
   for (const rawLine of text.split(/\n|<br\s*\/?>|<\/p>|<\/li>|<\/div>/i)) {
     const line = rawLine.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim()
     if (!line) continue
-    // group tokens before the first time range: "1.1", "1.1.", "Черга 1.1", "Групи 1.1, 1.2"
+    // group tokens before the first time range: "1.1", "1.1.", "Черга 1.1", "Групи 1.1, 1.2".
+    // Subgroups are 1 or 2, so "в обсязі 2.5 черги" is not a group.
     const firstTime = line.search(/\d{1,2}[:.]\d{2}\s*(?:[-–—−]|до|по)/)
     const head = firstTime === -1 ? line : line.slice(0, firstTime)
-    const groups = [...head.matchAll(/(?<![\d:.])(\d{1,2})\s*[.,]\s*(\d)(?!\d)/g)]
+    const groups = [...head.matchAll(/(?<![\d:.])(\d{1,2})\s*[.,]\s*([12])(?!\d)/g)]
       .map((m) => normalizeGroup(`${m[1]}.${m[2]}`))
       .filter((g): g is string => !!g)
     if (!groups.length) continue

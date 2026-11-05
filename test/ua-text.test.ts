@@ -44,3 +44,10 @@ describe('Ukrainian schedule text', () => {
     expect(Object.keys(parseGroupLines('Оновлено о 21.25'))).toEqual([])
   })
 })
+
+describe('dates vs group numbers', () => {
+  it('does not read a group as a date', () => {
+    expect(findUaDate('3.1 00:00-03:00', NOW)).toBeNull()
+    expect(findUaDate('о 21.25, графік на 06.11', NOW)).toBe('2026-11-06')
+  })
+})
