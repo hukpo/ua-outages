@@ -1,0 +1,21 @@
+name: Source health
+
+# Grid operators change their sites without notice. This hits every live source daily and
+# fails (so GitHub emails the maintainers) when a parser or lookup breaks.
+# Note: runners are outside Ukraine; a source that blocks foreign IPs shows up as `blocked`.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run health -- --address
