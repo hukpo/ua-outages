@@ -63,8 +63,8 @@ describe('Khmelnytskoblenergo', () => {
   it('splits the settlement name from its community', async () => {
     const cities = await client().client.searchCities('khmelnytskyi', 'Хмелівка')
     expect(cities).toEqual([
-      { id: '26030', name: 'с. Хмелівка', district: 'Городоцька громада' },
-      { id: '26772', name: 'с. Хмелівка', district: 'Михайлюцька громада' },
+      { id: '26030', name: 'с. Хмелівка', district: 'Городоцька громада', score: 1 },
+      { id: '26772', name: 'с. Хмелівка', district: 'Михайлюцька громада', score: 1 },
     ])
     await expect(
       client().client.findGroup('khmelnytskyi', { city: 'Хмелівка', street: 'Проскурівська', house: '1' }),

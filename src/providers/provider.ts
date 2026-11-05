@@ -12,9 +12,19 @@ export interface ProviderContext {
  *
  * Address search is a chain: cities → streets → houses → group. Regions served by a
  * single-city operator (e.g. Kyiv) skip `searchCities`.
+ *
+ * `searchCities` / `searchStreets` return *candidates*: the whole directory when the provider
+ * has it, or what the operator's server found for the query. The client ranks them with a
+ * typo-tolerant matcher, so providers should not filter by name themselves.
  */
 export interface Provider {
   readonly info: RegionInfo
+  /**
+   * Set when the operator's server does the name search (substring match) instead of the
+   * provider holding a directory. The client then also queries word fragments, so a typo in
+   * one part of a name still finds it.
+   */
+  readonly remoteSearch?: { cities?: boolean; streets?: boolean }
   /** A real public address used by the health check to verify the lookup still works */
   readonly sampleAddress?: AddressQuery
   getSchedules(ctx: ProviderContext): Promise<RegionSchedule>

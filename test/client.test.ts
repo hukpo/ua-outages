@@ -242,3 +242,63 @@ describe('villages with the same name', () => {
     expect(m.group).toBe('2.2')
   })
 })
+
+describe('forgiving street search', () => {
+  /** A provider whose "server" only does exact substring search, like YASNO */
+  function remoteProvider(calls: string[]) {
+    const all = ['вул. Хрещатик', 'вул. Набережно-Хрещатицька', 'вул. Прорізна']
+    return fakeProvider({
+      remoteSearch: { streets: true },
+      searchStreets: async (_ctx, q) => {
+        calls.push(q)
+        return all
+          .filter((n) => n.toLowerCase().includes(q.toLowerCase()))
+          .map((name, i) => ({ id: `s${i}${name}`, name }))
+      },
+    })
+  }
+
+  it('finds a misspelled street on a substring-only server through fragments', async () => {
+    const calls: string[] = []
+    const streets = await client(remoteProvider(calls)).searchStreets('kyiv', 'Хрищатик')
+    expect(streets[0]!.name).toBe('вул. Хрещатик')
+    expect(calls.length).toBeGreaterThan(1)
+  })
+
+  it('does not send fragments when the query already matches well', async () => {
+    const calls: string[] = []
+    await client(remoteProvider(calls)).searchStreets('kyiv', 'Прорізна')
+    expect(calls).toEqual(['Прорізна'])
+  })
+
+  it('returns scores and respects the limit', async () => {
+    const streets = await client(fakeProvider()).searchStreets('kyiv', 'Хрещ', { limit: 1 })
+    expect(streets).toHaveLength(1)
+    expect(streets[0]).toMatchObject({ name: 'вул. Хрещатик', score: expect.any(Number) })
+  })
+
+  it('findGroup accepts a misspelled street', async () => {
+    expect((await client(fakeProvider()).findGroup('kyiv', { street: 'Крещатик', house: '1' })).group).toBe(
+      '1.1',
+    )
+  })
+
+  it('suggests streets when nothing is close enough', async () => {
+    await expect(
+      client(fakeProvider()).findGroup('kyiv', { street: 'Хрестовий', house: '1' }),
+    ).rejects.toThrow(/Did you mean|No street matches/)
+  })
+
+  it('caches a directory between keystrokes', async () => {
+    let n = 0
+    const p = fakeProvider({
+      searchStreets: async () => {
+        n++
+        return [{ id: 's1', name: 'вул. Хрещатик' }]
+      },
+    })
+    const c = client(p)
+    for (const q of ['Х', 'Хр', 'Хре', 'Хрещ']) await c.searchStreets('kyiv', q)
+    expect(n).toBe(1)
+  })
+})

@@ -3,7 +3,8 @@ import { Http, type HttpOptions } from './http.js'
 import { createProviders } from './providers/index.js'
 import type { Provider, ProviderContext } from './providers/provider.js'
 import { normalizeGroup } from './schedule.js'
-import { bestMatch, matchScore, normalizeHouse } from './text.js'
+import { fuzzyScore, rankByName, searchFragments, type NameKind } from './fuzzy.js'
+import { normalizeHouse } from './text.js'
 import type {
   AddressQuery,
   City,
@@ -60,6 +61,7 @@ export class OutageClient {
   private readonly providers: ReadonlyMap<RegionId, Provider>
   private readonly cacheTtlMs: number
   private readonly cache = new Map<RegionId, { at: number; value: Promise<RegionSchedule> }>()
+  private readonly searchCache = new Map<string, { at: number; value: Promise<unknown[]> }>()
 
   constructor(opts: OutageClientOptions = {}) {
     this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()) }
@@ -69,11 +71,21 @@ export class OutageClient {
 
   /** Every supported region with what it can do. */
   regions(): RegionInfo[] {
-    return [...this.providers.values()].map((p) => p.info)
+    return [...this.providers.values()].map((p) => this.describe(p))
   }
 
   region(id: RegionId): RegionInfo {
-    return this.provider(id).info
+    return this.describe(this.provider(id))
+  }
+
+  private describe(p: Provider): RegionInfo {
+    return {
+      ...p.info,
+      capabilities: {
+        ...p.info.capabilities,
+        streetSearch: !!(p.searchStreets && p.searchHouses && p.groupOf),
+      },
+    }
   }
 
   // --- schedules ---
@@ -108,14 +120,55 @@ export class OutageClient {
 
   // --- address search ---
 
-  async searchCities(region: RegionId, query: string): Promise<City[]> {
+  /**
+   * Settlements matching what the user typed, best first. Forgiving: typos, missing "м."/"с.",
+   * Russian-style spelling. Empty for single-city regions (e.g. Kyiv).
+   */
+  async searchCities(
+    region: RegionId,
+    query: string,
+    opts: SearchOptions & { district?: string } = {},
+  ): Promise<City[]> {
     const p = this.provider(region)
     if (!p.searchCities) return []
-    return p.searchCities(this.ctx, query)
+    const found = await this.rankedSearch(
+      region,
+      'settlement',
+      query,
+      'cities',
+      !!p.remoteSearch?.cities,
+      (q) => p.searchCities!(this.ctx, q),
+      opts.district ? MAX_CANDIDATES : (opts.limit ?? DEFAULT_LIMIT),
+    )
+    if (!opts.district) return found
+    const district = opts.district
+    return found
+      .filter((c) => !c.district || fuzzyScore(district, c.district, 'settlement') >= 0.6)
+      .slice(0, opts.limit ?? DEFAULT_LIMIT)
   }
 
-  async searchStreets(region: RegionId, query: string, opts: { city?: City } = {}): Promise<Street[]> {
-    return this.addressProvider(region).searchStreets!(this.ctx, query, opts.city)
+  /**
+   * Streets matching what the user typed, best first, for autocomplete. Forgiving: typos
+   * ("Хрищатик"), no street type, any word order, a skipped first name ("Шевченка" for
+   * "Тараса Шевченка"), "и" for "і", a word typed halfway. Each result carries a `score` (0..1).
+   */
+  async searchStreets(
+    region: RegionId,
+    query: string,
+    opts: SearchOptions & { city?: City } = {},
+  ): Promise<Street[]> {
+    const p = this.addressProvider(region)
+    if (p.searchCities && !opts.city)
+      throw new OutageError('not-found', `${p.info.name}: pick a city first`, { region })
+    return this.rankedSearch(
+      region,
+      'street',
+      query,
+      `streets:${opts.city?.id ?? ''}`,
+      !!p.remoteSearch?.streets,
+      (q) => p.searchStreets!(this.ctx, q, opts.city),
+      opts.limit ?? DEFAULT_LIMIT,
+    )
   }
 
   async searchHouses(region: RegionId, street: Street, query?: string): Promise<House[]> {
@@ -128,8 +181,22 @@ export class OutageClient {
   }
 
   /**
-   * Finds the outage group of an address in one call. Throws `not-found` when the street or
-   * house can't be matched unambiguously; the message lists the closest candidates.
+   * Loads a region's settlement list (and a city's streets) ahead of time, so the first
+   * keystrokes of an autocomplete don't wait for the operator. Optional.
+   */
+  async prefetch(region: RegionId, opts: { city?: City } = {}): Promise<void> {
+    const p = this.provider(region)
+    if (p.searchCities && !p.remoteSearch?.cities)
+      await this.candidates(region, 'cities', '', false, (q) => p.searchCities!(this.ctx, q))
+    if (opts.city && p.searchStreets && !p.remoteSearch?.streets)
+      await this.candidates(region, `streets:${opts.city.id}`, '', false, (q) =>
+        p.searchStreets!(this.ctx, q, opts.city),
+      )
+  }
+
+  /**
+   * Finds the outage group of an address in one call. Names may be misspelled; when the street
+   * or settlement can't be picked with confidence, throws `not-found` listing the suggestions.
    */
   async findGroup(region: RegionId, address: AddressQuery): Promise<GroupMatch> {
     const direct = this.provider(region)
@@ -140,24 +207,14 @@ export class OutageClient {
     if (p.searchCities) {
       if (!address.city)
         throw new OutageError('not-found', `${p.info.name}: specify a city or village`, { region })
-      let cities = await p.searchCities(this.ctx, address.city)
-      if (address.district) {
-        const district = address.district
-        cities = cities.filter((c) => !c.district || matchScore(district, c.district, 'settlement') > 0)
-      }
-      city = pick(
-        address.city,
-        cities,
-        (c) => c.name,
-        'settlement',
-        'city',
-        region,
-        (c) => (c.district ? `${c.name} (${c.district})` : c.name),
+      const cities = await this.searchCities(region, address.city, { limit: 10, district: address.district })
+      city = choose(address.city, cities, 'city', region, (c) =>
+        c.district ? `${c.name} (${c.district})` : c.name,
       )
     }
 
-    const streets = await p.searchStreets!(this.ctx, address.street, city)
-    const street = pick(address.street, streets, (s) => s.name, 'street', 'street', region)
+    const streets = await this.searchStreets(region, address.street, { city, limit: 10 })
+    const street = choose(address.street, streets, 'street', region, (s) => s.name)
 
     const houses = await p.searchHouses!(this.ctx, street, address.house)
     const want = normalizeHouse(address.house)
@@ -174,6 +231,56 @@ export class OutageClient {
         { region },
       )
     return p.groupOf!(this.ctx, house, street, city)
+  }
+
+  /**
+   * Ranks a provider's candidates. Providers with a directory return it whole (cached here);
+   * providers whose operator searches server-side get the query, plus word fragments when the
+   * query alone finds little, so a typo in one part of the name still lands.
+   */
+  private async rankedSearch<T extends { id: string; name: string }>(
+    region: RegionId,
+    kind: NameKind,
+    query: string,
+    scope: string,
+    remote: boolean,
+    fetch: (q: string) => Promise<T[]>,
+    limit: number,
+  ): Promise<(T & { score: number })[]> {
+    if (!query.trim()) return []
+    let pool = await this.candidates(region, scope, query, remote, fetch)
+    let ranked = rankByName(query, pool, (t) => t.name, kind)
+    // a typo defeats the operator's substring search: retry with fragments of the word
+    if (remote && (ranked[0]?.score ?? 0) < 0.9) {
+      const extra = await Promise.all(
+        searchFragments(query, kind).map((f) =>
+          this.candidates(region, scope, f, true, fetch).catch(() => []),
+        ),
+      )
+      const seen = new Map(pool.map((t) => [t.id, t]))
+      for (const t of extra.flat()) if (!seen.has(t.id)) seen.set(t.id, t)
+      pool = [...seen.values()]
+      ranked = rankByName(query, pool, (t) => t.name, kind)
+    }
+    return ranked.slice(0, limit).map((r) => ({ ...r.item, score: Math.round(r.score * 100) / 100 }))
+  }
+
+  /** Candidate lists, cached briefly: whole directories per scope, server results per term. */
+  private candidates<T>(
+    region: RegionId,
+    scope: string,
+    query: string,
+    remote: boolean,
+    fetch: (q: string) => Promise<T[]>,
+  ): Promise<T[]> {
+    const key = `${region}|${scope}|${remote ? query.trim().toLowerCase() : ''}`
+    const hit = this.searchCache.get(key)
+    if (hit && Date.now() - hit.at < Math.max(this.cacheTtlMs, 60_000)) return hit.value as Promise<T[]>
+    const value = fetch(query)
+    if (this.searchCache.size > 500) this.searchCache.clear()
+    this.searchCache.set(key, { at: Date.now(), value })
+    value.catch(() => this.searchCache.delete(key))
+    return value
   }
 
   // --- health ---
@@ -258,22 +365,46 @@ export class OutageClient {
   }
 }
 
-function pick<T>(
+/**
+ * Picks the one result the user meant, or explains why not: nothing close enough, or several
+ * equally good ("Соборна" is both a вулиця and a площа).
+ */
+function choose<T extends { score?: number }>(
   query: string,
-  items: readonly T[],
-  name: (t: T) => string,
-  kind: 'street' | 'settlement',
-  label: string,
+  ranked: readonly T[],
+  label: 'city' | 'street',
   region: RegionId,
-  describe: (t: T) => string = name,
+  describe: (t: T) => string,
 ): T {
-  const m = bestMatch(query, items, name, kind)
-  if (!m) throw new OutageError('not-found', `No ${label} matches "${query}"`, { region })
-  if (m.ambiguous)
+  const [top, second] = ranked
+  if (!top) throw new OutageError('not-found', `No ${label} matches "${query}"`, { region })
+  const suggestions = (list: readonly T[]) => list.slice(0, 6).map(describe).join('; ')
+  if ((top.score ?? 0) < CONFIDENT)
     throw new OutageError(
       'not-found',
-      `"${query}" matches several: ${items.slice(0, 8).map(describe).join('; ')}. Be more specific${kind === 'settlement' ? ' or pass a district' : ''}.`,
+      `No ${label} matches "${query}" well. Did you mean: ${suggestions(ranked)}?`,
+      {
+        region,
+      },
+    )
+  if (second && (second.score ?? 0) >= (top.score ?? 0) - TIE)
+    throw new OutageError(
+      'not-found',
+      `"${query}" matches several: ${suggestions(ranked.filter((r) => (r.score ?? 0) >= (top.score ?? 0) - 0.1))}. Be more specific${label === 'city' ? ' or pass a district' : ' (add the street type)'}.`,
       { region },
     )
-  return m.item
+  return top
+}
+
+/** Results per search unless the caller asks otherwise */
+const DEFAULT_LIMIT = 10
+const MAX_CANDIDATES = 200
+/** findGroup picks a name automatically only at or above this score… */
+const CONFIDENT = 0.7
+/** …and only when the runner-up is further behind than this */
+const TIE = 0.025
+
+export interface SearchOptions {
+  /** Max results, default 10 */
+  limit?: number
 }

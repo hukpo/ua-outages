@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { compareGroups, normalizeGroup } from '../schedule.js'
-import { matchScore, normalizeSettlement, normalizeStreet } from '../text.js'
+import { normalizeSettlement, normalizeStreet } from '../text.js'
 import type { City, GroupId, GroupMatch, RegionInfo } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 
@@ -39,6 +39,7 @@ export function khmelnytskyiProvider(): Provider {
 
   return {
     info: INFO,
+    remoteSearch: { cities: true, streets: true },
     sampleAddress: { city: 'Хмельницький', street: 'вул. Проскурівська', house: '2' },
 
     async getSchedules() {
@@ -55,7 +56,7 @@ export function khmelnytskyiProvider(): Provider {
         ctx,
         `/settlements/?term=${encodeURIComponent(searchTerm(normalizeSettlement(query)))}`,
       )
-      return found.map((o) => parseSettlement(o)).filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return found.map((o) => parseSettlement(o))
     },
 
     async searchStreets(ctx, query, city) {
@@ -65,9 +66,7 @@ export function khmelnytskyiProvider(): Provider {
         ctx,
         `/streets/${city.id}?term=${encodeURIComponent(searchTerm(normalizeStreet(query)))}`,
       )
-      return found
-        .map((o) => ({ id: String(o.id), name: o.text.trim(), cityId: city.id }))
-        .filter((s) => matchScore(query, s.name) > 0)
+      return found.map((o) => ({ id: String(o.id), name: o.text.trim(), cityId: city.id }))
     },
 
     async searchHouses(ctx, street) {

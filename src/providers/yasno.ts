@@ -65,6 +65,8 @@ export function yasnoProvider(o: YasnoOptions): Provider {
 
   const provider: Provider = {
     info: { ...o.info, capabilities: { schedule: true, addressSearch: true } },
+    // cities: the whole list (~1100 for Dnipro region) comes in one request; streets: server search
+    remoteSearch: { streets: true },
     sampleAddress: o.sampleAddress,
 
     async getSchedules(ctx) {
@@ -112,7 +114,8 @@ export function yasnoProvider(o: YasnoOptions): Provider {
 
   if (o.hasCities)
     provider.searchCities = async (ctx, query): Promise<City[]> => {
-      const items = await list(ctx, 'cities', { query: query.trim() })
+      // without a query the API returns every settlement; the client ranks them
+      const items = await list(ctx, 'cities', {})
       return items.map((c) => ({ id: String(c.id), name: c.value }))
     }
 

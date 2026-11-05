@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups } from '../schedule.js'
-import { matchScore, normalizeHouse } from '../text.js'
+import { normalizeHouse } from '../text.js'
 import { toKyivIso } from '../time.js'
 import type {
   City,
@@ -114,16 +114,14 @@ export function zhytomyrProvider(): Provider {
         settlements = null
         throw e
       })
-      return (await settlements).filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return settlements
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${INFO.name}: pick a city first`, { region })
       const [rem, settlement] = splitCityId(city.id)
       const streets = parseOptions(await page(ctx, { rem_id: rem, naspunkt_id: settlement }), 'vulica_id')
-      return streets
-        .map((s): Street => ({ id: s.id, name: s.name, cityId: city.id }))
-        .filter((s) => matchScore(query, s.name) > 0)
+      return streets.map((s): Street => ({ id: s.id, name: s.name, cityId: city.id }))
     },
 
     async searchHouses(ctx, street) {

@@ -24,7 +24,11 @@ function client(queues = fixture('zakarpattia/pw_address_queues.city-769.street-
 describe('Zakarpattiaoblenergo', () => {
   it('has no machine-readable schedule', async () => {
     const { client: c, calls } = client()
-    expect(c.region('zakarpattia').capabilities).toEqual({ schedule: false, addressSearch: true })
+    expect(c.region('zakarpattia').capabilities).toMatchObject({
+      schedule: false,
+      addressSearch: true,
+      streetSearch: true,
+    })
     await expect(c.getSchedules('zakarpattia')).rejects.toThrow(
       expect.objectContaining({ code: 'unsupported' }),
     )
@@ -88,6 +92,6 @@ describe('Zakarpattiaoblenergo', () => {
 
   it('drops the nameless settlement and names the hromada', async () => {
     const cities = await client().client.searchCities('zakarpattia', 'Ужгород')
-    expect(cities).toEqual([{ id: '769', name: 'Ужгород', district: 'Ужгородська громада' }])
+    expect(cities).toEqual([{ id: '769', name: 'Ужгород', district: 'Ужгородська громада', score: 1 }])
   })
 })

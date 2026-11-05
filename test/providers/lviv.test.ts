@@ -126,6 +126,7 @@ describe('Lvivoblenergo', () => {
       id: '693',
       name: 'Львів',
       district: 'Львівська громада',
+      score: 1,
     })
   })
 

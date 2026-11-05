@@ -123,12 +123,12 @@ export function chernivtsiProvider(): Provider {
         nameDuplicates,
       )
       allCities.catch(() => (allCities = null))
-      return (await allCities).filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return allCities
     },
 
     async searchStreets(ctx, query, city) {
       const entry = await cityEntry(ctx, city)
-      return [...entry.streets.values()].map((s) => s.street).filter((s) => matchScore(query, s.name) > 0)
+      return [...entry.streets.values()].map((s) => s.street)
     },
 
     async searchHouses(ctx, street) {

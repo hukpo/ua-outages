@@ -1,6 +1,5 @@
 import { OutageError } from '../errors.js'
 import { normalizeGroup } from '../schedule.js'
-import { matchScore } from '../text.js'
 import type { AddressQuery, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -118,13 +117,13 @@ export function dtekProvider(o: DtekOptions): Provider {
 
     async searchCities(ctx, query) {
       const s = await ensure(ctx)
-      return filterByName(Object.keys(s.streets), query, 'settlement').map((name) => ({ id: name, name }))
+      return Object.keys(s.streets).map((name) => ({ id: name, name }))
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${o.info.name}: pick a city first`, { region })
       const s = await ensure(ctx)
-      return filterByName(s.streets[city.id] ?? [], query, 'street').map((name) => ({
+      return (s.streets[city.id] ?? []).map((name) => ({
         id: name,
         name,
         cityId: city.id,
@@ -171,13 +170,4 @@ export function parseDisconScript(html: string): Record<string, unknown> {
     }
   }
   return out
-}
-
-function filterByName(names: string[], query: string, kind: 'street' | 'settlement'): string[] {
-  return names
-    .map((n) => ({ n, s: matchScore(query, n, kind) }))
-    .filter((x) => x.s > 0)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 50)
-    .map((x) => x.n)
 }

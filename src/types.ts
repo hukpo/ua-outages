@@ -40,8 +40,10 @@ export interface RegionInfo {
   capabilities: {
     /** False when the operator publishes the schedule only as an image; `getSchedules` then throws `unsupported` */
     schedule: boolean
-    /** Can find a group from a street address */
+    /** Can find a group from a street address (`findGroup`) */
     addressSearch: boolean
+    /** Has street/settlement directories for autocomplete (`searchStreets`); filled in by the client */
+    streetSearch?: boolean
   }
 }
 
@@ -99,6 +101,8 @@ export interface RegionSchedule {
 export interface City {
   id: string
   name: string
+  /** How well it matched the search, 0..1 (search results only) */
+  score?: number
   /** District / community, when the source gives it */
   district?: string
 }
@@ -106,6 +110,8 @@ export interface City {
 export interface Street {
   id: string
   name: string
+  /** How well it matched the search, 0..1 (search results only) */
+  score?: number
   cityId?: string
 }
 

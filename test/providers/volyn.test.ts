@@ -22,7 +22,11 @@ function client(body = RESULT) {
 describe('Volynoblenergo', () => {
   it('has no machine-readable schedule', async () => {
     const c = client().client
-    expect(c.region('volyn').capabilities).toEqual({ schedule: false, addressSearch: true })
+    expect(c.region('volyn').capabilities).toMatchObject({
+      schedule: false,
+      addressSearch: true,
+      streetSearch: false,
+    })
     await expect(c.getSchedules('volyn')).rejects.toMatchObject({ code: 'unsupported' })
     expect((await c.healthCheck()).regions[0]).toMatchObject({ status: 'empty' })
   })

@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, type MinuteSlot } from '../schedule.js'
-import { normalizeSettlement, normalizeStreet, matchScore } from '../text.js'
+import { normalizeSettlement, normalizeStreet } from '../text.js'
 import { kyivDate, parseClock, toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import { parseUaDateTime } from './gpv.js'
@@ -78,6 +78,7 @@ export function sumyProvider(): Provider {
 
   return {
     info: INFO,
+    remoteSearch: { cities: true, streets: true },
     sampleAddress: { city: 'Шостка', street: 'вул. Шевченка', house: '14' },
 
     async getSchedules(ctx) {
@@ -88,15 +89,13 @@ export function sumyProvider(): Provider {
       const token = searchToken(normalizeSettlement(query))
       if (!token) return []
       const rows = await list<[number, string]>(ctx, `cities?search=${encodeURIComponent(token)}`)
-      return rows
-        .map(([id, label]) => {
-          // "м.Шостка (Шосткинський Район/М.Шостка)"
-          const m = /^(.*?)\s*\((.*)\)\s*$/.exec(label)
-          const city: City = { id: String(id), name: (m?.[1] ?? label).trim() }
-          if (m?.[2]) city.district = m[2].trim()
-          return city
-        })
-        .filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return rows.map(([id, label]) => {
+        // "м.Шостка (Шосткинський Район/М.Шостка)"
+        const m = /^(.*?)\s*\((.*)\)\s*$/.exec(label)
+        const city: City = { id: String(id), name: (m?.[1] ?? label).trim() }
+        if (m?.[2]) city.district = m[2].trim()
+        return city
+      })
     },
 
     async searchStreets(ctx, query, city) {
@@ -108,9 +107,7 @@ export function sumyProvider(): Provider {
         ctx,
         `streets?cityId=${encodeURIComponent(city.id)}&search=${encodeURIComponent(token)}`,
       )
-      return rows
-        .map(([id, name]) => ({ id: String(id), name: name.trim(), cityId: city.id }))
-        .filter((s) => matchScore(query, s.name) > 0)
+      return rows.map(([id, name]) => ({ id: String(id), name: name.trim(), cityId: city.id }))
     },
 
     async searchHouses(ctx, street, query) {

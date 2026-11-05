@@ -1,6 +1,5 @@
 import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
-import { matchScore } from '../text.js'
 import { toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupMatch, IntervalKind, RegionInfo, RegionSchedule } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -81,7 +80,7 @@ export function poltavaProvider(): Provider {
         cities = null
         throw e
       })
-      return (await cities).filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return cities
     },
 
     async searchStreets(ctx, query, city) {
@@ -92,9 +91,7 @@ export function poltavaProvider(): Provider {
         city_id: Number(city.id),
         street_id: '',
       })
-      return list
-        .map((s) => ({ id: String(s.instance_id), name: s.instance_name.trim(), cityId: city.id }))
-        .filter((s) => matchScore(query, s.name) > 0)
+      return list.map((s) => ({ id: String(s.instance_id), name: s.instance_name.trim(), cityId: city.id }))
     },
 
     async searchHouses(ctx, street) {

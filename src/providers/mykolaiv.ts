@@ -1,7 +1,6 @@
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, type MinuteSlot } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
-import { matchScore } from '../text.js'
 import type { City, DaySchedule, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 
@@ -84,15 +83,13 @@ export function mykolaivProvider(): Provider {
         throw e
       })
       const all = await settlements
-      return all.filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return all
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${INFO.name}: pick a city first`, { region })
       const streets = await list<{ idstreet: number; nazstreet: string }>(ctx, `/addr/ns/${city.id}/street`)
-      return streets
-        .map((s) => ({ id: String(s.idstreet), name: s.nazstreet.trim(), cityId: city.id }))
-        .filter((s) => matchScore(query, s.name) > 0)
+      return streets.map((s) => ({ id: String(s.idstreet), name: s.nazstreet.trim(), cityId: city.id }))
     },
 
     async searchHouses(ctx, street) {

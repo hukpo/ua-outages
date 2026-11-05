@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { normalizeGroup } from '../schedule.js'
-import { matchScore, normalizeHouse } from '../text.js'
+import { normalizeHouse } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
 import type { City, GroupId, GroupMatch, House, RegionInfo, Street } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -146,7 +146,7 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
       const all = await cities
       if (!all.length)
         throw new OutageError('parse', `${opts.label}: the settlement list is empty`, { region })
-      return all.filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return all
     },
 
     async searchStreets(ctx, query, city) {
@@ -167,7 +167,7 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
         list.catch(() => streets.delete(city.id))
         streets.set(city.id, list)
       }
-      return (await list).filter((s) => matchScore(query, s.name) > 0)
+      return list
     },
 
     async searchHouses(ctx, street, query) {

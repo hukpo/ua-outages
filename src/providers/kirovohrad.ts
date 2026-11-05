@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
-import { matchScore, normalizeHouse } from '../text.js'
+import { normalizeHouse } from '../text.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type {
   City,
@@ -185,14 +185,16 @@ export function kirovohradProvider(): Provider {
         cities = null
         throw e
       })
-      return (await cities).filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      return cities
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${INFO.name}: pick a city first`, { region })
-      return (await list<ApiStreet>(ctx, `/street/${city.id}`))
-        .map((s): Street => ({ id: String(s.StreetId), name: streetName(s), cityId: city.id }))
-        .filter((s) => matchScore(query, s.name) > 0)
+      return (await list<ApiStreet>(ctx, `/street/${city.id}`)).map((s): Street => ({
+        id: String(s.StreetId),
+        name: streetName(s),
+        cityId: city.id,
+      }))
     },
 
     async searchHouses(ctx, street) {

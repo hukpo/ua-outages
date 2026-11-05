@@ -85,20 +85,36 @@ A `DaySchedule` is `{ date: 'YYYY-MM-DD', status, intervals }`:
 ### Address → group
 
 ```ts
-await outages.findGroup('dnipro', { city: 'Дніпро', street: 'просп. Дмитра Яворницького', house: '41' })
-// { region: 'dnipro', group: '5.1', address: { city, street, house } }
+await outages.findGroup('dnipro', { city: 'Днепр', street: 'проспект Яворницкого', house: '41' })
+// { region: 'dnipro', group: '5.1', address: { city: 'м. Дніпро', street: 'просп. Дмитра Яворницького', house: '41' } }
 ```
 
-Names are matched loosely: street types in any position, any apostrophe, latin/cyrillic look-alikes in house numbers ("12a" = "12А"). When the input fits several streets equally ("Яворницького" is both a вулиця and a проспект), `findGroup` throws `not-found` and lists the candidates; include the street type to disambiguate. Some buildings belong to more than one group; you get them in `otherGroups`.
+People rarely know a street's official name, so matching is forgiving:
 
-For an autocomplete UI, use the steps directly:
+| they type                           | finds                                                          |
+| ----------------------------------- | -------------------------------------------------------------- |
+| `Хрищатик`, `крещатик`              | вул. Хрещатик (typos)                                          |
+| `Адмиральская`, `Днепр`, `Киевская` | вул. Адміральська, м. Дніпро, вул. Київська (Russian spelling) |
+| `Тараса Шевченка`                   | вул. Шевченка (the directory omits the first name)             |
+| `Богдана Хмельницького`             | Хмельницького Б. (an initial)                                  |
+| `Центральний проспект`              | пр. Центральний (type in any position)                         |
+| `Шевч`                              | вул. Шевченка (still typing)                                   |
+
+`findGroup` picks a name on its own only when one match is clearly the best. Otherwise it throws `not-found` with suggestions, for example when "Соборна" is both a вулиця and a площа, or two villages share a name (pass `district` then). Some buildings belong to more than one group; you get those in `otherGroups`.
+
+#### Autocomplete
 
 ```ts
-const [city] = await outages.searchCities('dnipro', 'Дніпро')
-const streets = await outages.searchStreets('dnipro', 'Яворн', { city })
-const houses = await outages.searchHouses('dnipro', streets[0])
-const match = await outages.groupOf('dnipro', houses[0], streets[0], city)
+await outages.prefetch('lviv') // optional: load the settlement list before the user types
+
+const [city] = await outages.searchCities('lviv', 'Львов')
+const streets = await outages.searchStreets('lviv', 'Городоцк', { city, limit: 10 })
+// [{ id, name: 'Городоцька', score: 0.92 }, { name: 'Суха-Городоцька', score: 0.74 }, …]
+const houses = await outages.searchHouses('lviv', streets[0])
+const match = await outages.groupOf('lviv', houses[0], streets[0], city)
 ```
+
+Results come back ranked, best first, each with a `score` from 0 to 1. Most operators publish a whole directory: the SDK downloads it once and searches it locally, so later keystrokes cost nothing. For operators whose server does the searching (YASNO streets, Sumy, Khmelnytskyi), a misspelled query is also sent as word fragments, so a typo still finds the street. `capabilities.streetSearch` tells you whether a region supports autocomplete. Ivano-Frankivsk and Volyn only check a complete address, so there `findGroup` works but autocomplete doesn't.
 
 ### Helpers
 
@@ -108,6 +124,7 @@ intervalAt(days, at?)    // the interval covering an instant
 nextOutage(days, from?, { kinds?, includeCurrent? })  // joins outages across midnight
 minutesOf(day, kind?)    // total scheduled minutes
 normalizeGroup('Черга 3.1') // '3.1'
+fuzzyScore('Хрищатик', 'вул. Хрещатик') // 0..1, the matcher behind the search
 ```
 
 ### Health check
