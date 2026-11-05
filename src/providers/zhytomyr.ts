@@ -2,7 +2,17 @@ import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups } from '../schedule.js'
 import { matchScore, normalizeHouse } from '../text.js'
 import { toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupId, GroupMatch, House, IntervalKind, RegionInfo, RegionSchedule, Street } from '../types.js'
+import type {
+  City,
+  DaySchedule,
+  GroupId,
+  GroupMatch,
+  House,
+  IntervalKind,
+  RegionInfo,
+  RegionSchedule,
+  Street,
+} from '../types.js'
 import { parseUaDateTime } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mapLimit } from '../util.js'
@@ -90,11 +100,14 @@ export function zhytomyrProvider(): Provider {
       // The form has no settlement search: list every РЕМ's settlements once and keep them.
       settlements ??= (async () => {
         const rems = parseOptions(await page(ctx), 'rem_id')
-        if (!rems.length) throw new OutageError('parse', 'Zhytomyr: no РЕМ list on the search page', { region })
+        if (!rems.length)
+          throw new OutageError('parse', 'Zhytomyr: no РЕМ list on the search page', { region })
         const lists = await mapLimit(rems, 4, async (rem) =>
-          parseOptions(await page(ctx, { rem_id: rem.id }), 'naspunkt_id').map(
-            (s): City => ({ id: `${rem.id}:${s.id}`, name: s.name, district: `${rem.name} РЕМ` }),
-          ),
+          parseOptions(await page(ctx, { rem_id: rem.id }), 'naspunkt_id').map((s): City => ({
+            id: `${rem.id}:${s.id}`,
+            name: s.name,
+            district: `${rem.name} РЕМ`,
+          })),
         )
         return lists.flat()
       })().catch((e) => {
@@ -123,7 +136,8 @@ export function zhytomyrProvider(): Provider {
         await loadHouses(ctx, street)
         h = houseGroups.get(house.id)
       }
-      if (!h) throw new OutageError('not-found', `House "${house.number}" not found on ${street.name}`, { region })
+      if (!h)
+        throw new OutageError('not-found', `House "${house.number}" not found on ${street.name}`, { region })
       // a house is often listed both for households and for businesses inside it; people
       // asking by address are almost always households
       const groups = h.household.length ? h.household : h.business
@@ -167,11 +181,17 @@ export function parseSchedulePage(html: string, now: Date): RegionSchedule {
       const cells = [...slots.matchAll(/<td\b([^>]*)>/gi)].map((m) => {
         const colour = /background:\s*([#\w]+)/i.exec(m[1]!)?.[1]?.toLowerCase() ?? ''
         if (!(colour in COLOUR))
-          throw new OutageError('parse', `Zhytomyr: unknown slot colour "${colour}" for ${group} on ${date}`, { region })
+          throw new OutageError(
+            'parse',
+            `Zhytomyr: unknown slot colour "${colour}" for ${group} on ${date}`,
+            { region },
+          )
         return COLOUR[colour]!
       })
       if (cells.length !== 48)
-        throw new OutageError('parse', `Zhytomyr: group ${group} has ${cells.length} slots on ${date}`, { region })
+        throw new OutageError('parse', `Zhytomyr: group ${group} has ${cells.length} slots on ${date}`, {
+          region,
+        })
       ;(schedules[group] ??= []).push({ date, status: 'scheduled', intervals: cellsToIntervals(date, cells) })
       rows++
     }
@@ -206,7 +226,9 @@ export function parseAddressRows(html: string): AddressRow[] {
   const rows: AddressRow[] = []
   for (const tr of html.slice(found.index).matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
     const cells = [...tr[1]!.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((m) =>
-      decodeEntities(m[1]!.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim(),
+      decodeEntities(m[1]!.replace(/<[^>]+>/g, ' '))
+        .replace(/\s+/g, ' ')
+        .trim(),
     )
     // РЕМ | Населений пункт | Вулиця | Будинки | Черга | Підчерга | Примітка
     if (cells.length !== 7 || cells[4] === 'Черга') continue
@@ -215,7 +237,10 @@ export function parseAddressRows(html: string): AddressRow[] {
     if (!group && !EXEMPT.test(queue))
       throw new OutageError('parse', `Zhytomyr: unexpected queue "${queue}" / "${sub}"`, { region })
     rows.push({
-      houses: houses.split(',').map((h) => h.trim()).filter(Boolean),
+      houses: houses
+        .split(',')
+        .map((h) => h.trim())
+        .filter(Boolean),
       group,
       household: /^побутові/i.test(note),
     })
@@ -258,4 +283,3 @@ function decodeEntities(s: string): string {
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&')
 }
-

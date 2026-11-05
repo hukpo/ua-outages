@@ -23,7 +23,10 @@ function client(opts: { schedule?: string; search?: { file: string; status: numb
     },
   ])
   const now = () => new Date('2025-11-25T10:00:00+02:00')
-  return { client: new OutageClient({ fetch, now, cacheTtlMs: 0, providers: [ivanoFrankivskProvider()] }), calls }
+  return {
+    client: new OutageClient({ fetch, now, cacheTtlMs: 0, providers: [ivanoFrankivskProvider()] }),
+    calls,
+  }
 }
 
 describe('Prykarpattiaoblenergo', () => {
@@ -46,7 +49,14 @@ describe('Prykarpattiaoblenergo', () => {
 
   it('treats an empty group list on a published day as no outages', () => {
     const s = parseQueueSchedules(
-      [[{ eventDate: '25.11.2025', queues: { '1.1': [], '1.2': [{ from: '22:00', to: '24:00', status: 1 }] } }]],
+      [
+        [
+          {
+            eventDate: '25.11.2025',
+            queues: { '1.1': [], '1.2': [{ from: '22:00', to: '24:00', status: 1 }] },
+          },
+        ],
+      ],
       new Date(),
     )
     expect(s.schedules['1.1']![0]!.status).toBe('no-outages')
@@ -69,7 +79,11 @@ describe('Prykarpattiaoblenergo', () => {
 
   it('looks up a free-text address without type words', async () => {
     const { client: c, calls } = client()
-    const m = await c.findGroup('ivano-frankivsk', { city: 'м. Івано-Франківськ', street: 'вул. Галицька', house: '1' })
+    const m = await c.findGroup('ivano-frankivsk', {
+      city: 'м. Івано-Франківськ',
+      street: 'вул. Галицька',
+      house: '1',
+    })
     expect(m).toEqual({
       region: 'ivano-frankivsk',
       group: '3.2',
@@ -81,25 +95,29 @@ describe('Prykarpattiaoblenergo', () => {
   })
 
   it('reports every group of an address with several connections (HTTP 300)', async () => {
-    const m = await client({ search: { file: 'schedule-by-search.many-300.json', status: 300 } }).client.findGroup(
-      'ivano-frankivsk',
-      { city: 'Івано-Франківськ', street: 'Незалежності', house: '2' },
-    )
+    const m = await client({
+      search: { file: 'schedule-by-search.many-300.json', status: 300 },
+    }).client.findGroup('ivano-frankivsk', { city: 'Івано-Франківськ', street: 'Незалежності', house: '2' })
     expect(m).toMatchObject({ group: '1.1', otherGroups: ['1.2'] })
   })
 
   it('turns HTTP 404 into not-found', async () => {
     await expect(
-      client({ search: { file: 'schedule-by-search.not-found-404.json', status: 404 } }).client.findGroup('ivano-frankivsk', {
-        city: 'Калуш',
-        street: 'Шевченка',
-        house: '5',
-      }),
+      client({ search: { file: 'schedule-by-search.not-found-404.json', status: 404 } }).client.findGroup(
+        'ivano-frankivsk',
+        {
+          city: 'Калуш',
+          street: 'Шевченка',
+          house: '5',
+        },
+      ),
     ).rejects.toMatchObject({ code: 'not-found' })
   })
 
   it('needs a city', async () => {
-    await expect(client().client.findGroup('ivano-frankivsk', { street: 'Галицька', house: '1' })).rejects.toThrow(/city/)
+    await expect(
+      client().client.findGroup('ivano-frankivsk', { street: 'Галицька', house: '1' }),
+    ).rejects.toThrow(/city/)
   })
 
   it('strips address type words but keeps case', () => {

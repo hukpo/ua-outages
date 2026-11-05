@@ -3,7 +3,13 @@ import { compareGroups, makeDay, normalizeGroup } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionInfo, RegionSchedule } from '../types.js'
 import { parseUaDateTime } from './gpv.js'
-import { STANDARD_GROUPS, hydraList, powerOnAddressSearch, rankGroups, type PowerOnBuilding } from './poweron.js'
+import {
+  STANDARD_GROUPS,
+  hydraList,
+  powerOnAddressSearch,
+  rankGroups,
+  type PowerOnBuilding,
+} from './poweron.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { findUaDate, parseGroupLines } from './ua-text.js'
 
@@ -91,9 +97,11 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
   const region = INFO.id
   const [menu] = hydraList<{ menuItems?: MenuItem[] }>(data, 'Lviv menus', region)
   const items = menu?.menuItems
-  if (!Array.isArray(items)) throw new OutageError('parse', 'Lviv: no menu items in the schedule response', { region })
+  if (!Array.isArray(items))
+    throw new OutageError('parse', 'Lviv: no menu items in the schedule response', { region })
   const slots = items.filter((i) => i.name === 'Today' || i.name === 'Tomorrow')
-  if (!slots.length) throw new OutageError('parse', 'Lviv: no "Today"/"Tomorrow" items (format changed?)', { region })
+  if (!slots.length)
+    throw new OutageError('parse', 'Lviv: no "Today"/"Tomorrow" items (format changed?)', { region })
 
   /** date → the latest publication for it */
   const days = new Map<string, { updatedAt: string | null; groups: Record<GroupId, DaySchedule> }>()
@@ -106,7 +114,10 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
     const html = item.rawHtml?.trim() ?? ''
     const description = item.description?.trim() ?? ''
     if (html) {
-      const text = html.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ')
+      const text = html
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
       const date = /відключень\s+на\s+(\d{2}\.\d{2}\.\d{4})/i.exec(text)?.[1] ?? text
       const day = findUaDate(date, now)
       if (!day) throw new OutageError('parse', `Lviv ${item.name}: no date in the schedule text`, { region })
@@ -117,18 +128,23 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
         if (g) groups[g] = makeDay(day, slots)
       }
       if (!Object.keys(groups).length)
-        throw new OutageError('parse', `Lviv ${item.name}: schedule text without groups (format changed?)`, { region })
+        throw new OutageError('parse', `Lviv ${item.name}: schedule text without groups (format changed?)`, {
+          region,
+        })
       keep(day, updatedAtOf(text), groups)
     } else if (/відмін\S*\s+застосування\s+ГПВ/i.test(description)) {
       // "Отримано вказівку НЕК «Укренерго» про відміну застосування ГПВ на 20.11.2024 …"
       const day = findUaDate(description.replace(/^[\s\S]*?ГПВ\s+на/i, ''), now)
-      if (!day) throw new OutageError('parse', `Lviv ${item.name}: cancellation notice without a date`, { region })
+      if (!day)
+        throw new OutageError('parse', `Lviv ${item.name}: cancellation notice without a date`, { region })
       const groups: Record<GroupId, DaySchedule> = {}
       for (const g of STANDARD_GROUPS) groups[g] = { date: day, status: 'no-outages', intervals: [] }
       keep(day, updatedAtOf(description), groups)
     } else if (item.imageUrl?.trim()) {
       // before 30.10.2025 LOE published only a picture; text parsing can't read that
-      throw new OutageError('parse', `Lviv ${item.name}: the schedule is published only as an image`, { region })
+      throw new OutageError('parse', `Lviv ${item.name}: the schedule is published only as an image`, {
+        region,
+      })
     }
     // otherwise the slot is empty: nothing published
   }

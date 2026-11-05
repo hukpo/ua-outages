@@ -69,9 +69,13 @@ export function mykolaivProvider(): Provider {
         const filii = await list<{ idfilial: number; fullname: string }>(ctx, '/addr/filii')
         const per = await Promise.all(
           filii.map(async (f) =>
-            (await list<{ idnaspunkt: number; naznaspunkt: string }>(ctx, `/addr/filii/${f.idfilial}/ns`)).map(
-              (n) => ({ id: String(n.idnaspunkt), name: n.naznaspunkt.trim(), district: f.fullname.trim() }),
-            ),
+            (
+              await list<{ idnaspunkt: number; naznaspunkt: string }>(ctx, `/addr/filii/${f.idfilial}/ns`)
+            ).map((n) => ({
+              id: String(n.idnaspunkt),
+              name: n.naznaspunkt.trim(),
+              district: f.fullname.trim(),
+            })),
           ),
         )
         return per.flat()
@@ -103,9 +107,13 @@ export function mykolaivProvider(): Provider {
       )
       const gpv = rows.filter((r) => r.outage?.type_id === GPV_TYPE).map((r) => r.outage!.name.trim())
       if (!gpv.length)
-        throw new OutageError('not-found', `${house.number}, ${street.name}: the operator has no group for this house`, {
-          region,
-        })
+        throw new OutageError(
+          'not-found',
+          `${house.number}, ${street.name}: the operator has no group for this house`,
+          {
+            region,
+          },
+        )
       return {
         region,
         group: gpv[0]!,

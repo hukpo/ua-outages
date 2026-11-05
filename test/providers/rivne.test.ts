@@ -16,7 +16,20 @@ describe('Rivneoblenergo', () => {
     const { fetch } = mockFetch([{ match: 'https://www.roe.vsei.ua/disconnections', body: FEB }])
     const c = new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [rivneProvider()] })
     const s = await c.getSchedules('rivne')
-    expect(s.groups).toEqual(['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'])
+    expect(s.groups).toEqual([
+      '1.1',
+      '1.2',
+      '2.1',
+      '2.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.1',
+      '5.2',
+      '6.1',
+      '6.2',
+    ])
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-02-10', '2026-02-11'])
     expect(s.updatedAt).toBe('2026-02-10T22:00:00+02:00')
   })
@@ -36,7 +49,11 @@ describe('Rivneoblenergo', () => {
   })
 
   it('treats "Очікується" as not published yet', () => {
-    expect(parseDisconnections(JAN, NOW).schedules['1.1']![1]).toEqual({ date: '2026-01-12', status: 'unknown', intervals: [] })
+    expect(parseDisconnections(JAN, NOW).schedules['1.1']![1]).toEqual({
+      date: '2026-01-12',
+      status: 'unknown',
+      intervals: [],
+    })
     const now = parseDisconnections(CURRENT, NOW)
     expect(Object.values(now.schedules).every((days) => days.every((d) => d.status === 'unknown'))).toBe(true)
     expect(now.updatedAt).toBe('2026-11-05T23:30:00+02:00')
@@ -52,6 +69,8 @@ describe('Rivneoblenergo', () => {
   it('has no address search', async () => {
     const c = new OutageClient({ fetch: mockFetch([]).fetch, providers: [rivneProvider()] })
     expect(c.region('rivne').capabilities.addressSearch).toBe(false)
-    await expect(c.findGroup('rivne', { street: 'Соборна', house: '1' })).rejects.toMatchObject({ code: 'unsupported' })
+    await expect(c.findGroup('rivne', { street: 'Соборна', house: '1' })).rejects.toMatchObject({
+      code: 'unsupported',
+    })
   })
 })

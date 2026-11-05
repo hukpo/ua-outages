@@ -39,7 +39,10 @@ export function poltavaProvider(): Provider {
       region,
       method: 'POST',
       body: new URLSearchParams({ disconn: JSON.stringify(payload) }),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
     })
     return parseJsonList<Instance>(body, region)
   }
@@ -57,14 +60,17 @@ export function poltavaProvider(): Provider {
       cities ??= (async () => {
         const home = await ctx.http.text(`${SITE}/`, { region })
         const filials = parseFilials(home)
-        if (!filials.length) throw new OutageError('parse', 'Poltava: no districts on the home page', { region })
+        if (!filials.length)
+          throw new OutageError('parse', 'Poltava: no districts on the home page', { region })
         const lists = await Promise.all(
           filials.map(async (f) =>
-            (await search(ctx, { operation_type: 'city', filial_id: f.id, city_id: '', street_id: '' })).map((c) => ({
-              id: String(c.instance_id),
-              name: c.instance_name.trim(),
-              district: f.name,
-            })),
+            (await search(ctx, { operation_type: 'city', filial_id: f.id, city_id: '', street_id: '' })).map(
+              (c) => ({
+                id: String(c.instance_id),
+                name: c.instance_name.trim(),
+                district: f.name,
+              }),
+            ),
           ),
         )
         // a settlement can be listed under several districts
@@ -80,7 +86,12 @@ export function poltavaProvider(): Provider {
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${INFO.name}: pick a city first`, { region })
-      const list = await search(ctx, { operation_type: 'street', filial_id: '', city_id: Number(city.id), street_id: '' })
+      const list = await search(ctx, {
+        operation_type: 'street',
+        filial_id: '',
+        city_id: Number(city.id),
+        street_id: '',
+      })
       return list
         .map((s) => ({ id: String(s.instance_id), name: s.instance_name.trim(), cityId: city.id }))
         .filter((s) => matchScore(query, s.name) > 0)
@@ -94,7 +105,11 @@ export function poltavaProvider(): Provider {
         street_id: Number(street.id),
       })
       // instance_id is just a row number here; the name is the key
-      return list.map((h) => ({ id: h.instance_name.trim(), number: h.instance_name.trim(), streetId: street.id }))
+      return list.map((h) => ({
+        id: h.instance_name.trim(),
+        number: h.instance_name.trim(),
+        streetId: street.id,
+      }))
     },
 
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
@@ -105,12 +120,16 @@ export function poltavaProvider(): Provider {
         body: new URLSearchParams({
           disconn: JSON.stringify({ cityid: street.cityId, streerid: street.id, house: house.number }),
         }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'X-Requested-With': 'XMLHttpRequest' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
       })
-      const [row] = parseJsonList<{ gp_qnum_1?: string | null; gp_qnum_2?: string | null; fn_accident_message?: string }>(
-        body,
-        region,
-      )
+      const [row] = parseJsonList<{
+        gp_qnum_1?: string | null
+        gp_qnum_2?: string | null
+        fn_accident_message?: string
+      }>(body, region)
       if (!row?.gp_qnum_1)
         throw new OutageError(
           'not-found',

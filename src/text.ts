@@ -57,11 +57,21 @@ export function normalizeText(s: string): string {
 }
 
 export function normalizeStreet(s: string): string {
-  return normalizeText(s).replace(/\./g, '. ').replace(STREET_RE, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim()
+  return normalizeText(s)
+    .replace(/\./g, '. ')
+    .replace(STREET_RE, ' ')
+    .replace(/[.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 export function normalizeSettlement(s: string): string {
-  return normalizeText(s).replace(/\./g, '. ').replace(SETTLEMENT_RE, ' ').replace(/[.]/g, ' ').replace(/\s+/g, ' ').trim()
+  return normalizeText(s)
+    .replace(/\./g, '. ')
+    .replace(SETTLEMENT_RE, ' ')
+    .replace(/[.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 /** "12-А", "12 а", "12a" (latin), "№12А" → "12а". Keeps building parts: "12 к 3" → "12к3". */
@@ -87,21 +97,42 @@ export function streetType(s: string): string | null {
 }
 
 const TYPE_CANON: Record<string, string> = {
-  вулиця: 'вул', вул: 'вул',
-  проспект: 'просп', просп: 'просп', 'пр-т': 'просп', пр: 'просп',
-  провулок: 'пров', пров: 'пров',
-  бульвар: 'бул', бульв: 'бул', бул: 'бул',
-  площа: 'пл', пл: 'пл',
-  набережна: 'наб', наб: 'наб',
-  шосе: 'шосе', узвіз: 'узвіз', тупик: 'тупик', проїзд: 'проїзд', майдан: 'майдан', алея: 'алея',
-  мікрорайон: 'мкр', мкр: 'мкр', квартал: 'кв-л', 'кв-л': 'кв-л',
+  вулиця: 'вул',
+  вул: 'вул',
+  проспект: 'просп',
+  просп: 'просп',
+  'пр-т': 'просп',
+  пр: 'просп',
+  провулок: 'пров',
+  пров: 'пров',
+  бульвар: 'бул',
+  бульв: 'бул',
+  бул: 'бул',
+  площа: 'пл',
+  пл: 'пл',
+  набережна: 'наб',
+  наб: 'наб',
+  шосе: 'шосе',
+  узвіз: 'узвіз',
+  тупик: 'тупик',
+  проїзд: 'проїзд',
+  майдан: 'майдан',
+  алея: 'алея',
+  мікрорайон: 'мкр',
+  мкр: 'мкр',
+  квартал: 'кв-л',
+  'кв-л': 'кв-л',
 }
 
 /**
  * How well `candidate` matches `query`, 0..1. Exact normalized match = 1; every query word
  * found as a word prefix scores high; otherwise 0.
  */
-export function matchScore(query: string, candidate: string, kind: 'street' | 'settlement' = 'street'): number {
+export function matchScore(
+  query: string,
+  candidate: string,
+  kind: 'street' | 'settlement' = 'street',
+): number {
   const norm = kind === 'street' ? normalizeStreet : normalizeSettlement
   const q = norm(query)
   const c = norm(candidate)

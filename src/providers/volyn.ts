@@ -38,16 +38,24 @@ export function volynProvider(): Provider {
     sampleAddress: { city: 'Луцьк', street: 'Винниченка', house: '8' },
 
     async getSchedules() {
-      throw new OutageError('unsupported', `${INFO.operator} publishes the hourly schedule only as an image`, { region })
+      throw new OutageError(
+        'unsupported',
+        `${INFO.operator} publishes the hourly schedule only as an image`,
+        { region },
+      )
     },
 
     async lookupAddress(ctx, address) {
-      if (!address.city) throw new OutageError('not-found', `${INFO.name}: specify a city or village`, { region })
+      if (!address.city)
+        throw new OutageError('not-found', `${INFO.name}: specify a city or village`, { region })
       // the form wants bare names: "Луцьк", "Лесі Українки" (no "м.", "вул.")
       const html = await ctx.http.text(QUEUE_FORM, {
         region,
         method: 'POST',
-        body: new URLSearchParams({ formCity: bare(address.city, 'settlement'), formStreet: bare(address.street, 'street') }),
+        body: new URLSearchParams({
+          formCity: bare(address.city, 'settlement'),
+          formStreet: bare(address.street, 'street'),
+        }),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       })
       return matchRecords(parseQueueTable(html), address)
@@ -92,27 +100,55 @@ export function parseQueueTable(html: string): VolynRecord[] {
 export function matchRecords(records: readonly VolynRecord[], address: AddressQuery): GroupMatch {
   const region = INFO.id
   const where = `${address.house}, ${address.street}, ${address.city ?? ''}`
-  const narrow = (list: readonly VolynRecord[], key: (r: VolynRecord) => string, want: string, label: string) => {
+  const narrow = (
+    list: readonly VolynRecord[],
+    key: (r: VolynRecord) => string,
+    want: string,
+    label: string,
+  ) => {
     const exact = list.filter((r) => key(r) === want)
     if (exact.length) return exact
     const names = [...new Set(list.map(key))]
     if (names.length > 1)
-      throw new OutageError('not-found', `"${want}" matches several ${label}: ${names.slice(0, 8).join('; ')}. Be more specific.`, { region })
+      throw new OutageError(
+        'not-found',
+        `"${want}" matches several ${label}: ${names.slice(0, 8).join('; ')}. Be more specific.`,
+        { region },
+      )
     return list
   }
-  if (!records.length) throw new OutageError('not-found', `${INFO.operator} knows no address "${where}"`, { region })
+  if (!records.length)
+    throw new OutageError('not-found', `${INFO.operator} knows no address "${where}"`, { region })
 
-  const inCity = narrow(records, (r) => normalizeSettlement(r.city), normalizeSettlement(address.city ?? ''), 'settlements')
-  const onStreet = narrow(inCity, (r) => normalizeStreet(r.street), normalizeStreet(address.street), 'streets')
+  const inCity = narrow(
+    records,
+    (r) => normalizeSettlement(r.city),
+    normalizeSettlement(address.city ?? ''),
+    'settlements',
+  )
+  const onStreet = narrow(
+    inCity,
+    (r) => normalizeStreet(r.street),
+    normalizeStreet(address.street),
+    'streets',
+  )
   const want = normalizeHouse(address.house)
   const hits = onStreet.filter((r) => r.houses.some((h) => normalizeHouse(h) === want))
   if (!hits.length) {
     const known = [...new Set(onStreet.flatMap((r) => r.houses))].slice(0, 12).join(', ')
-    throw new OutageError('not-found', `House "${address.house}" not found on ${onStreet[0]!.street}. Known: ${known}`, { region })
+    throw new OutageError(
+      'not-found',
+      `House "${address.house}" not found on ${onStreet[0]!.street}. Known: ${known}`,
+      { region },
+    )
   }
   const groups = [...new Set(hits.map((r) => r.group).filter((g): g is GroupId => !!g))].sort(compareGroups)
   if (!groups.length)
-    throw new OutageError('not-found', `${where}: the address is not part of the hourly schedule ("Не залучено")`, { region })
+    throw new OutageError(
+      'not-found',
+      `${where}: the address is not part of the hourly schedule ("Не залучено")`,
+      { region },
+    )
   const first = hits.find((r) => r.group)!
   return {
     region,

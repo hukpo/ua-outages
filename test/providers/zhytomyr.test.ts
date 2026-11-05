@@ -15,7 +15,8 @@ const bytes = (name: string) =>
 const SCHEDULE = bytes('schedule-2026-11-05.cp1251.html')
 const decoded = (buf: Buffer) => new TextDecoder('windows-1251').decode(buf)
 /** What the site renders for a РЕМ that the tests don't care about: the form with no settlements. */
-const EMPTY_FORM = '<form action="/unhooking-search.php" id="mainform" method="post"><select name="naspunkt_id"><option value="0">Оберіть населений пункт</option></select></form>'
+const EMPTY_FORM =
+  '<form action="/unhooking-search.php" id="mainform" method="post"><select name="naspunkt_id"><option value="0">Оберіть населений пункт</option></select></form>'
 
 function client(houses = bytes('search-step3-kyivska-all-houses.cp1251.html')) {
   const calls: Record<string, string>[] = []
@@ -28,7 +29,10 @@ function client(houses = bytes('search-step3-kyivska-all-houses.cp1251.html')) {
     if (form.naspunkt_id) return new Response(bytes('search-step2-zhytomyr-streets.cp1251.html'))
     return new Response(form.rem_id === '7' ? bytes('search-step1-rem7-settlements.cp1251.html') : EMPTY_FORM)
   }
-  return { client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [zhytomyrProvider()] }), calls }
+  return {
+    client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [zhytomyrProvider()] }),
+    calls,
+  }
 }
 
 const spans = (s: ReturnType<typeof parseSchedulePage>, group: string, day: number) =>
@@ -38,18 +42,46 @@ describe('Zhytomyroblenergo', () => {
   const s = parseSchedulePage(decoded(SCHEDULE), NOW)
 
   it('reads both day tables and all twelve groups', () => {
-    expect(s.groups).toEqual(['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'])
+    expect(s.groups).toEqual([
+      '1.1',
+      '1.2',
+      '2.1',
+      '2.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.1',
+      '5.2',
+      '6.1',
+      '6.2',
+    ])
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05', '2026-11-06'])
   })
 
   it('turns red slots into off intervals', () => {
     // same as the red cells on the page and the yaroslav2901 aggregator for 05.11
-    expect(spans(s, '1.1', 0)).toEqual(['00:00–02:00 off', '06:00–10:00 off', '12:00–16:00 off', '18:00–22:00 off'])
-    expect(spans(s, '1.1', 1)).toEqual(['00:00–04:00 off', '06:00–08:00 off', '10:00–14:00 off', '16:00–20:00 off'])
+    expect(spans(s, '1.1', 0)).toEqual([
+      '00:00–02:00 off',
+      '06:00–10:00 off',
+      '12:00–16:00 off',
+      '18:00–22:00 off',
+    ])
+    expect(spans(s, '1.1', 1)).toEqual([
+      '00:00–04:00 off',
+      '06:00–08:00 off',
+      '10:00–14:00 off',
+      '16:00–20:00 off',
+    ])
   })
 
   it('copes with the 2.2 row that lacks </a>', () => {
-    expect(spans(s, '2.2', 0)).toEqual(['02:00–06:00 off', '08:00–12:00 off', '14:00–18:00 off', '20:00–22:00 off'])
+    expect(spans(s, '2.2', 0)).toEqual([
+      '02:00–06:00 off',
+      '08:00–12:00 off',
+      '14:00–18:00 off',
+      '20:00–22:00 off',
+    ])
   })
 
   it('reads the update time', () => {
@@ -65,7 +97,10 @@ describe('Zhytomyroblenergo', () => {
   })
 
   it('fails loudly on a new slot colour or a changed table', () => {
-    const grey = decoded(SCHEDULE).replace('<td style="background: #ff3333">', '<td style="background: #cccccc">')
+    const grey = decoded(SCHEDULE).replace(
+      '<td style="background: #ff3333">',
+      '<td style="background: #cccccc">',
+    )
     expect(() => parseSchedulePage(grey, NOW)).toThrow(/unknown slot colour "#cccccc"/)
     const short = decoded(SCHEDULE).replace('<td style="background: #ffffff">&nbsp;</td>', '')
     expect(() => parseSchedulePage(short, NOW)).toThrow(/47 slots/)
@@ -97,7 +132,11 @@ describe('Zhytomyroblenergo', () => {
 
   it('prefers the household row when businesses in the house have other groups', async () => {
     // 86: households 3.1; businesses 1.2, 5.2 and 3.1
-    const m = await client().client.findGroup('zhytomyr', { city: 'Житомир', street: 'Київська', house: '86' })
+    const m = await client().client.findGroup('zhytomyr', {
+      city: 'Житомир',
+      street: 'Київська',
+      house: '86',
+    })
     expect(m.group).toBe('3.1')
     expect(m.otherGroups).toBeUndefined()
   })

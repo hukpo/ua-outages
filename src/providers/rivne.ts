@@ -37,7 +37,8 @@ export function rivneProvider(): Provider {
 export function parseDisconnections(html: string, now: Date): RegionSchedule {
   const region = INFO.id
   const start = html.indexOf('id="fetched-data-container"')
-  if (start === -1) throw new OutageError('parse', 'Rivne: no #fetched-data-container on the page', { region })
+  if (start === -1)
+    throw new OutageError('parse', 'Rivne: no #fetched-data-container on the page', { region })
   const end = html.indexOf('</table>', start)
   if (end === -1) throw new OutageError('parse', 'Rivne: schedule table is not closed', { region })
   const table = html.slice(start, end)
@@ -58,7 +59,11 @@ export function parseDisconnections(html: string, now: Date): RegionSchedule {
     if (!m) continue
     const date = `${m[3]}-${m[2]}-${m[1]}`
     if (cells.length - 1 !== groups.length)
-      throw new OutageError('parse', `Rivne: ${date} has ${cells.length - 1} cells for ${groups.length} groups`, { region })
+      throw new OutageError(
+        'parse',
+        `Rivne: ${date} has ${cells.length - 1} cells for ${groups.length} groups`,
+        { region },
+      )
     groups.forEach((g, i) => (schedules[g!] ??= []).push(parseCell(date, cells[i + 1]!)))
   }
 
@@ -77,9 +82,14 @@ function parseCell(date: string, html: string): DaySchedule {
   const content = text(html.replace(/<\/p>|<br\s*\/?>/gi, '\n'))
   if (/очікується/i.test(content)) return { date, status: 'unknown', intervals: [] }
   const ranges = findTimeRanges(content)
-  if (ranges.length) return makeDay(date, ranges.map(([start, end]) => ({ start, end, kind: 'off' as const })))
+  if (ranges.length)
+    return makeDay(
+      date,
+      ranges.map(([start, end]) => ({ start, end, kind: 'off' as const })),
+    )
   // an empty cell on a published day: the group has no outages
-  if (!content || /не\s*(?:має|заплановано)|відсутн|немає/i.test(content)) return { date, status: 'no-outages', intervals: [] }
+  if (!content || /не\s*(?:має|заплановано)|відсутн|немає/i.test(content))
+    return { date, status: 'no-outages', intervals: [] }
   return { date, status: 'unknown', intervals: [] }
 }
 

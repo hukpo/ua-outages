@@ -23,7 +23,20 @@ const INFO: RegionInfo = {
 }
 
 /** The operator's twelve groups (also served by `/gpv-queue-list`, which never changes). */
-const GROUPS: readonly GroupId[] = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2']
+const GROUPS: readonly GroupId[] = [
+  '1.1',
+  '1.2',
+  '2.1',
+  '2.2',
+  '3.1',
+  '3.2',
+  '4.1',
+  '4.2',
+  '5.1',
+  '5.2',
+  '6.1',
+  '6.2',
+]
 
 /** Parallel schedule requests; the backend is small, so stay polite. */
 const CONCURRENCY = 4
@@ -83,16 +96,26 @@ export function ivanoFrankivskProvider(): Provider {
     const res = await ctx.http.raw(`${API}/schedule-by-search`, {
       region,
       method: 'POST',
-      body: new URLSearchParams({ accountNumber: '', userSearchChoice: 'pob', address: `${city},${street},${house}` }),
+      body: new URLSearchParams({
+        accountNumber: '',
+        userSearchChoice: 'pob',
+        address: `${city},${street},${house}`,
+      }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       // these statuses are answers: several groups / not found / not in any group
       acceptStatus: [204, 300, 404],
     })
     const where = `${address.house}, ${address.street}, ${address.city}`
     if (res.status === 404)
-      throw new OutageError('not-found', `${INFO.operator} knows no address "${where}"`, { region, status: 404 })
+      throw new OutageError('not-found', `${INFO.operator} knows no address "${where}"`, {
+        region,
+        status: 404,
+      })
     if (res.status === 204)
-      throw new OutageError('not-found', `${where}: the address is not in any hourly-outage group`, { region, status: 204 })
+      throw new OutageError('not-found', `${where}: the address is not in any hourly-outage group`, {
+        region,
+        status: 204,
+      })
     const match = parseSearchAnswer(res.body, res.status)
     return { region, ...match, address: { city, street, house } }
   }
@@ -114,7 +137,11 @@ export function parseQueueSchedules(responses: readonly unknown[], now: Date): R
     for (const day of days as IfScheduleDay[]) {
       const date = parseDate(day?.eventDate)
       if (!date || !day.queues || typeof day.queues !== 'object')
-        throw new OutageError('parse', `Ivano-Frankivsk: unexpected day ${JSON.stringify(day).slice(0, 120)}`, { region })
+        throw new OutageError(
+          'parse',
+          `Ivano-Frankivsk: unexpected day ${JSON.stringify(day).slice(0, 120)}`,
+          { region },
+        )
       const groups = byDate.get(date) ?? new Map<GroupId, DaySchedule>()
       byDate.set(date, groups)
       for (const [raw, intervals] of Object.entries(day.queues)) {
@@ -128,10 +155,11 @@ export function parseQueueSchedules(responses: readonly unknown[], now: Date): R
   }
 
   const dates = [...byDate.keys()].sort()
-  if (!dates.length)
-    return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt: toKyivIso(now) }
+  if (!dates.length) return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt: toKyivIso(now) }
 
-  const groups = [...new Set([...GROUPS, ...dates.flatMap((d) => [...byDate.get(d)!.keys()])])].sort(compareGroups)
+  const groups = [...new Set([...GROUPS, ...dates.flatMap((d) => [...byDate.get(d)!.keys()])])].sort(
+    compareGroups,
+  )
   const schedules: Record<GroupId, DaySchedule[]> = {}
   for (const g of groups)
     schedules[g] = dates.map((d) => byDate.get(d)!.get(g) ?? { date: d, status: 'unknown', intervals: [] })
@@ -152,14 +180,23 @@ export function parseSearchAnswer(body: string, status: number): { group: GroupI
 
   // 300 = "the consumer may belong to several groups" (several connections at one address)
   if (status === 300 || cur.hasQueue === 'many') {
-    const all = [...new Set((cur.possibleQueues ?? []).map((q) => normalizeGroup(q)).filter((g): g is GroupId => !!g))]
-    if (!all.length) throw new OutageError('parse', 'Ivano-Frankivsk address search: several groups but none listed', { region })
+    const all = [
+      ...new Set((cur.possibleQueues ?? []).map((q) => normalizeGroup(q)).filter((g): g is GroupId => !!g)),
+    ]
+    if (!all.length)
+      throw new OutageError('parse', 'Ivano-Frankivsk address search: several groups but none listed', {
+        region,
+      })
     all.sort(compareGroups)
     return all.length > 1 ? { group: all[0]!, otherGroups: all.slice(1) } : { group: all[0]! }
   }
   const group = cur.queue && cur.subQueue ? normalizeGroup(`${cur.queue}.${cur.subQueue}`) : null
   if (!group)
-    throw new OutageError('not-found', cur.note?.trim() || 'Ivano-Frankivsk: the operator returned no group', { region })
+    throw new OutageError(
+      'not-found',
+      cur.note?.trim() || 'Ivano-Frankivsk: the operator returned no group',
+      { region },
+    )
   return { group }
 }
 
@@ -196,4 +233,3 @@ function parseDate(text: unknown): string | null {
   const m = typeof text === 'string' ? /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(text.trim()) : null
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null
 }
-

@@ -4,14 +4,7 @@ export { OutageError, isOutageError } from './errors.js'
 export type { OutageErrorCode } from './errors.js'
 export type { FetchLike } from './http.js'
 export type { Provider, ProviderContext } from './providers/provider.js'
-export {
-  compareGroups,
-  intervalAt,
-  minutesOf,
-  nextOutage,
-  normalizeGroup,
-  stateAt,
-} from './schedule.js'
+export { compareGroups, intervalAt, minutesOf, nextOutage, normalizeGroup, stateAt } from './schedule.js'
 export type { PowerState } from './schedule.js'
 export { kyivDate } from './time.js'
 export type * from './types.js'

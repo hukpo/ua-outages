@@ -46,7 +46,10 @@ export function gpvCellsToSlots(cells: Record<string, string>): MinuteSlot[] {
  * Converts the date-keyed GPV object into per-group days. An empty schedule may come as `[]`.
  * Keys are unix seconds of Kyiv midnight; dates are derived in Kyiv time (DST-safe).
  */
-export function parseGpvDays(region: RegionId, data: GpvDays | null | undefined): Record<string, DaySchedule[]> {
+export function parseGpvDays(
+  region: RegionId,
+  data: GpvDays | null | undefined,
+): Record<string, DaySchedule[]> {
   if (data == null || Array.isArray(data)) return {}
   if (typeof data !== 'object') throw new OutageError('parse', 'GPV: expected an object of days', { region })
   const out: Record<string, DaySchedule[]> = {}

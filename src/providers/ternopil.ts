@@ -90,7 +90,10 @@ export function ternopilProvider(): Provider {
       'group[]': group,
       time: key.replace(/\//g, ''),
     })
-    const data = await ctx.http.json(`${API}/a_gpv_g?${q}`, { region, headers: { 'X-debug-key': base64Utf8(key) } })
+    const data = await ctx.http.json(`${API}/a_gpv_g?${q}`, {
+      region,
+      headers: { 'X-debug-key': base64Utf8(key) },
+    })
     return parseGroupGraph(data, group)
   }
 
@@ -122,7 +125,10 @@ export function ternopilProvider(): Provider {
       api: API,
       async streetBuildings(ctx, street) {
         const q = new URLSearchParams({ cityId: street.cityId ?? '', streetId: street.id })
-        const data = await ctx.http.json<{ buildingNames?: unknown }>(`${API}/pw-accounts/building-names?${q}`, { region })
+        const data = await ctx.http.json<{ buildingNames?: unknown }>(
+          `${API}/pw-accounts/building-names?${q}`,
+          { region },
+        )
         if (!Array.isArray(data?.buildingNames))
           throw new OutageError('parse', 'Ternopil building-names: expected a list', { region })
         return (data.buildingNames as { buildingName?: string; chergGpv?: string }[])
@@ -134,7 +140,11 @@ export function ternopilProvider(): Provider {
       },
       // a building with two supplies is in two groups; only this endpoint lists both
       async buildingGroups(ctx, street, house) {
-        const q = new URLSearchParams({ cityId: street.cityId ?? '', streetId: street.id, buildingNames: house.number })
+        const q = new URLSearchParams({
+          cityId: street.cityId ?? '',
+          streetId: street.id,
+          buildingNames: house.number,
+        })
         const data = await ctx.http.json<{ buildingGroups?: { chergGpv?: string }[] }>(
           `${API}/pw-accounts/building-groups?${q}`,
           { region },
@@ -159,7 +169,8 @@ export function parseGroupGraph(data: unknown, group: GroupId): GroupGraph {
   const byDate = new Map<string, { day: DaySchedule; created: string | null }>()
   for (const item of member as GraphItem[]) {
     const date = /^\d{4}-\d{2}-\d{2}/.exec(item.dateGraph ?? '')?.[0]
-    if (!date) throw new OutageError('parse', `Ternopil a_gpv_g: bad dateGraph "${item.dateGraph}"`, { region })
+    if (!date)
+      throw new OutageError('parse', `Ternopil a_gpv_g: bad dateGraph "${item.dateGraph}"`, { region })
     const entries = Object.entries(item.dataJson ?? {})
     const mine = entries.find(([k]) => parseCherg(k) === group)
     if (!mine)
@@ -168,10 +179,15 @@ export function parseGroupGraph(data: unknown, group: GroupId): GroupGraph {
         `Ternopil: the representative address of group ${group} (${REPRESENTATIVES[group]?.address}) now returns ${entries.map(([k]) => k).join(', ') || 'no groups'}`,
         { region },
       )
-    const day = { date, status: 'scheduled' as const, intervals: cellsToIntervals(date, timesToCells(mine[1]?.times, group)) }
+    const day = {
+      date,
+      status: 'scheduled' as const,
+      intervals: cellsToIntervals(date, timesToCells(mine[1]?.times, group)),
+    }
     const created = parsePowerOnTime(item.dateCreate)
     const prev = byDate.get(date)
-    if (!prev || Date.parse(created ?? '') >= Date.parse(prev.created ?? '')) byDate.set(date, { day, created })
+    if (!prev || Date.parse(created ?? '') >= Date.parse(prev.created ?? ''))
+      byDate.set(date, { day, created })
   }
   const dates = [...byDate.keys()].sort()
   const updated = [...byDate.values()].map((v) => v.created).filter((c): c is string => !!c)
@@ -192,7 +208,9 @@ export function buildSchedule(byGroup: Record<GroupId, GroupGraph>, now: Date): 
         `Ternopil: the operator no longer knows the representative address of group ${g} (${REPRESENTATIVES[g]?.address})`,
         { region },
       )
-  const withDays = Object.values(byGroup).filter((r): r is Extract<GroupGraph, { kind: 'days' }> => r.kind === 'days')
+  const withDays = Object.values(byGroup).filter(
+    (r): r is Extract<GroupGraph, { kind: 'days' }> => r.kind === 'days',
+  )
   const fetchedAt = toKyivIso(now)
   if (!withDays.length) return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt }
 
@@ -203,7 +221,9 @@ export function buildSchedule(byGroup: Record<GroupId, GroupGraph>, now: Date): 
     const r = byGroup[g]!
     const days = r.kind === 'days' ? r.days : []
     // a group that answered nothing while the others have a schedule is unknown, not "no outages"
-    schedules[g] = dates.map((d) => days.find((x) => x.date === d) ?? { date: d, status: 'unknown', intervals: [] })
+    schedules[g] = dates.map(
+      (d) => days.find((x) => x.date === d) ?? { date: d, status: 'unknown', intervals: [] },
+    )
   }
   const updatedAt =
     withDays
@@ -224,7 +244,11 @@ function timesToCells(times: Record<string, string> | undefined, group: GroupId)
     const m = /^(\d{2}):(00|30)$/.exec(clock)
     const kind = SLOT[String(value)]
     if (!m || Number(m[1]) > 23 || kind === undefined)
-      throw new OutageError('parse', `Ternopil a_gpv_g: unexpected slot ${clock}=${value} in group ${group}`, { region })
+      throw new OutageError(
+        'parse',
+        `Ternopil a_gpv_g: unexpected slot ${clock}=${value} in group ${group}`,
+        { region },
+      )
     cells[Number(m[1]) * 2 + (m[2] === '30' ? 1 : 0)] = kind
   }
   return cells

@@ -104,7 +104,9 @@ export function parseCherkasyPosts(
     (p) => !Object.keys(parseGroupLines(p.body)).length && !/не\s+застосов|скасова/i.test(p.body),
   )
   if (unreadable.length && unreadable.length === prepared.length)
-    throw new OutageError('parse', `Cherkasy: no group lines in "${unreadable[0]!.title}"`, { region: INFO.id })
+    throw new OutageError('parse', `Cherkasy: no group lines in "${unreadable[0]!.title}"`, {
+      region: INFO.id,
+    })
   return postsToSchedule(INFO.id, prepared, now)
 }
 

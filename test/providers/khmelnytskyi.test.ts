@@ -13,7 +13,15 @@ function client(queues = 'khmelnytskyi/shutdown-queues-280957-house-2.html') {
     { match: `${SITE}/houses/280957`, body: fixture('khmelnytskyi/address-3-houses.json') },
     { match: `${SITE}/shutdown-queues`, method: 'POST', body: fixture(queues) },
   ])
-  return { client: new OutageClient({ fetch, now: () => new Date('2026-11-05T23:50:00+02:00'), cacheTtlMs: 0, providers: [khmelnytskyiProvider()] }), calls }
+  return {
+    client: new OutageClient({
+      fetch,
+      now: () => new Date('2026-11-05T23:50:00+02:00'),
+      cacheTtlMs: 0,
+      providers: [khmelnytskyiProvider()],
+    }),
+    calls,
+  }
 }
 
 describe('Khmelnytskoblenergo', () => {
@@ -23,13 +31,21 @@ describe('Khmelnytskoblenergo', () => {
 
   it('walks settlement → street → house → subgroup', async () => {
     const { client: c, calls } = client()
-    const m = await c.findGroup('khmelnytskyi', { city: 'Хмельницький', street: 'вул. Проскурівська', house: '2' })
+    const m = await c.findGroup('khmelnytskyi', {
+      city: 'Хмельницький',
+      street: 'вул. Проскурівська',
+      house: '2',
+    })
     expect(m).toEqual({
       region: 'khmelnytskyi',
       group: '6.1',
       address: { city: 'м. Хмельницький', street: 'вул. Проскурівська', house: '2' },
     })
-    expect(calls.every((x) => (x.init!.headers as Record<string, string>)['X-Requested-With'] === 'XMLHttpRequest')).toBe(true)
+    expect(
+      calls.every(
+        (x) => (x.init!.headers as Record<string, string>)['X-Requested-With'] === 'XMLHttpRequest',
+      ),
+    ).toBe(true)
     // the server searches by substring and has no "вул." in its names
     expect(decodeURIComponent(calls[1]!.url)).toBe(`${SITE}/streets/26499?term=проскурівська`)
     expect(String(calls.at(-1)!.init!.body)).toBe('streetId=280957&house=2')

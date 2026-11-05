@@ -16,19 +16,38 @@ const POSTS: Route[] = [
     match: `${API}/hrafik-pohodynnykh-vidklyuchen-hpv-na-${d}-lystopada?`,
     body: fixture(`cherkasy/post-hpv-na-${d}-lystopada.json`),
   })),
-  { match: `${API}/onovleno-hrafik-pohodynnykh-vidklyuchen-hpv-na-1-lystopada?`, body: fixture('cherkasy/post-onovleno-hpv-na-1-lystopada.json') },
+  {
+    match: `${API}/onovleno-hrafik-pohodynnykh-vidklyuchen-hpv-na-1-lystopada?`,
+    body: fixture('cherkasy/post-onovleno-hpv-na-1-lystopada.json'),
+  },
 ]
 
 function client(routes: Route[] = POSTS, now = NOW) {
   const { fetch, calls } = mockFetch(routes)
-  return { client: new OutageClient({ fetch, now: () => now, cacheTtlMs: 0, providers: [cherkasyProvider()] }), calls }
+  return {
+    client: new OutageClient({ fetch, now: () => now, cacheTtlMs: 0, providers: [cherkasyProvider()] }),
+    calls,
+  }
 }
 
 describe('Cherkasyoblenergo', () => {
   it('reads yesterday, today and tomorrow, fetching only those posts', async () => {
     const { client: c, calls } = client()
     const s = await c.getSchedules('cherkasy')
-    expect(s.groups).toEqual(['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'])
+    expect(s.groups).toEqual([
+      '1.1',
+      '1.2',
+      '2.1',
+      '2.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.1',
+      '5.2',
+      '6.1',
+      '6.2',
+    ])
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-04', '2026-11-05', '2026-11-06'])
     // the search list plus one post per day; emergency (ГАВ) notices are never fetched
     expect(calls).toHaveLength(4)
@@ -47,7 +66,13 @@ describe('Cherkasyoblenergo', () => {
     // "24:00" ends at midnight
     expect(hhmm(nov6('3.2'))).toEqual(['04:00-06:00', '09:00-13:00', '15:00-19:00', '21:00-00:00'])
     // a stray "0" after "21:00" in the source doesn't break the line
-    expect(hhmm(nov6('6.2'))).toEqual(['00:00-02:00', '06:00-09:00', '11:00-15:00', '17:00-21:00', '23:00-00:00'])
+    expect(hhmm(nov6('6.2'))).toEqual([
+      '00:00-02:00',
+      '06:00-09:00',
+      '11:00-15:00',
+      '17:00-21:00',
+      '23:00-00:00',
+    ])
   })
 
   it('reports the newest publish time in Kyiv time', async () => {
@@ -73,7 +98,9 @@ describe('Cherkasyoblenergo', () => {
   it('returns an empty schedule when no schedule posts are recent', async () => {
     const search = JSON.parse(fixture('cherkasy/posts-search-gpv-2026-11-05.json'))
     search.data.content = search.data.content.filter((p: { title: string }) => !/ГПВ/.test(p.title))
-    const s = await client([{ match: `${API}/search?`, body: JSON.stringify(search) }]).client.getSchedules('cherkasy')
+    const s = await client([{ match: `${API}/search?`, body: JSON.stringify(search) }]).client.getSchedules(
+      'cherkasy',
+    )
     expect(s.groups).toEqual([])
     expect(s.updatedAt).toBeNull()
   })
@@ -93,8 +120,8 @@ describe('Cherkasyoblenergo', () => {
   })
 
   it('flattens the hand-edited HTML', () => {
-    expect(flattenPostHtml('<p>1.1&nbsp;<span>00</span><span> :00 - 02:00,&nbsp;</span></p><p>1.2 x</p>')).toBe(
-      '1.1 00:00 - 02:00, \n1.2 x\n',
-    )
+    expect(
+      flattenPostHtml('<p>1.1&nbsp;<span>00</span><span> :00 - 02:00,&nbsp;</span></p><p>1.2 x</p>'),
+    ).toBe('1.1 00:00 - 02:00, \n1.2 x\n')
   })
 })

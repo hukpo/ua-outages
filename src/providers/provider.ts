@@ -1,13 +1,5 @@
 import type { Http } from '../http.js'
-import type {
-  AddressQuery,
-  City,
-  GroupMatch,
-  House,
-  RegionInfo,
-  RegionSchedule,
-  Street,
-} from '../types.js'
+import type { AddressQuery, City, GroupMatch, House, RegionInfo, RegionSchedule, Street } from '../types.js'
 
 export interface ProviderContext {
   http: Http

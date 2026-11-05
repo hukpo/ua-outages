@@ -35,7 +35,16 @@ export function findUaDate(text: string, now: Date): string | null {
   const numeric = [...lower.matchAll(/\b(\d{1,2})\.(\d{2})(?:\.(\d{4}))?\b/g)].find(
     (m) => Number(m[2]) >= 1 && Number(m[2]) <= 12 && Number(m[1]) >= 1 && Number(m[1]) <= 31,
   )
-  const pickFirst = named && numeric ? (named.index <= numeric.index ? 'named' : 'numeric') : named ? 'named' : numeric ? 'numeric' : null
+  const pickFirst =
+    named && numeric
+      ? named.index <= numeric.index
+        ? 'named'
+        : 'numeric'
+      : named
+        ? 'named'
+        : numeric
+          ? 'numeric'
+          : null
   if (!pickFirst) return null
   const [day, month, year] =
     pickFirst === 'named'
@@ -78,7 +87,10 @@ export function findTimeRanges(text: string): [number, number][] {
 export function parseGroupLines(text: string, kind: 'off' | 'maybe' = 'off'): Record<string, MinuteSlot[]> {
   const out: Record<string, MinuteSlot[]> = {}
   for (const rawLine of text.split(/\n|<br\s*\/?>|<\/p>|<\/li>|<\/div>/i)) {
-    const line = rawLine.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').trim()
+    const line = rawLine
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .trim()
     if (!line) continue
     // group tokens before the first time range: "1.1", "1.1.", "Черга 1.1", "Групи 1.1, 1.2".
     // Subgroups are 1 or 2, so "в обсязі 2.5 черги" is not a group.

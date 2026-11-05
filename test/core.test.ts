@@ -141,7 +141,7 @@ describe('address text', () => {
   })
 
   it('unifies apostrophes', () => {
-    expect(matchScore("Січових Стрільців", 'Січових Стрільців')).toBe(1)
+    expect(matchScore('Січових Стрільців', 'Січових Стрільців')).toBe(1)
     expect(matchScore("Солом'янська", 'Соломʼянська')).toBe(1)
   })
 

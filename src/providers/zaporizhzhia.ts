@@ -29,7 +29,8 @@ export function zaporizhzhiaProvider(): Provider {
 /** Exported for tests. */
 export function parseZoe(html: string, now: Date) {
   const articles = [...html.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/g)]
-  if (!articles.length) throw new OutageError('parse', 'Zaporizhzhia: no posts on the page', { region: INFO.id })
+  if (!articles.length)
+    throw new OutageError('parse', 'Zaporizhzhia: no posts on the page', { region: INFO.id })
   const posts: SchedulePost[] = articles.map((a, i) => ({
     title: decode(/<h2[^>]*>([\s\S]*?)<\/h2>/.exec(a[1]!)?.[1] ?? ''),
     body: decode(a[1]!),

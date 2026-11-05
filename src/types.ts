@@ -1,4 +1,7 @@
-/** Region ids, one per grid operator area. Cities with their own operator get their own id. */
+/**
+ * Region ids, one per grid operator area. Not covered: Vinnytsia and Chernihiv (data behind a
+ * captcha), Kherson (no public schedule), Luhansk and Crimea.
+ */
 export type RegionId =
   | 'kyiv'
   | 'kyiv-region'
@@ -14,9 +17,7 @@ export type RegionId =
   | 'volyn'
   | 'chernivtsi'
   | 'khmelnytskyi'
-  | 'vinnytsia'
   | 'zhytomyr'
-  | 'chernihiv'
   | 'cherkasy'
   | 'kirovohrad'
   | 'sumy'
@@ -24,7 +25,6 @@ export type RegionId =
   | 'poltava'
   | 'zaporizhzhia'
   | 'mykolaiv'
-  | 'kherson'
 
 /** Outage group (queue, "черга"), normalized to "<queue>.<subqueue>", e.g. "3.1". */
 export type GroupId = string

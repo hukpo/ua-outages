@@ -142,7 +142,9 @@ export function dtekProvider(o: DtekOptions): Provider {
         .map((g) => normalizeGroup(g))
         .filter((g): g is string => !!g)
       if (!groups.length)
-        throw new OutageError('not-found', `${house.number}, ${street.name} is not in any outage group`, { region })
+        throw new OutageError('not-found', `${house.number}, ${street.name} is not in any outage group`, {
+          region,
+        })
       return {
         region,
         group: groups[0]!,
@@ -158,7 +160,10 @@ export function parseDisconScript(html: string): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   const re = /DisconSchedule\.(\w+)\s*=\s*(.+)/g
   for (const m of html.matchAll(re)) {
-    const raw = m[2]!.replace(/<\/script>.*$/, '').trim().replace(/;$/, '')
+    const raw = m[2]!
+      .replace(/<\/script>.*$/, '')
+      .trim()
+      .replace(/;$/, '')
     try {
       out[m[1]!] = JSON.parse(raw)
     } catch {
@@ -176,4 +181,3 @@ function filterByName(names: string[], query: string, kind: 'street' | 'settleme
     .slice(0, 50)
     .map((x) => x.n)
 }
-

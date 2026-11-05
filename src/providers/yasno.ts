@@ -53,7 +53,11 @@ export function yasnoProvider(o: YasnoOptions): Provider {
     for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== '') sp.set(k, String(v))
     return sp.toString()
   }
-  const list = async (ctx: ProviderContext, path: string, params: Record<string, string | number | undefined>) => {
+  const list = async (
+    ctx: ProviderContext,
+    path: string,
+    params: Record<string, string | number | undefined>,
+  ) => {
     const data = await ctx.http.json<unknown>(`${BASE}/addresses/v2/${path}?${q(params)}`, { region })
     if (!Array.isArray(data)) throw new OutageError('parse', `YASNO ${path}: expected a list`, { region })
     return data as YasnoItem[]

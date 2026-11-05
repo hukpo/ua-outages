@@ -71,7 +71,8 @@ export function sumyProvider(): Provider {
   const list = async <Row>(ctx: ProviderContext, path: string): Promise<Row[]> => {
     const { data } = await get<ListResponse<Row>>(ctx, path)
     if (data === '' || data === undefined) return []
-    if (!Array.isArray(data.list)) throw new OutageError('parse', `Sumy ${path.split('?')[0]}: expected a list`, { region })
+    if (!Array.isArray(data.list))
+      throw new OutageError('parse', `Sumy ${path.split('?')[0]}: expected a list`, { region })
     return data.list
   }
 
@@ -180,11 +181,15 @@ export async function decryptSumyResponse<T>(
     )
     plain = new TextDecoder().decode(buf)
   } catch (cause) {
-    throw new OutageError('parse', 'Sumy: cannot decrypt the API response (the site may have changed its key)', {
-      region,
-      url,
-      cause,
-    })
+    throw new OutageError(
+      'parse',
+      'Sumy: cannot decrypt the API response (the site may have changed its key)',
+      {
+        region,
+        url,
+        cause,
+      },
+    )
   }
   try {
     return JSON.parse(plain) as T
@@ -207,7 +212,9 @@ export function parseSumySchedules(res: { data?: ScheduleEntry[] }, now: Date): 
   for (const e of res.data) {
     const group = e.cherga_n ? normalizeGroup(e.cherga_n) : null
     if (!group || !Array.isArray(e.lst_time_disc))
-      throw new OutageError('parse', `Sumy schedules: unexpected entry ${JSON.stringify(e).slice(0, 80)}`, { region })
+      throw new OutageError('parse', `Sumy schedules: unexpected entry ${JSON.stringify(e).slice(0, 80)}`, {
+        region,
+      })
     if (e.no_data) {
       schedules[group] = [{ date: today, status: 'unknown', intervals: [] }]
       continue

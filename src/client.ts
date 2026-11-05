@@ -98,7 +98,11 @@ export class OutageClient {
     const all = await this.getSchedules(region, opts)
     const days = id ? all.schedules[id] : undefined
     if (!id || !days)
-      throw new OutageError('not-found', `Group "${group}" not found in ${region}. Known groups: ${all.groups.join(', ') || 'none'}`, { region })
+      throw new OutageError(
+        'not-found',
+        `Group "${group}" not found in ${region}. Known groups: ${all.groups.join(', ') || 'none'}`,
+        { region },
+      )
     return { region, group: id, days, updatedAt: all.updatedAt, fetchedAt: all.fetchedAt }
   }
 
@@ -141,8 +145,14 @@ export class OutageClient {
         const district = address.district
         cities = cities.filter((c) => !c.district || matchScore(district, c.district, 'settlement') > 0)
       }
-      city = pick(address.city, cities, (c) => c.name, 'settlement', 'city', region, (c) =>
-        c.district ? `${c.name} (${c.district})` : c.name,
+      city = pick(
+        address.city,
+        cities,
+        (c) => c.name,
+        'settlement',
+        'city',
+        region,
+        (c) => (c.district ? `${c.name} (${c.district})` : c.name),
       )
     }
 
@@ -155,7 +165,12 @@ export class OutageClient {
     if (!house)
       throw new OutageError(
         'not-found',
-        `House "${address.house}" not found on ${street.name}. Closest: ${houses.slice(0, 8).map((h) => h.number).join(', ') || 'none'}`,
+        `House "${address.house}" not found on ${street.name}. Closest: ${
+          houses
+            .slice(0, 8)
+            .map((h) => h.number)
+            .join(', ') || 'none'
+        }`,
         { region },
       )
     return p.groupOf!(this.ctx, house, street, city)
@@ -236,7 +251,9 @@ export class OutageClient {
   private addressProvider(id: RegionId): Provider {
     const p = this.provider(id)
     if (!p.searchStreets || !p.searchHouses || !p.groupOf)
-      throw new OutageError('unsupported', `${p.info.name}: the operator has no address lookup`, { region: id })
+      throw new OutageError('unsupported', `${p.info.name}: the operator has no address lookup`, {
+        region: id,
+      })
     return p
   }
 }
@@ -251,8 +268,7 @@ function pick<T>(
   describe: (t: T) => string = name,
 ): T {
   const m = bestMatch(query, items, name, kind)
-  if (!m)
-    throw new OutageError('not-found', `No ${label} matches "${query}"`, { region })
+  if (!m) throw new OutageError('not-found', `No ${label} matches "${query}"`, { region })
   if (m.ambiguous)
     throw new OutageError(
       'not-found',
@@ -261,4 +277,3 @@ function pick<T>(
     )
   return m.item
 }
-

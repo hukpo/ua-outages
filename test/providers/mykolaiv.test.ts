@@ -16,7 +16,10 @@ function client() {
     { match: `${API}/addr/filii`, body: fixture('mykolaiv/addr-filii.json') },
     { match: `${API}/addr/ns/171/street`, body: fixture('mykolaiv/addr-ns-171-street.json') },
     { match: `${API}/addr/street/3057/dom`, body: fixture('mykolaiv/addr-street-3057-dom.json') },
-    { match: `${API}/addr/dom/121142/outage-queue`, body: fixture('mykolaiv/addr-dom-121142-outage-queue.json') },
+    {
+      match: `${API}/addr/dom/121142/outage-queue`,
+      body: fixture('mykolaiv/addr-dom-121142-outage-queue.json'),
+    },
   ])
   return { client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0 }), calls }
 }
@@ -34,7 +37,20 @@ describe('Mykolaivoblenergo', () => {
 
   it('lists all twelve groups', async () => {
     const s = await client().client.getSchedules('mykolaiv')
-    expect(s.groups).toEqual(['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'])
+    expect(s.groups).toEqual([
+      '1.1',
+      '1.2',
+      '2.1',
+      '2.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.1',
+      '5.2',
+      '6.1',
+      '6.2',
+    ])
     expect(s.updatedAt).toMatch(/^2026-11-05T/)
   })
 
@@ -49,7 +65,11 @@ describe('Mykolaivoblenergo', () => {
   })
 
   it('finds the group of a house through district and settlement', async () => {
-    const m = await client().client.findGroup('mykolaiv', { city: 'Миколаїв', street: 'вул. Соборна', house: '1' })
+    const m = await client().client.findGroup('mykolaiv', {
+      city: 'Миколаїв',
+      street: 'вул. Соборна',
+      house: '1',
+    })
     expect(m).toEqual({
       region: 'mykolaiv',
       group: '2.2',

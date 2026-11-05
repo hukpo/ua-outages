@@ -17,10 +17,14 @@ function client(today = TODAY) {
     { match: `${SITE}/shutdowns-search/2/`, body: fixture('chernivtsi/shutdowns-search-2.trimmed.html') },
     { match: /\/shutdowns-search\/\d+\/$/, body: EMPTY_DISTRICT },
   ])
-  return { client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [chernivtsiProvider()] }), calls }
+  return {
+    client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [chernivtsiProvider()] }),
+    calls,
+  }
 }
 
-const hhmm = (i: { from: string; to: string; kind: string }) => `${i.from.slice(11, 16)}–${i.to.slice(11, 16)} ${i.kind}`
+const hhmm = (i: { from: string; to: string; kind: string }) =>
+  `${i.from.slice(11, 16)}–${i.to.slice(11, 16)} ${i.kind}`
 
 describe('Chernivtsioblenergo', () => {
   it('reads today and tomorrow for groups 1–12', async () => {
@@ -42,7 +46,11 @@ describe('Chernivtsioblenergo', () => {
       '22:30–23:00 maybe',
     ])
     const g12 = (await client().client.getSchedule('chernivtsi', '12')).days[1]!
-    expect(g12.intervals.at(-1)).toEqual({ from: '2026-11-06T22:30:00+02:00', to: '2026-11-07T00:00:00+02:00', kind: 'off' })
+    expect(g12.intervals.at(-1)).toEqual({
+      from: '2026-11-06T22:30:00+02:00',
+      to: '2026-11-07T00:00:00+02:00',
+      kind: 'off',
+    })
   })
 
   it('dates the time-only "актуальний станом на" with the page render date', async () => {
@@ -61,7 +69,9 @@ describe('Chernivtsioblenergo', () => {
   it('marks an all-clear day as no outages', () => {
     const allOn = TODAY.replace(/<o>в<\/o>|<s>мз<\/s>/g, '<u>з</u>')
     const page = parseSchedulePage(allOn, NOW)
-    expect(Object.values(page.days).every((d) => d.status === 'no-outages' && d.intervals.length === 0)).toBe(true)
+    expect(Object.values(page.days).every((d) => d.status === 'no-outages' && d.intervals.length === 0)).toBe(
+      true,
+    )
   })
 
   it('rejects a changed format', () => {
@@ -73,7 +83,11 @@ describe('Chernivtsioblenergo', () => {
 
   it('finds a house in the city directory, merging street spellings', async () => {
     const { client: c, calls } = client()
-    const m = await c.findGroup('chernivtsi', { city: 'Чернівці', street: 'бульвар Героїв Крут', house: '22' })
+    const m = await c.findGroup('chernivtsi', {
+      city: 'Чернівці',
+      street: 'бульвар Героїв Крут',
+      house: '22',
+    })
     expect(m).toEqual({
       region: 'chernivtsi',
       group: '4',
@@ -84,7 +98,11 @@ describe('Chernivtsioblenergo', () => {
   })
 
   it('finds a village house that belongs to two groups', async () => {
-    const m = await client().client.findGroup('chernivtsi', { city: 'Чорногузи', street: 'Ярослава Мудрого', house: '3' })
+    const m = await client().client.findGroup('chernivtsi', {
+      city: 'Чорногузи',
+      street: 'Ярослава Мудрого',
+      house: '3',
+    })
     expect(m).toEqual({
       region: 'chernivtsi',
       group: '7',
@@ -105,7 +123,11 @@ describe('Chernivtsioblenergo', () => {
 
   it('reports an unknown house with the closest numbers', async () => {
     await expect(
-      client().client.findGroup('chernivtsi', { city: 'Чернівці', street: 'бульвар Героїв Крут', house: '999' }),
+      client().client.findGroup('chernivtsi', {
+        city: 'Чернівці',
+        street: 'бульвар Героїв Крут',
+        house: '999',
+      }),
     ).rejects.toMatchObject({ code: 'not-found' })
   })
 })

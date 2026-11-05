@@ -35,7 +35,9 @@ describe('Poltavaoblenergo', () => {
   })
 
   it('matches the operator’s own list of off periods', () => {
-    const off = s.schedules['1.1']![0]!.intervals.filter((i) => i.kind === 'off').map((i) => `${i.from.slice(11, 16)}–${i.to.slice(11, 16)}`)
+    const off = s.schedules['1.1']![0]!.intervals.filter((i) => i.kind === 'off').map(
+      (i) => `${i.from.slice(11, 16)}–${i.to.slice(11, 16)}`,
+    )
     // from <ul class="gpv-periods"> on the same page
     expect(off).toEqual(['00:00–00:30', '05:00–09:00', '11:00–15:00', '17:00–21:00', '23:00–00:00'])
   })

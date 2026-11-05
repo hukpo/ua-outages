@@ -113,15 +113,9 @@ export function nextOutage(
   opts: { kinds?: IntervalKind[]; includeCurrent?: boolean } = {},
 ): Interval | null {
   const kinds = opts.kinds ?? ['off']
-  const all = mergeAdjacent(
-    days.flatMap((d) => d.intervals).filter((i) => kinds.includes(i.kind)),
-  )
+  const all = mergeAdjacent(days.flatMap((d) => d.intervals).filter((i) => kinds.includes(i.kind)))
   const t = from.getTime()
-  return (
-    all.find((i) =>
-      opts.includeCurrent ? Date.parse(i.to) > t : Date.parse(i.from) > t,
-    ) ?? null
-  )
+  return all.find((i) => (opts.includeCurrent ? Date.parse(i.to) > t : Date.parse(i.from) > t)) ?? null
 }
 
 /** Total scheduled minutes of a kind on a day. */

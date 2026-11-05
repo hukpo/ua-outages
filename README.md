@@ -31,21 +31,21 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 
 ### `new OutageClient(options?)`
 
-| option | default | |
-|---|---|---|
-| `cacheTtlMs` | `300000` | Reuse a region's schedule for this long. `0` turns caching off. Concurrent requests for one region share a single fetch. |
-| `timeoutMs` | `15000` | Per request. |
-| `retries` | `1` | Extra attempts after a network error or a 5xx. |
-| `fetch` | `globalThis.fetch` | Bring your own (proxy, logging, tests). |
-| `userAgent` | `ua-outages (+repo url)` | |
-| `providers` | built-in | Replace or extend the regions. |
+| option       | default                  |                                                                                                                          |
+| ------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `cacheTtlMs` | `300000`                 | Reuse a region's schedule for this long. `0` turns caching off. Concurrent requests for one region share a single fetch. |
+| `timeoutMs`  | `15000`                  | Per request.                                                                                                             |
+| `retries`    | `1`                      | Extra attempts after a network error or a 5xx.                                                                           |
+| `fetch`      | `globalThis.fetch`       | Bring your own (proxy, logging, tests).                                                                                  |
+| `userAgent`  | `ua-outages (+repo url)` |                                                                                                                          |
+| `providers`  | built-in                 | Replace or extend the regions.                                                                                           |
 
 ### Schedules
 
 ```ts
-outages.regions()                         // RegionInfo[]: id, name, operator, capabilities
-await outages.getSchedules('lviv')        // every group: { groups, schedules: { '1.1': DaySchedule[] }, updatedAt }
-await outages.getSchedule('lviv', '3.1')  // one group; accepts "GPV3.1", "черга 3.1", …
+outages.regions() // RegionInfo[]: id, name, operator, capabilities
+await outages.getSchedules('lviv') // every group: { groups, schedules: { '1.1': DaySchedule[] }, updatedAt }
+await outages.getSchedule('lviv', '3.1') // one group; accepts "GPV3.1", "черга 3.1", …
 ```
 
 A `DaySchedule` is `{ date: 'YYYY-MM-DD', status, intervals }`:
@@ -100,14 +100,14 @@ From the terminal: `npm run health` (`-- --address`, `-- --json`, `-- kyiv lviv`
 
 Everything throws `OutageError` with a `code`:
 
-| code | meaning |
-|---|---|
-| `network` | DNS, timeout, connection reset |
-| `http` | non-2xx from the operator |
-| `blocked` | a firewall or bot check answered instead of the operator |
-| `parse` | the response arrived, but its format changed |
-| `unsupported` | unknown region, or the operator doesn't offer this |
-| `not-found` | unknown group, or the address couldn't be matched unambiguously |
+| code          | meaning                                                         |
+| ------------- | --------------------------------------------------------------- |
+| `network`     | DNS, timeout, connection reset                                  |
+| `http`        | non-2xx from the operator                                       |
+| `blocked`     | a firewall or bot check answered instead of the operator        |
+| `parse`       | the response arrived, but its format changed                    |
+| `unsupported` | unknown region, or the operator doesn't offer this              |
+| `not-found`   | unknown group, or the address couldn't be matched unambiguously |
 
 ## How it works and its limits
 

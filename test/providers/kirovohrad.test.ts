@@ -18,12 +18,29 @@ function setup(opts: { graphs?: string; sessionDead?: boolean } = {}) {
       body: fixture('kirovohrad/blackout-page-offices.html'),
       headers: { 'set-cookie': '8f3a1c7833fb0e0c789b47f2e28acc10=sess; path=/' },
     },
-    { match: `${B}/actual-gpv-graphs`, method: 'POST', body: () => (dead ? EMPTY : opts.graphs ?? fixture('kirovohrad/blackout-actual-gpv-graphs.2026-11-05.json')) },
-    { match: `${B}/city/86`, method: 'POST', body: () => (dead ? EMPTY : fixture('kirovohrad/blackout-city-86.json')) },
+    {
+      match: `${B}/actual-gpv-graphs`,
+      method: 'POST',
+      body: () =>
+        dead ? EMPTY : (opts.graphs ?? fixture('kirovohrad/blackout-actual-gpv-graphs.2026-11-05.json')),
+    },
+    {
+      match: `${B}/city/86`,
+      method: 'POST',
+      body: () => (dead ? EMPTY : fixture('kirovohrad/blackout-city-86.json')),
+    },
     { match: /\/city\/\d+$/, method: 'POST', body: EMPTY },
-    { match: `${B}/street/1471`, method: 'POST', body: fixture('kirovohrad/blackout-street-1471.TRIMMED.json') },
+    {
+      match: `${B}/street/1471`,
+      method: 'POST',
+      body: fixture('kirovohrad/blackout-street-1471.TRIMMED.json'),
+    },
     { match: `${B}/house/14592`, method: 'POST', body: fixture('kirovohrad/blackout-house-14592.json') },
-    { match: `${B}/get-house-info/96451`, method: 'POST', body: fixture('kirovohrad/blackout-get-house-info-96451.json') },
+    {
+      match: `${B}/get-house-info/96451`,
+      method: 'POST',
+      body: fixture('kirovohrad/blackout-get-house-info-96451.json'),
+    },
   ])
   const provider = kirovohradProvider()
   return {
@@ -42,14 +59,35 @@ describe('Kirovohradoblenergo', () => {
 
   it('reads today’s half-hour cells with possible-outage edges', () => {
     const s = parseGraphs(graphs, NOW)
-    expect(s.groups).toEqual(['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'])
+    expect(s.groups).toEqual([
+      '1.1',
+      '1.2',
+      '2.1',
+      '2.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.1',
+      '5.2',
+      '6.1',
+      '6.2',
+    ])
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05'])
     // "times" of 1.1: 01:30 "10", 02:00–03:30 "1", 04:00 "10", …
     expect(spans(s, '1.1')).toEqual([
-      '01:30–02:00 maybe', '02:00–04:00 off', '04:00–04:30 maybe',
-      '05:30–06:00 maybe', '06:00–08:00 off', '08:00–08:30 maybe',
-      '13:30–14:00 maybe', '14:00–16:00 off', '16:00–16:30 maybe',
-      '17:30–18:00 maybe', '18:00–20:00 off', '20:00–20:30 maybe',
+      '01:30–02:00 maybe',
+      '02:00–04:00 off',
+      '04:00–04:30 maybe',
+      '05:30–06:00 maybe',
+      '06:00–08:00 off',
+      '08:00–08:30 maybe',
+      '13:30–14:00 maybe',
+      '14:00–16:00 off',
+      '16:00–16:30 maybe',
+      '17:30–18:00 maybe',
+      '18:00–20:00 off',
+      '20:00–20:30 maybe',
     ])
     // the operator publishes no change time
     expect(s.updatedAt).toBeNull()
@@ -64,7 +102,10 @@ describe('Kirovohradoblenergo', () => {
     const headers = post.init!.headers as Record<string, string>
     expect(headers.Referer).toBe(B)
     expect(headers.Cookie).toBe('8f3a1c7833fb0e0c789b47f2e28acc10=sess')
-    expect(Object.fromEntries(new URLSearchParams(String(post.init!.body)))).toEqual({ ajax: '1', token: TOKEN })
+    expect(Object.fromEntries(new URLSearchParams(String(post.init!.body)))).toEqual({
+      ajax: '1',
+      token: TOKEN,
+    })
   })
 
   it('returns no groups when the schedule is empty but the session works', async () => {
@@ -85,11 +126,24 @@ describe('Kirovohradoblenergo', () => {
     let pages = 0
     const graphs = fixture('kirovohrad/blackout-actual-gpv-graphs.2026-11-05.json')
     const { fetch, calls } = mockFetch([
-      { match: /electricity-blackout$/, method: 'GET', body: () => (pages++, fixture('kirovohrad/blackout-page-offices.html')) },
+      {
+        match: /electricity-blackout$/,
+        method: 'GET',
+        body: () => (pages++, fixture('kirovohrad/blackout-page-offices.html')),
+      },
       // the second schedule request finds the first session expired
-      { match: '/actual-gpv-graphs', method: 'POST', body: () => (pages === 1 && calls.length > 2 ? EMPTY : graphs) },
+      {
+        match: '/actual-gpv-graphs',
+        method: 'POST',
+        body: () => (pages === 1 && calls.length > 2 ? EMPTY : graphs),
+      },
     ])
-    const client = new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [kirovohradProvider()] })
+    const client = new OutageClient({
+      fetch,
+      now: () => NOW,
+      cacheTtlMs: 0,
+      providers: [kirovohradProvider()],
+    })
     await client.getSchedules('kirovohrad')
     await new Promise((r) => setTimeout(r, 2))
     expect((await client.getSchedules('kirovohrad')).groups).toHaveLength(12)
@@ -121,8 +175,15 @@ describe('Kirovohradoblenergo', () => {
 
   it('explains houses outside the schedule', async () => {
     await expect(
-      setup().client.findGroup('kirovohrad', { city: 'Кропивницький', street: 'Велика Перспективна', house: '40' }),
-    ).rejects.toMatchObject({ code: 'not-found', message: expect.stringMatching(/not in the outage schedule/) })
+      setup().client.findGroup('kirovohrad', {
+        city: 'Кропивницький',
+        street: 'Велика Перспективна',
+        house: '40',
+      }),
+    ).rejects.toMatchObject({
+      code: 'not-found',
+      message: expect.stringMatching(/not in the outage schedule/),
+    })
   })
 
   it('asks the site for a house it has not listed in this session', async () => {

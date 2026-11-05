@@ -32,7 +32,8 @@ export function khmelnytskyiProvider(): Provider {
 
   const list = async <T>(ctx: ProviderContext, path: string) => {
     const data = await ctx.http.json<T[]>(`${SITE}${path}`, { region, headers: XHR })
-    if (!Array.isArray(data)) throw new OutageError('parse', `Khmelnytskyi ${path}: expected a list`, { region })
+    if (!Array.isArray(data))
+      throw new OutageError('parse', `Khmelnytskyi ${path}: expected a list`, { region })
     return data
   }
 
@@ -41,21 +42,29 @@ export function khmelnytskyiProvider(): Provider {
     sampleAddress: { city: 'Хмельницький', street: 'вул. Проскурівська', house: '2' },
 
     async getSchedules() {
-      throw new OutageError('unsupported', `${INFO.operator} publishes the hourly schedule only as an image`, { region })
+      throw new OutageError(
+        'unsupported',
+        `${INFO.operator} publishes the hourly schedule only as an image`,
+        { region },
+      )
     },
 
     async searchCities(ctx, query) {
       // the trailing slash is required; the term is a case-insensitive substring
-      const found = await list<Option>(ctx, `/settlements/?term=${encodeURIComponent(searchTerm(normalizeSettlement(query)))}`)
-      return found
-        .map((o) => parseSettlement(o))
-        .filter((c) => matchScore(query, c.name, 'settlement') > 0)
+      const found = await list<Option>(
+        ctx,
+        `/settlements/?term=${encodeURIComponent(searchTerm(normalizeSettlement(query)))}`,
+      )
+      return found.map((o) => parseSettlement(o)).filter((c) => matchScore(query, c.name, 'settlement') > 0)
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${INFO.name}: pick a city first`, { region })
       // an empty term returns only the first 30 streets, so always send a word of the name
-      const found = await list<Option>(ctx, `/streets/${city.id}?term=${encodeURIComponent(searchTerm(normalizeStreet(query)))}`)
+      const found = await list<Option>(
+        ctx,
+        `/streets/${city.id}?term=${encodeURIComponent(searchTerm(normalizeStreet(query)))}`,
+      )
       return found
         .map((o) => ({ id: String(o.id), name: o.text.trim(), cityId: city.id }))
         .filter((s) => matchScore(query, s.name) > 0)
@@ -64,7 +73,10 @@ export function khmelnytskyiProvider(): Provider {
     async searchHouses(ctx, street) {
       const houses = await list<string>(ctx, `/houses/${street.id}`)
       // the house string itself is what /shutdown-queues expects
-      return houses.map((h) => String(h).trim()).filter(Boolean).map((h) => ({ id: h, number: h, streetId: street.id }))
+      return houses
+        .map((h) => String(h).trim())
+        .filter(Boolean)
+        .map((h) => ({ id: h, number: h, streetId: street.id }))
     },
 
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
@@ -76,7 +88,11 @@ export function khmelnytskyiProvider(): Provider {
       })
       const groups = parseQueues(html)
       if (!groups.length)
-        throw new OutageError('not-found', `${house.number}, ${street.name}: the operator gives no hourly-outage subgroup`, { region })
+        throw new OutageError(
+          'not-found',
+          `${house.number}, ${street.name}: the operator gives no hourly-outage subgroup`,
+          { region },
+        )
       return {
         region,
         group: groups[0]!,
@@ -102,9 +118,13 @@ export function parseQueues(html: string): GroupId[] {
   const gpv = /\(ГПВ\)[^<]*<strong>([^<]*)<\/strong>/.exec(html)
   if (!gpv) {
     if (/alert/.test(html) && !/<html/i.test(html)) return []
-    throw new OutageError('parse', 'Khmelnytskyi: unexpected /shutdown-queues answer (format changed or bad request)', {
-      region: INFO.id,
-    })
+    throw new OutageError(
+      'parse',
+      'Khmelnytskyi: unexpected /shutdown-queues answer (format changed or bad request)',
+      {
+        region: INFO.id,
+      },
+    )
   }
   const groups = gpv[1]!
     .split(',')

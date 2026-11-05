@@ -57,7 +57,9 @@ describe('DTEK sites', () => {
 
   it('extracts the script variables', () => {
     const vars = parseDisconScript(fixture('dtek/shutdowns.trimmed.html'))
-    expect(Object.keys(vars)).toEqual(expect.arrayContaining(['streets', 'preset', 'fact', 'currentWeekDayIndex']))
+    expect(Object.keys(vars)).toEqual(
+      expect.arrayContaining(['streets', 'preset', 'fact', 'currentWeekDayIndex']),
+    )
   })
 
   it('finds a group by address with the session cookie and CSRF token', async () => {
@@ -72,7 +74,11 @@ describe('DTEK sites', () => {
   })
 
   it('reports houses that belong to two groups', async () => {
-    const m = await setup().client.findGroup('odesa', { city: 'м. Одеса', street: 'вул. Варненська', house: '18/3' })
+    const m = await setup().client.findGroup('odesa', {
+      city: 'м. Одеса',
+      street: 'вул. Варненська',
+      house: '18/3',
+    })
     expect(m).toMatchObject({ group: '3.1', otherGroups: ['4.1'] })
   })
 
@@ -90,7 +96,9 @@ describe('DTEK sites', () => {
   })
 
   it('says when the page changed', async () => {
-    await expect(setup('<html>' + 'x'.repeat(30_000) + '</html>').client.getSchedules('odesa')).rejects.toMatchObject({
+    await expect(
+      setup('<html>' + 'x'.repeat(30_000) + '</html>').client.getSchedules('odesa'),
+    ).rejects.toMatchObject({
       code: 'parse',
     })
   })

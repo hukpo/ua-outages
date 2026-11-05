@@ -2,7 +2,17 @@ import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups } from '../schedule.js'
 import { matchScore, normalizeHouse, normalizeSettlement, normalizeStreet, streetType } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupId, GroupMatch, House, IntervalKind, RegionInfo, RegionSchedule, Street } from '../types.js'
+import type {
+  City,
+  DaySchedule,
+  GroupId,
+  GroupMatch,
+  House,
+  IntervalKind,
+  RegionInfo,
+  RegionSchedule,
+  Street,
+} from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mapLimit } from '../util.js'
 
@@ -97,15 +107,21 @@ export function chernivtsiProvider(): Provider {
       const today = await ctx.http.text(`${SITE}/shutdowns/`, { region })
       const pages = [today]
       // the link to tomorrow appears only once it is published
-      if (today.includes('href="/shutdowns/?next"')) pages.push(await ctx.http.text(`${SITE}/shutdowns/?next`, { region }))
-      return mergeDays(pages.map((p) => parseSchedulePage(p, ctx.now())), ctx.now())
+      if (today.includes('href="/shutdowns/?next"'))
+        pages.push(await ctx.http.text(`${SITE}/shutdowns/?next`, { region }))
+      return mergeDays(
+        pages.map((p) => parseSchedulePage(p, ctx.now())),
+        ctx.now(),
+      )
     },
 
     async searchCities(ctx, query) {
       // fast path: the city of Chernivtsi is district 1 alone, no need to download the other 11
       if (matchScore(query, CITY_NAME, 'settlement') === 1)
         return [...(await directory(ctx, 1)).cities.values()].map((c) => c.city)
-      allCities ??= mapLimit(DISTRICTS, DIRECTORY_CONCURRENCY, (d) => directory(ctx, d.id)).then(nameDuplicates)
+      allCities ??= mapLimit(DISTRICTS, DIRECTORY_CONCURRENCY, (d) => directory(ctx, d.id)).then(
+        nameDuplicates,
+      )
       allCities.catch(() => (allCities = null))
       return (await allCities).filter((c) => matchScore(query, c.name, 'settlement') > 0)
     },
@@ -125,7 +141,11 @@ export function chernivtsiProvider(): Provider {
       const entry = await cityEntry(ctx, city ?? { id: street.cityId ?? '', name: '' })
       const hit = entry.streets.get(street.id)?.houses.get(house.id)
       if (!hit)
-        throw new OutageError('not-found', `${house.number}, ${street.name}: not in the operator's directory`, { region })
+        throw new OutageError(
+          'not-found',
+          `${house.number}, ${street.name}: not in the operator's directory`,
+          { region },
+        )
       const [group, ...other] = [...hit.groups].sort(compareGroups)
       return {
         region,
@@ -140,10 +160,14 @@ export function chernivtsiProvider(): Provider {
 // --- schedule ---
 
 /** One `/shutdowns/` page → its day for every group. Exported for tests. */
-export function parseSchedulePage(html: string, now: Date): { date: string; days: Record<GroupId, DaySchedule>; updatedAt: string | null } {
+export function parseSchedulePage(
+  html: string,
+  now: Date,
+): { date: string; days: Record<GroupId, DaySchedule>; updatedAt: string | null } {
   const region = INFO.id
   const gsv = html.indexOf('<div id="gsv"')
-  if (gsv === -1) throw new OutageError('parse', 'Chernivtsi: no schedule block (#gsv) on the page', { region })
+  if (gsv === -1)
+    throw new OutageError('parse', 'Chernivtsi: no schedule block (#gsv) on the page', { region })
   const block = html.slice(gsv)
 
   const dateText = /<ul>\s*<p>\s*(\d{2})\.(\d{2})\.(\d{4})/.exec(block)
@@ -152,12 +176,15 @@ export function parseSchedulePage(html: string, now: Date): { date: string; days
 
   const days: Record<GroupId, DaySchedule> = {}
   const rows = [...block.matchAll(/<div id="inf(\d+)"[^>]*>([\s\S]*?)<\/div>/g)]
-  if (!rows.length) throw new OutageError('parse', 'Chernivtsi: no group rows in the schedule block', { region })
+  if (!rows.length)
+    throw new OutageError('parse', 'Chernivtsi: no group rows in the schedule block', { region })
   let anyOutage = false
   for (const [, group, inner] of rows) {
     const cells = [...inner!.matchAll(/<(u|o|s)>[^<]*<\/\1>/g)].map((m) => CELL[m[1]!]!)
     if (cells.length !== 48)
-      throw new OutageError('parse', `Chernivtsi: group ${group} has ${cells.length} cells, expected 48`, { region })
+      throw new OutageError('parse', `Chernivtsi: group ${group} has ${cells.length} cells, expected 48`, {
+        region,
+      })
     if (cells.some((c) => c)) anyOutage = true
     days[String(Number(group))] = { date, status: 'scheduled', intervals: cellsToIntervals(date, cells) }
   }
@@ -197,7 +224,8 @@ function mergeDays(pages: ReturnType<typeof parseSchedulePage>[], now: Date): Re
   let updatedAt: string | null = null
   for (const page of [...pages].sort((a, b) => a.date.localeCompare(b.date))) {
     for (const [g, day] of Object.entries(page.days)) (schedules[g] ??= []).push(day)
-    if (page.updatedAt && (!updatedAt || Date.parse(page.updatedAt) > Date.parse(updatedAt))) updatedAt = page.updatedAt
+    if (page.updatedAt && (!updatedAt || Date.parse(page.updatedAt) > Date.parse(updatedAt)))
+      updatedAt = page.updatedAt
   }
   return {
     region: INFO.id,
@@ -224,7 +252,8 @@ const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export function parseDirectory(html: string, district: number, districtName: string): Directory {
   const region = INFO.id
   const table = /<div id="(city|obl)_tbl"[^>]*>([\s\S]*)/.exec(html)
-  if (!table) throw new OutageError('parse', `Chernivtsi: no address table for district ${district}`, { region })
+  if (!table)
+    throw new OutageError('parse', `Chernivtsi: no address table for district ${district}`, { region })
   const isCity = table[1] === 'city'
   const cities = new Map<string, CityEntry>()
 
@@ -236,7 +265,9 @@ export function parseDirectory(html: string, district: number, districtName: str
       ? [CITY_NAME, m[1]!, m[2]!, m[3]!]
       : [m[1]!, m[2]!, m[3]!, m[4]!]
     const street = decode(streetName).trim()
-    const number = decode(houseText).replace(/^\s*буд\.?\s*/i, '').trim()
+    const number = decode(houseText)
+      .replace(/^\s*буд\.?\s*/i, '')
+      .trim()
     const group = /^\s*(\d{1,2})\s*$/.exec(groupText)?.[1]
     // the directory has leftover rows with GUIDs instead of names
     if (!street || !number || !group || GUID.test(street) || GUID.test(number)) continue
@@ -245,7 +276,11 @@ export function parseDirectory(html: string, district: number, districtName: str
     const cityId = `${district}:${normalizeSettlement(settlement)}`
     let c = cities.get(cityId)
     if (!c) {
-      c = { city: { id: cityId, name: titleCase(settlement), district: districtName }, streets: new Map(), rows: 0 }
+      c = {
+        city: { id: cityId, name: titleCase(settlement), district: districtName },
+        streets: new Map(),
+        rows: 0,
+      }
       cities.set(cityId, c)
     }
     // "вул. X" and "пров. X" are different streets; "бульвар X" and "бульвар X БУЛЬВ." are not
@@ -264,7 +299,10 @@ export function parseDirectory(html: string, district: number, districtName: str
     h.groups.add(String(Number(group)))
     c.rows++
   }
-  if (!cities.size) throw new OutageError('parse', `Chernivtsi: address table for district ${district} has no rows`, { region })
+  if (!cities.size)
+    throw new OutageError('parse', `Chernivtsi: address table for district ${district} has no rows`, {
+      region,
+    })
   return { cities }
 }
 
@@ -304,4 +342,3 @@ function decode(s: string): string {
     .replace(/&amp;/g, '&')
     .replace(/&nbsp;/g, ' ')
 }
-

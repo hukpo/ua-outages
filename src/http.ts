@@ -27,7 +27,13 @@ export interface RequestOptions {
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
 
 /** Markers of bot-protection pages served instead of the real content. */
-const BLOCK_MARKERS = ['_Incapsula_Resource', 'Incapsula incident', 'cf-browser-verification', 'cf_chl_', 'Attention Required!']
+const BLOCK_MARKERS = [
+  '_Incapsula_Resource',
+  'Incapsula incident',
+  'cf-browser-verification',
+  'cf_chl_',
+  'Attention Required!',
+]
 
 export class Http {
   private readonly fetchImpl: FetchLike
@@ -47,7 +53,10 @@ export class Http {
   }
 
   /** Body plus response headers (for cookies). */
-  async raw(url: string, opts: RequestOptions = {}): Promise<{ body: string; headers: Headers; status: number }> {
+  async raw(
+    url: string,
+    opts: RequestOptions = {},
+  ): Promise<{ body: string; headers: Headers; status: number }> {
     const res = await this.request(url, opts)
     const body = opts.encoding
       ? new TextDecoder(opts.encoding).decode(await res.arrayBuffer())

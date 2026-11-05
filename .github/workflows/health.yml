@@ -18,4 +18,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run health -- --address
+      # DTEK's Kyiv-region and Donetsk sites answer non-browser clients with a bot check;
+      # drop them from the skip list once that changes
+      - run: npm run health -- --address --skip kyiv-region,donetsk

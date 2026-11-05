@@ -46,7 +46,11 @@ export function zakarpattiaProvider(): Provider {
       async streetBuildings(ctx, street) {
         // the `buildingNames` filter of this endpoint matches substrings ("5" finds "15"),
         // so the whole street is loaded (a few rows) and houses are matched here
-        const q = new URLSearchParams({ pagination: 'false', 'city.id': street.cityId ?? '', 'street.id': street.id })
+        const q = new URLSearchParams({
+          pagination: 'false',
+          'city.id': street.cityId ?? '',
+          'street.id': street.id,
+        })
         const data = await ctx.http.json(`${API}/pw_address_queues?${q}`, { region })
         return queuesToBuildings(hydraList<AddressQueue>(data, 'Zakarpattia pw_address_queues', region))
       },

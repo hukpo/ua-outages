@@ -28,14 +28,19 @@ const URL_ =
   }).toString()
 
 interface JsonApi {
-  data?: { attributes?: { title?: string; changed?: string; created?: string; body?: { value?: string } | null } }[]
+  data?: {
+    attributes?: { title?: string; changed?: string; created?: string; body?: { value?: string } | null }
+  }[]
 }
 
 export function kharkivProvider(): Provider {
   return {
     info: INFO,
     async getSchedules(ctx) {
-      const res = await ctx.http.json<JsonApi>(URL_, { region: INFO.id, headers: { Accept: 'application/vnd.api+json' } })
+      const res = await ctx.http.json<JsonApi>(URL_, {
+        region: INFO.id,
+        headers: { Accept: 'application/vnd.api+json' },
+      })
       return parseKharkiv(res, ctx.now())
     },
   }
@@ -43,7 +48,8 @@ export function kharkivProvider(): Provider {
 
 /** Exported for tests. */
 export function parseKharkiv(res: JsonApi, now: Date) {
-  if (!Array.isArray(res?.data)) throw new OutageError('parse', 'Kharkiv JSON:API: no "data" list', { region: INFO.id })
+  if (!Array.isArray(res?.data))
+    throw new OutageError('parse', 'Kharkiv JSON:API: no "data" list', { region: INFO.id })
   const posts: SchedulePost[] = res.data.map((n) => ({
     title: n.attributes?.title ?? '',
     body: n.attributes?.body?.value ?? '',

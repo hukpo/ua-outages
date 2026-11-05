@@ -11,12 +11,24 @@ function client(menus = 'lviv/menus.today-2026-10-17.hydra.json') {
   const { fetch, calls } = mockFetch([
     { match: MENUS, body: fixture(menus) },
     { match: `${API}/pw_cities?pagination=false`, body: fixture('lviv/pw_cities.json') },
-    { match: `${API}/pw_streets?pagination=false&city.id=693`, body: fixture('lviv/pw_streets.city-693.json') },
-    { match: /pw_accounts\?.*street\.id=12564&buildingName=171$/, body: fixture('lviv/pw_accounts.street-12564.building-171.json') },
-    { match: /pw_accounts\?.*street\.id=12564&buildingName=/, body: fixture('lviv/pw_accounts.no-match.json') },
+    {
+      match: `${API}/pw_streets?pagination=false&city.id=693`,
+      body: fixture('lviv/pw_streets.city-693.json'),
+    },
+    {
+      match: /pw_accounts\?.*street\.id=12564&buildingName=171$/,
+      body: fixture('lviv/pw_accounts.street-12564.building-171.json'),
+    },
+    {
+      match: /pw_accounts\?.*street\.id=12564&buildingName=/,
+      body: fixture('lviv/pw_accounts.no-match.json'),
+    },
     { match: /pw_accounts\?.*street\.id=12564$/, body: fixture('lviv/pw_accounts.street-12564.json') },
   ])
-  return { client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [lvivProvider()] }), calls }
+  return {
+    client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [lvivProvider()] }),
+    calls,
+  }
 }
 
 /** The real response with its "Today" slot replaced. */
@@ -34,7 +46,20 @@ const archived = (id: number) =>
 describe('Lvivoblenergo', () => {
   it('reads the prose schedule into exact intervals', async () => {
     const s = await client().client.getSchedules('lviv')
-    expect(s.groups).toEqual(['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'])
+    expect(s.groups).toEqual([
+      '1.1',
+      '1.2',
+      '2.1',
+      '2.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.1',
+      '5.2',
+      '6.1',
+      '6.2',
+    ])
     expect(s.schedules['1.1']).toEqual([
       {
         date: '2026-10-17',
@@ -76,20 +101,32 @@ describe('Lvivoblenergo', () => {
   })
 
   it('fails loudly on a changed format', () => {
-    expect(() => parseLvivMenu(menuWithToday({ rawHtml: '<p>Графік на 17.10.2026: див. зображення</p>' }), NOW)).toThrow(
+    expect(() =>
+      parseLvivMenu(menuWithToday({ rawHtml: '<p>Графік на 17.10.2026: див. зображення</p>' }), NOW),
+    ).toThrow(expect.objectContaining({ code: 'parse' }))
+    expect(() => parseLvivMenu(menuWithToday({ imageUrl: '/media/x_GPV.png' }), NOW)).toThrow(
+      /only as an image/,
+    )
+    expect(() => parseLvivMenu({ 'hydra:member': [{ id: 9 }] }, NOW)).toThrow(
       expect.objectContaining({ code: 'parse' }),
     )
-    expect(() => parseLvivMenu(menuWithToday({ imageUrl: '/media/x_GPV.png' }), NOW)).toThrow(/only as an image/)
-    expect(() => parseLvivMenu({ 'hydra:member': [{ id: 9 }] }, NOW)).toThrow(expect.objectContaining({ code: 'parse' }))
   })
 
   it('finds the group with an exact building request', async () => {
     const { client: c, calls } = client()
     const m = await c.findGroup('lviv', { city: 'Львів', street: 'вул. Городоцька', house: '171' })
-    expect(m).toEqual({ region: 'lviv', group: '5.1', address: { city: 'Львів', street: 'Городоцька', house: '171' } })
+    expect(m).toEqual({
+      region: 'lviv',
+      group: '5.1',
+      address: { city: 'Львів', street: 'Городоцька', house: '171' },
+    })
     // the 2 MB whole-street list isn't needed
     expect(calls.some((x) => x.url.endsWith('street.id=12564'))).toBe(false)
-    expect((await c.searchCities('lviv', 'Львів'))[0]).toEqual({ id: '693', name: 'Львів', district: 'Львівська громада' })
+    expect((await c.searchCities('lviv', 'Львів'))[0]).toEqual({
+      id: '693',
+      name: 'Львів',
+      district: 'Львівська громада',
+    })
   })
 
   it('returns every group of a building, the most common first', async () => {
@@ -106,9 +143,11 @@ describe('Lvivoblenergo', () => {
 
   it('skips accounts that are not in the schedule', async () => {
     // 20 accounts "Не входить", 2 in group 2.1
-    expect((await client().client.findGroup('lviv', { city: 'Львів', street: 'Городоцька', house: '16' })).group).toBe('2.1')
-    await expect(client().client.findGroup('lviv', { city: 'Львів', street: 'Городоцька', house: '219' })).rejects.toThrow(
-      /not included/,
-    )
+    expect(
+      (await client().client.findGroup('lviv', { city: 'Львів', street: 'Городоцька', house: '16' })).group,
+    ).toBe('2.1')
+    await expect(
+      client().client.findGroup('lviv', { city: 'Львів', street: 'Городоцька', house: '219' }),
+    ).rejects.toThrow(/not included/)
   })
 })

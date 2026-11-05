@@ -88,9 +88,9 @@ describe('OutageClient', () => {
   })
 
   it('reports a missing house with nearby options', async () => {
-    await expect(client(fakeProvider()).findGroup('kyiv', { street: 'Хрещатик', house: '99' })).rejects.toThrow(
-      /Closest: 1, 1-А/,
-    )
+    await expect(
+      client(fakeProvider()).findGroup('kyiv', { street: 'Хрещатик', house: '99' }),
+    ).rejects.toThrow(/Closest: 1, 1-А/)
   })
 
   it('refuses address search where the operator has none', async () => {
@@ -105,7 +105,9 @@ describe('OutageClient', () => {
     expect(ok.ok).toBe(true)
     expect(ok.regions[0]).toMatchObject({ status: 'ok', groups: 2, address: { ok: true, group: '1.1' } })
 
-    const stale = await client(fakeProvider(), { now: () => new Date('2026-11-20T10:00:00+02:00') }).healthCheck()
+    const stale = await client(fakeProvider(), {
+      now: () => new Date('2026-11-20T10:00:00+02:00'),
+    }).healthCheck()
     expect(stale.regions[0]!.status).toBe('stale')
 
     const empty = await client(
@@ -144,10 +146,15 @@ describe('Http', () => {
 
   it('classifies bot checks, HTTP errors and timeouts', async () => {
     const { Http } = await import('../src/http.js')
-    const blocked = new Http({ fetch: async () => new Response('<script src="/_Incapsula_Resource?x=1"></script>') })
+    const blocked = new Http({
+      fetch: async () => new Response('<script src="/_Incapsula_Resource?x=1"></script>'),
+    })
     await expect(blocked.text('https://x.test')).rejects.toMatchObject({ code: 'blocked' })
     const notFound = new Http({ fetch: async () => new Response('nope', { status: 404 }) })
-    await expect(notFound.text('https://x.test')).rejects.toMatchObject({ code: 'http', details: { status: 404 } })
+    await expect(notFound.text('https://x.test')).rejects.toMatchObject({
+      code: 'http',
+      details: { status: 404 },
+    })
     let n = 0
     const flaky = new Http({
       retries: 1,
@@ -158,7 +165,9 @@ describe('Http', () => {
       timeoutMs: 20,
       retries: 0,
       fetch: (_u, init) =>
-        new Promise((_, reject) => init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason))),
+        new Promise((_, reject) =>
+          init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason)),
+        ),
     })
     await expect(slow.text('https://x.test')).rejects.toMatchObject({ code: 'network' })
   })
@@ -182,7 +191,11 @@ describe('direct address lookup', () => {
   it('is used instead of the search chain', async () => {
     const p = fakeProvider({
       searchStreets: undefined,
-      lookupAddress: async (_ctx, a) => ({ region: 'kyiv', group: '4.2', address: { street: a.street, house: a.house } }),
+      lookupAddress: async (_ctx, a) => ({
+        region: 'kyiv',
+        group: '4.2',
+        address: { street: a.street, house: a.house },
+      }),
     })
     expect((await client(p).findGroup('kyiv', { street: 'Будь-яка', house: '1' })).group).toBe('4.2')
   })
@@ -203,7 +216,9 @@ describe('villages with the same name', () => {
         { id: 'c1', name: 'с. Хмелівка', district: 'Красилівська громада' },
         { id: 'c2', name: 'с. Хмелівка', district: 'Старокостянтинівська громада' },
       ],
-      searchStreets: async (_ctx, _q, city) => [{ id: `s-${city!.id}`, name: 'вул. Центральна', cityId: city!.id }],
+      searchStreets: async (_ctx, _q, city) => [
+        { id: `s-${city!.id}`, name: 'вул. Центральна', cityId: city!.id },
+      ],
       groupOf: async (_ctx, house, street) => ({
         region: 'kyiv',
         group: street.cityId === 'c2' ? '2.2' : '1.1',

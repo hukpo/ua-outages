@@ -117,14 +117,22 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
     return remember(street, await opts.streetBuildings(ctx, street), true)
   }
 
-  const toHouse = (street: Street, b: PowerOnBuilding): House => ({ id: b.number, number: b.number, streetId: street.id })
+  const toHouse = (street: Street, b: PowerOnBuilding): House => ({
+    id: b.number,
+    number: b.number,
+    streetId: street.id,
+  })
 
   return {
     async searchCities(ctx, query) {
       // one request for the whole region (a few hundred KB) instead of one per hromada
       cities ??= (async () => {
         const data = await ctx.http.json(`${opts.api}/pw_cities?pagination=false`, { region })
-        return hydraList<{ id: number; name: string; otg?: { name?: string } | string }>(data, `${opts.label} pw_cities`, region)
+        return hydraList<{ id: number; name: string; otg?: { name?: string } | string }>(
+          data,
+          `${opts.label} pw_cities`,
+          region,
+        )
           .filter((c) => c.name?.trim())
           .map((c) => ({
             id: String(c.id),
@@ -136,7 +144,8 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
         throw e
       })
       const all = await cities
-      if (!all.length) throw new OutageError('parse', `${opts.label}: the settlement list is empty`, { region })
+      if (!all.length)
+        throw new OutageError('parse', `${opts.label}: the settlement list is empty`, { region })
       return all.filter((c) => matchScore(query, c.name, 'settlement') > 0)
     },
 
@@ -145,9 +154,12 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
       let list = streets.get(city.id)
       if (!list) {
         list = (async () => {
-          const data = await ctx.http.json(`${opts.api}/pw_streets?pagination=false&city.id=${encodeURIComponent(city.id)}`, {
-            region,
-          })
+          const data = await ctx.http.json(
+            `${opts.api}/pw_streets?pagination=false&city.id=${encodeURIComponent(city.id)}`,
+            {
+              region,
+            },
+          )
           return hydraList<{ id: number; name: string }>(data, `${opts.label} pw_streets`, region)
             .filter((s) => s.name?.trim())
             .map((s) => ({ id: String(s.id), name: s.name.trim().replace(/\s+/g, ' '), cityId: city.id }))
@@ -180,12 +192,18 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
       if (!groups?.length) {
         const find = (e: { byNumber: Map<string, PowerOnBuilding> } | undefined) =>
           e?.byNumber.get(house.number) ??
-          [...(e?.byNumber.values() ?? [])].find((b) => normalizeHouse(b.number) === normalizeHouse(house.number))
+          [...(e?.byNumber.values() ?? [])].find(
+            (b) => normalizeHouse(b.number) === normalizeHouse(house.number),
+          )
         let b = find(buildings.get(street.id))
         if (!b && opts.findBuilding) b = (await opts.findBuilding(ctx, street, house.number))[0]
         if (!b) b = find(await loadStreet(ctx, street))
         if (!b)
-          throw new OutageError('not-found', `${house.number}, ${street.name}: no such building in the operator's list`, { region })
+          throw new OutageError(
+            'not-found',
+            `${house.number}, ${street.name}: no such building in the operator's list`,
+            { region },
+          )
         groups = b.groups
       }
       if (!groups.length)

@@ -2,7 +2,17 @@ import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
 import { matchScore, normalizeHouse } from '../text.js'
 import { kyivDate, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupId, GroupMatch, House, IntervalKind, RegionInfo, RegionSchedule, Street } from '../types.js'
+import type {
+  City,
+  DaySchedule,
+  GroupId,
+  GroupMatch,
+  House,
+  IntervalKind,
+  RegionInfo,
+  RegionSchedule,
+  Street,
+} from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { cookieHeader, mapLimit } from '../util.js'
 
@@ -68,7 +78,10 @@ export function kirovohradProvider(): Provider {
   const houseGroups = new Map<string, { number: string; groups: GroupId[] }>()
 
   const bootstrap = async (ctx: ProviderContext): Promise<Session> => {
-    const { body, headers } = await ctx.http.raw(BASE, { region, headers: { Accept: 'text/html,application/xhtml+xml' } })
+    const { body, headers } = await ctx.http.raw(BASE, {
+      region,
+      headers: { Accept: 'text/html,application/xhtml+xml' },
+    })
     const token = /ajaxToken:\s*"([a-f0-9]+)"/.exec(body)?.[1]
     if (!token)
       throw new OutageError(
@@ -106,7 +119,10 @@ export function kirovohradProvider(): Provider {
       },
     })
     if (!res || typeof res !== 'object' || res.success !== true)
-      throw new OutageError('parse', `${INFO.operator} ${path}: unexpected answer`, { region, url: `${BASE}${path}` })
+      throw new OutageError('parse', `${INFO.operator} ${path}: unexpected answer`, {
+        region,
+        url: `${BASE}${path}`,
+      })
     return res.data
   }
 
@@ -136,7 +152,8 @@ export function kirovohradProvider(): Provider {
   const list = async <T>(ctx: ProviderContext, path: string): Promise<T[]> => {
     const data = await api(ctx, path)
     if (isEmpty(data)) return []
-    if (!Array.isArray(data)) throw new OutageError('parse', `${INFO.operator} ${path}: expected a list`, { region })
+    if (!Array.isArray(data))
+      throw new OutageError('parse', `${INFO.operator} ${path}: expected a list`, { region })
     return data as T[]
   }
 
@@ -152,7 +169,8 @@ export function kirovohradProvider(): Provider {
       // settlements are only listed per ОТГ: fetch all ОТГ once and keep them
       cities ??= (async () => {
         const { offices } = await session(ctx)
-        if (!offices.length) throw new OutageError('parse', `${INFO.operator}: no ОТГ list on the page`, { region })
+        if (!offices.length)
+          throw new OutageError('parse', `${INFO.operator}: no ОТГ list on the page`, { region })
         const lists = await mapLimit(offices, 6, async (o) =>
           (await list<ApiCity>(ctx, `/city/${o.id}`))
             .filter((c) => c.CityName?.trim())
@@ -191,13 +209,19 @@ export function kirovohradProvider(): Provider {
       if (!groups) {
         const info = await api(ctx, `/get-house-info/${house.id}`)
         if (isEmpty(info) || typeof info !== 'object')
-          throw new OutageError('not-found', `House "${house.number}" not found on ${street.name}`, { region })
+          throw new OutageError('not-found', `House "${house.number}" not found on ${street.name}`, {
+            region,
+          })
         groups = mergeHouses([info as ApiHouse])[0]?.groups ?? []
       }
       if (!groups.length)
-        throw new OutageError('not-found', `${house.number}, ${street.name}: not in the outage schedule ("не входить")`, {
-          region,
-        })
+        throw new OutageError(
+          'not-found',
+          `${house.number}, ${street.name}: not in the outage schedule ("не входить")`,
+          {
+            region,
+          },
+        )
       return {
         region,
         group: groups[0]!,
@@ -219,24 +243,38 @@ export function parseGraphs(data: unknown, now: Date): RegionSchedule {
   if (!isEmpty(data)) {
     if (typeof data !== 'object' || Array.isArray(data))
       throw new OutageError('parse', `${INFO.operator}: schedule is not an object of groups`, { region })
-    for (const [rawGroup, value] of Object.entries(data as Record<string, { times?: Record<string, string> }>)) {
+    for (const [rawGroup, value] of Object.entries(
+      data as Record<string, { times?: Record<string, string> }>,
+    )) {
       const group = normalizeGroup(rawGroup)
       const times = value?.times
       if (!group || !times || typeof times !== 'object')
-        throw new OutageError('parse', `${INFO.operator}: unexpected schedule entry "${rawGroup}"`, { region })
+        throw new OutageError('parse', `${INFO.operator}: unexpected schedule entry "${rawGroup}"`, {
+          region,
+        })
       const cells: (IntervalKind | null | undefined)[] = new Array(48).fill(undefined)
       for (const [clock, state] of Object.entries(times)) {
         const m = /^(\d{2}):(00|30)$/.exec(clock)
         const kind = CELL[String(state)]
         if (!m || kind === undefined || Number(m[1]) > 23)
-          throw new OutageError('parse', `${INFO.operator}: unexpected cell ${clock}="${state}" for ${group}`, { region })
+          throw new OutageError(
+            'parse',
+            `${INFO.operator}: unexpected cell ${clock}="${state}" for ${group}`,
+            { region },
+          )
         cells[Number(m[1]) * 2 + (m[2] === '30' ? 1 : 0)] = kind
       }
       if (cells.includes(undefined))
-        throw new OutageError('parse', `${INFO.operator}: group ${group} has ${Object.keys(times).length} cells, expected 48`, {
-          region,
-        })
-      schedules[group] = [{ date, status: 'scheduled', intervals: cellsToIntervals(date, cells as (IntervalKind | null)[]) }]
+        throw new OutageError(
+          'parse',
+          `${INFO.operator}: group ${group} has ${Object.keys(times).length} cells, expected 48`,
+          {
+            region,
+          },
+        )
+      schedules[group] = [
+        { date, status: 'scheduled', intervals: cellsToIntervals(date, cells as (IntervalKind | null)[]) },
+      ]
     }
   }
   return {
@@ -254,7 +292,10 @@ export function parseOffices(html: string): { id: string; name: string }[] {
   const select = /<select[^>]*id="fn_office"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1] ?? ''
   return [...select.matchAll(/<option[^>]*value="(\d+)"[^>]*>([^<]*)/g)].map((m) => ({
     id: m[1]!,
-    name: m[2]!.replace(/&#0?39;/g, "'").replace(/&amp;/g, '&').trim(),
+    name: m[2]!
+      .replace(/&#0?39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .trim(),
   }))
 }
 
@@ -288,4 +329,3 @@ function isEmpty(data: unknown): boolean {
   if (Array.isArray(data)) return data.length === 0
   return typeof data === 'object' && Object.keys(data).length === 0
 }
-
