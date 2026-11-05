@@ -23,6 +23,33 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 ## Regions
 
 <!-- regions:start -->
+
+| id                | region                         | source                                       | schedule   | address | notes                                                     |
+| ----------------- | ------------------------------ | -------------------------------------------- | ---------- | ------- | --------------------------------------------------------- |
+| `kyiv`            | Київ                           | ДТЕК Київські електромережі via YASNO API    | ✅         | ✅      |                                                           |
+| `dnipro`          | Дніпропетровська область       | ДТЕК Дніпровські електромережі via YASNO API | ✅         | ✅      |                                                           |
+| `dnipro-cek`      | Дніпропетровська область (ЦЕК) | ЦЕК via YASNO API                            | ✅         | ✅      |                                                           |
+| `odesa`           | Одеська область                | ДТЕК Одеські електромережі, schedule page    | ✅         | ✅      |                                                           |
+| `kyiv-region`     | Київська область               | ДТЕК Київські регіональні електромережі      | ⛔         | ⛔      | site answers with a bot check                             |
+| `donetsk`         | Донецька область               | ДТЕК Донецькі електромережі                  | ⛔         | ⛔      | site answers with a bot check                             |
+| `lviv`            | Львівська область              | Львівобленерго API                           | ✅         | ✅      |                                                           |
+| `ternopil`        | Тернопільська область          | Тернопільобленерго API                       | ✅         | ✅      | schedule is read per group via one reference address each |
+| `zakarpattia`     | Закарпатська область           | Закарпаттяобленерго API                      | image only | ✅      |                                                           |
+| `ivano-frankivsk` | Івано-Франківська область      | Прикарпаттяобленерго API                     | ✅         | ✅      | free-text address lookup                                  |
+| `chernivtsi`      | Чернівецька область            | Чернівціобленерго, schedule page             | ✅         | ✅      | groups are numbered 1–12                                  |
+| `rivne`           | Рівненська область             | Рівнеобленерго, schedule page                | ✅         | —       | address list is PDF only                                  |
+| `volyn`           | Волинська область              | Волиньобленерго                              | image only | ✅      |                                                           |
+| `khmelnytskyi`    | Хмельницька область            | Хмельницькобленерго                          | image only | ✅      |                                                           |
+| `zhytomyr`        | Житомирська область            | Житомиробленерго, schedule page              | ✅         | ✅      |                                                           |
+| `kirovohrad`      | Кіровоградська область         | Кіровоградобленерго API                      | ✅ today   | ✅      |                                                           |
+| `cherkasy`        | Черкаська область              | Черкасиобленерго news API                    | ✅         | —       | lookup server has a broken TLS chain                      |
+| `sumy`            | Сумська область                | Сумиобленерго API                            | ✅ today   | ✅      |                                                           |
+| `poltava`         | Полтавська область             | Полтаваобленерго, schedule fragment          | ✅         | ✅      | buildings with several connections have no single group   |
+| `kharkiv`         | Харківська область             | Харківобленерго news API                     | ✅         | —       | lookup needs a captcha                                    |
+| `zaporizhzhia`    | Запорізька область             | Запоріжжяобленерго news page                 | ✅         | —       | no lookup published                                       |
+| `mykolaiv`        | Миколаївська область           | Миколаївобленерго API                        | ✅         | ✅      |                                                           |
+
+Not covered: Вінницька and Чернігівська (schedule and lookup behind a captcha), Херсонська (no public schedule), Луганська, АР Крим. "today" means the operator publishes only the current day.
 <!-- regions:end -->
 
 "Address" means the SDK can turn an address into a group. Regions marked "image only" publish the schedule only as a picture; the SDK still finds the group, but `getSchedules` throws `unsupported`.
@@ -112,6 +139,8 @@ Everything throws `OutageError` with a `code`:
 ## How it works and its limits
 
 Each region is a provider in `src/providers/` that reads the operator's own source: a JSON API where one exists (YASNO, Mykolaiv, Sumy, …), otherwise the schedule page or the operator's news posts. Nothing goes around captchas or bot protection. When an operator puts one in front of its data, the SDK reports `blocked` instead.
+
+Notes on every source (endpoints, formats, quirks) are in [`docs/sources`](docs/sources).
 
 Operators change their sites without warning. Every provider is tested against real saved responses (`test/fixtures`), and `healthCheck` catches changes in production. If a region breaks, please open an issue with the `npm run health` output.
 

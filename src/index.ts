@@ -3,6 +3,7 @@ export type { HealthCheckOptions, HealthReport, OutageClientOptions } from './cl
 export { OutageError, isOutageError } from './errors.js'
 export type { OutageErrorCode } from './errors.js'
 export type { FetchLike } from './http.js'
+export { createProviders } from './providers/index.js'
 export type { Provider, ProviderContext } from './providers/provider.js'
 export { compareGroups, intervalAt, minutesOf, nextOutage, normalizeGroup, stateAt } from './schedule.js'
 export type { PowerState } from './schedule.js'
