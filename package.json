@@ -1,0 +1,50 @@
+{
+  "name": "ua-outages",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Ukrainian power outage schedules: find your outage group by address and get schedules straight from the grid operators.",
+  "keywords": [
+    "ukraine",
+    "power-outage",
+    "blackout",
+    "electricity",
+    "schedule",
+    "yasno",
+    "dtek",
+    "oblenergo",
+    "графік відключень"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:live": "LIVE=1 vitest run test/live",
+    "health": "tsx scripts/health.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
