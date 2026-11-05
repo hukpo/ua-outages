@@ -76,6 +76,27 @@ export function normalizeHouse(s: string): string {
     .replace(/[\s\-/.]+/g, '')
 }
 
+/** Canonical street type of a name ("просп. X" → "просп"), or null when it has none. */
+export function streetType(s: string): string | null {
+  const words = normalizeText(s).replace(/\./g, ' ').split(' ')
+  for (const w of words) {
+    const canon = TYPE_CANON[w]
+    if (canon) return canon
+  }
+  return null
+}
+
+const TYPE_CANON: Record<string, string> = {
+  вулиця: 'вул', вул: 'вул',
+  проспект: 'просп', просп: 'просп', 'пр-т': 'просп', пр: 'просп',
+  провулок: 'пров', пров: 'пров',
+  бульвар: 'бул', бульв: 'бул', бул: 'бул',
+  площа: 'пл', пл: 'пл',
+  набережна: 'наб', наб: 'наб',
+  шосе: 'шосе', узвіз: 'узвіз', тупик: 'тупик', проїзд: 'проїзд', майдан: 'майдан', алея: 'алея',
+  мікрорайон: 'мкр', мкр: 'мкр', квартал: 'кв-л', 'кв-л': 'кв-л',
+}
+
 /**
  * How well `candidate` matches `query`, 0..1. Exact normalized match = 1; every query word
  * found as a word prefix scores high; otherwise 0.
@@ -85,13 +106,18 @@ export function matchScore(query: string, candidate: string, kind: 'street' | 's
   const q = norm(query)
   const c = norm(candidate)
   if (!q || !c) return 0
-  if (q === c) return 1
+  // "просп. Яворницького" and "вул. Яворницького" are different streets: when the query names
+  // a type, a candidate of another type ranks lower
+  const qt = kind === 'street' ? streetType(query) : null
+  const ct = qt ? streetType(candidate) : null
+  const typeFactor = qt && ct && qt !== ct ? 0.85 : 1
+  if (q === c) return typeFactor
   const cWords = c.split(' ')
   const qWords = q.split(' ')
   const allFound = qWords.every((w) => cWords.some((cw) => cw.startsWith(w)))
-  if (!allFound) return c.includes(q) ? 0.5 : 0
+  if (!allFound) return c.includes(q) ? 0.5 * typeFactor : 0
   // prefer candidates that don't have many extra words ("Шевченка" vs "Тараса Шевченка")
-  return 0.6 + 0.35 * (qWords.length / cWords.length)
+  return (0.6 + 0.35 * (qWords.length / cWords.length)) * typeFactor
 }
 
 /** Picks the single best match, or null when nothing fits or two candidates tie at the top. */
@@ -107,6 +133,7 @@ export function bestMatch<T>(
     .sort((a, b) => b.score - a.score)
   const top = scored[0]
   if (!top) return null
-  const ambiguous = scored.length > 1 && scored[1]!.score === top.score && top.score < 1
+  // equal scores mean the query can't tell them apart ("Яворницького" → вул. or пров.?)
+  const ambiguous = scored.length > 1 && scored[1]!.score === top.score
   return { ...top, ambiguous }
 }

@@ -1,0 +1,1 @@
+{"type":"https://tools.ietf.org/html/rfc9110#section-15.5.5","title":"EntryNotFoundException","status":404,"detail":"There is nothing by the URL requested /public/shutdowns/regions/25/902/planned-outages","traceId":"00-7c42c963b14695a03bbaf36ca5c38efc-a088528240fab8dc-01","code":"EntryNotFound"}

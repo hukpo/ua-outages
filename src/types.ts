@@ -3,7 +3,7 @@ export type RegionId =
   | 'kyiv'
   | 'kyiv-region'
   | 'dnipro'
-  | 'dnipro-region'
+  | 'dnipro-cek'
   | 'odesa'
   | 'donetsk'
   | 'lviv'
