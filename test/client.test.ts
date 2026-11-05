@@ -163,3 +163,17 @@ describe('Http', () => {
     await expect(slow.text('https://x.test')).rejects.toMatchObject({ code: 'network' })
   })
 })
+
+describe('regions without a machine-readable schedule', () => {
+  it('are reported as empty, not broken', async () => {
+    const p = fakeProvider({
+      getSchedules: async () => {
+        throw new OutageError('unsupported', 'image only')
+      },
+    })
+    ;(p.info.capabilities as { schedule: boolean }).schedule = false
+    const r = await client(p).healthCheck({ address: true })
+    expect(r.ok).toBe(true)
+    expect(r.regions[0]).toMatchObject({ status: 'empty', address: { ok: true } })
+  })
+})

@@ -38,6 +38,7 @@ export interface RegionInfo {
   /** Page where people can see the schedule themselves */
   website: string
   capabilities: {
+    /** False when the operator publishes the schedule only as an image; `getSchedules` then throws `unsupported` */
     schedule: boolean
     /** Can find a group from a street address */
     addressSearch: boolean

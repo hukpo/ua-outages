@@ -180,6 +180,17 @@ export class OutageClient {
   }
 
   private async checkRegion(region: RegionId, staleMs: number): Promise<RegionHealth> {
+    const info = this.provider(region).info
+    // e.g. operators that publish the schedule only as an image: nothing to check
+    if (!info.capabilities.schedule)
+      return {
+        region,
+        status: 'empty',
+        latencyMs: 0,
+        groups: 0,
+        updatedAt: null,
+        message: 'The operator publishes no machine-readable schedule (address lookup only)',
+      }
     const started = performance.now()
     try {
       const s = await this.getSchedules(region, { fresh: true })
