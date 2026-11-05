@@ -79,6 +79,8 @@ const outages = new OutageClient({
 })
 ```
 
+In interactive tools (a CLI, a desktop app, a script you run yourself), `fetch` can also be backed by a visible browser window: the person using the tool passes the site's check themselves, and the requests then run in that same browser session. This SDK doesn't ship such a fetch and never solves checks on anyone's behalf. Expect the session to expire and the check to come back. It doesn't fit servers or cron jobs, where nobody is there to pass it.
+
 The same option works for proxies, caching, logging and tests. When an operator opens its data publicly, as YASNO did for Kyiv and Dnipro, support follows; issues and contacts at operators are welcome.
 
 ## API
