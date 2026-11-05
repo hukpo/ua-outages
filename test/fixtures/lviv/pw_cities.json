@@ -1,0 +1,153 @@
+{
+ "@context": "/api/contexts/PwCity",
+ "@id": "/api/pw_cities",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_cities/298",
+   "@type": "PwCity",
+   "id": 298,
+   "name": "Дубляни",
+   "codeOtg": "UA46060250000025047",
+   "otg": {
+    "@id": "/api/pw_otgs/28",
+    "@type": "PwOtg",
+    "name": "Львівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/693",
+   "@type": "PwCity",
+   "id": 693,
+   "name": "Львів",
+   "codeOtg": "UA46060250000025047",
+   "otg": {
+    "@id": "/api/pw_otgs/28",
+    "@type": "PwOtg",
+    "name": "Львівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/783",
+   "@type": "PwCity",
+   "id": 783,
+   "name": "Пустомити",
+   "codeOtg": "UA46060370000065608",
+   "otg": {
+    "@id": "/api/pw_otgs/34",
+    "@type": "PwOtg",
+    "name": "Пустомитівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1176",
+   "@type": "PwCity",
+   "id": 1176,
+   "name": "Винники",
+   "codeOtg": "UA46060250000025047",
+   "otg": {
+    "@id": "/api/pw_otgs/28",
+    "@type": "PwOtg",
+    "name": "Львівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1205",
+   "@type": "PwCity",
+   "id": 1205,
+   "name": "Винники",
+   "codeOtg": "UA46020010000073886",
+   "otg": {
+    "@id": "/api/pw_otgs/4",
+    "@type": "PwOtg",
+    "name": "Бориславська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/2293",
+   "@type": "PwCity",
+   "id": 2293,
+   "name": "Дубляни",
+   "codeOtg": "UA46080070000035761",
+   "otg": {
+    "@id": "/api/pw_otgs/42",
+    "@type": "PwOtg",
+    "name": "Новокалинівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1",
+   "@type": "PwCity",
+   "id": 1,
+   "name": "Броди",
+   "codeOtg": "UA46040010000033885",
+   "otg": {
+    "@id": "/api/pw_otgs/9",
+    "@type": "PwOtg",
+    "name": "Бродівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/3",
+   "@type": "PwCity",
+   "id": 3,
+   "name": "Берлин",
+   "codeOtg": "UA46040010000033885",
+   "otg": {
+    "@id": "/api/pw_otgs/9",
+    "@type": "PwOtg",
+    "name": "Бродівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/4",
+   "@type": "PwCity",
+   "id": 4,
+   "name": "Конюшків",
+   "codeOtg": "UA46040010000033885",
+   "otg": {
+    "@id": "/api/pw_otgs/9",
+    "@type": "PwOtg",
+    "name": "Бродівська"
+   }
+  }
+ ],
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_cities{?name,otg.id,otg.id[],codeOtg,codeOtg[]}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id[]",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "codeOtg",
+    "property": "codeOtg",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "codeOtg[]",
+    "property": "codeOtg",
+    "required": false
+   }
+  ]
+ },
+ "_trimmed": "9 of 2034 settlements"
+}

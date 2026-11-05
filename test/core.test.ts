@@ -159,3 +159,11 @@ describe('address text', () => {
     expect(tie?.ambiguous).toBe(true)
   })
 })
+
+describe('street initials', () => {
+  it('matches a first name to its initial', () => {
+    expect(matchScore('вул. Богдана Хмельницького', 'Хмельницького Б.')).toBeGreaterThan(0.6)
+    expect(matchScore('Хмельницького', 'Хмельницького Б.')).toBeGreaterThan(0)
+    expect(matchScore('вул. Івана Франка', 'Хмельницького Б.')).toBe(0)
+  })
+})

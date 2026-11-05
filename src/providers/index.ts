@@ -7,10 +7,13 @@ import { poltavaProvider } from './poltava.js'
 import { kharkivProvider } from './kharkiv.js'
 import { khmelnytskyiProvider } from './khmelnytskyi.js'
 import { kirovohradProvider } from './kirovohrad.js'
+import { lvivProvider } from './lviv.js'
 import type { Provider } from './provider.js'
 import { rivneProvider } from './rivne.js'
 import { sumyProvider } from './sumy.js'
+import { ternopilProvider } from './ternopil.js'
 import { volynProvider } from './volyn.js'
+import { zakarpattiaProvider } from './zakarpattia.js'
 import { zaporizhzhiaProvider } from './zaporizhzhia.js'
 import { zhytomyrProvider } from './zhytomyr.js'
 import { yasnoProvider } from './yasno.js'
@@ -89,6 +92,9 @@ export function createProviders(): Provider[] {
     sumyProvider(),
     zhytomyrProvider(),
     kirovohradProvider(),
+    lvivProvider(),
+    ternopilProvider(),
+    zakarpattiaProvider(),
     ivanoFrankivskProvider(),
     chernivtsiProvider(),
     rivneProvider(),

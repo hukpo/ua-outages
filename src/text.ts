@@ -114,7 +114,9 @@ export function matchScore(query: string, candidate: string, kind: 'street' | 's
   if (q === c) return typeFactor
   const cWords = c.split(' ')
   const qWords = q.split(' ')
-  const allFound = qWords.every((w) => cWords.some((cw) => cw.startsWith(w)))
+  // a one-letter word is an initial: "Хмельницького Б." matches "Богдана Хмельницького"
+  const wordMatches = (w: string, cw: string) => cw.startsWith(w) || (cw.length === 1 && w.startsWith(cw))
+  const allFound = qWords.every((w) => cWords.some((cw) => wordMatches(w, cw)))
   if (!allFound) return c.includes(q) ? 0.5 * typeFactor : 0
   // prefer candidates that don't have many extra words ("Шевченка" vs "Тараса Шевченка")
   return (0.6 + 0.35 * (qWords.length / cWords.length)) * typeFactor

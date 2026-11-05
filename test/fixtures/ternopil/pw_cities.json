@@ -1,0 +1,129 @@
+{
+ "@context": "/api/contexts/PwCity",
+ "@id": "/api/pw_cities",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_cities/192",
+   "@type": "PwCity",
+   "id": 192,
+   "name": "Борщів",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/25",
+    "@type": "PwOtg",
+    "name": "Борщівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1032",
+   "@type": "PwCity",
+   "id": 1032,
+   "name": "Тернопіль",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/41",
+    "@type": "PwOtg",
+    "name": "Тернопільська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/21525",
+   "@type": "PwCity",
+   "id": 21525,
+   "name": "Козова",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/32",
+    "@type": "PwOtg",
+    "name": "Козівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1036",
+   "@type": "PwCity",
+   "id": 1036,
+   "name": "",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/14",
+    "@type": "PwOtg",
+    "name": "Гусятинська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1",
+   "@type": "PwCity",
+   "id": 1,
+   "name": "Теребовля",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/1",
+    "@type": "PwOtg",
+    "name": "Теребовлянська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/95",
+   "@type": "PwCity",
+   "id": 95,
+   "name": "Бучач",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/12",
+    "@type": "PwOtg",
+    "name": "Бучацька"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/136",
+   "@type": "PwCity",
+   "id": 136,
+   "name": "Бережани",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/17",
+    "@type": "PwOtg",
+    "name": "Бережанська"
+   }
+  }
+ ],
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_cities{?name,otg.id,otg.id[],codeOtg,codeOtg[]}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id[]",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "codeOtg",
+    "property": "codeOtg",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "codeOtg[]",
+    "property": "codeOtg",
+    "required": false
+   }
+  ]
+ },
+ "_trimmed": "7 of 1301 settlements"
+}

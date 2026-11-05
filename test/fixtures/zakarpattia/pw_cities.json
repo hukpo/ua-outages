@@ -1,0 +1,117 @@
+{
+ "@context": "/api/contexts/PwCity",
+ "@id": "/api/pw_cities",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_cities/769",
+   "@type": "PwCity",
+   "id": 769,
+   "name": "Ужгород",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/1",
+    "@type": "PwOtg",
+    "name": "Ужгородська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/890",
+   "@type": "PwCity",
+   "id": 890,
+   "name": "Мукачево",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/9",
+    "@type": "PwOtg",
+    "name": "Мукачівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/1028",
+   "@type": "PwCity",
+   "id": 1028,
+   "name": "",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/9",
+    "@type": "PwOtg",
+    "name": "Мукачівська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/3",
+   "@type": "PwCity",
+   "id": 3,
+   "name": "Зняцьово",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/2",
+    "@type": "PwOtg",
+    "name": "Великолучківська"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/4",
+   "@type": "PwCity",
+   "id": 4,
+   "name": "Лалово",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/3",
+    "@type": "PwOtg",
+    "name": "Верхньокоропецька"
+   }
+  },
+  {
+   "@id": "/api/pw_cities/5",
+   "@type": "PwCity",
+   "id": 5,
+   "name": "Лохово",
+   "codeOtg": "",
+   "otg": {
+    "@id": "/api/pw_otgs/4",
+    "@type": "PwOtg",
+    "name": "Івановецька"
+   }
+  }
+ ],
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_cities{?name,otg.id,otg.id[],codeOtg,codeOtg[]}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id[]",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "codeOtg",
+    "property": "codeOtg",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "codeOtg[]",
+    "property": "codeOtg",
+    "required": false
+   }
+  ]
+ },
+ "_trimmed": "6 of 726 settlements"
+}

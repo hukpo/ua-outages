@@ -1,0 +1,150 @@
+{
+ "@context": "/api/contexts/PwStreet",
+ "@id": "/api/pw_streets",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_streets/9335",
+   "@type": "PwStreet",
+   "id": 9335,
+   "city": "/api/pw_cities/769",
+   "name": "Стрільнична"
+  },
+  {
+   "@id": "/api/pw_streets/9336",
+   "@type": "PwStreet",
+   "id": 9336,
+   "city": "/api/pw_cities/769",
+   "name": "Гагаріна"
+  },
+  {
+   "@id": "/api/pw_streets/9337",
+   "@type": "PwStreet",
+   "id": 9337,
+   "city": "/api/pw_cities/769",
+   "name": "Черешнева"
+  },
+  {
+   "@id": "/api/pw_streets/9338",
+   "@type": "PwStreet",
+   "id": 9338,
+   "city": "/api/pw_cities/769",
+   "name": "Янтарна"
+  },
+  {
+   "@id": "/api/pw_streets/9339",
+   "@type": "PwStreet",
+   "id": 9339,
+   "city": "/api/pw_cities/769",
+   "name": "Заньковецької"
+  },
+  {
+   "@id": "/api/pw_streets/9340",
+   "@type": "PwStreet",
+   "id": 9340,
+   "city": "/api/pw_cities/769",
+   "name": "Почаївська"
+  },
+  {
+   "@id": "/api/pw_streets/9341",
+   "@type": "PwStreet",
+   "id": 9341,
+   "city": "/api/pw_cities/769",
+   "name": "Карпатська"
+  },
+  {
+   "@id": "/api/pw_streets/9342",
+   "@type": "PwStreet",
+   "id": 9342,
+   "city": "/api/pw_cities/769",
+   "name": "Перемоги"
+  },
+  {
+   "@id": "/api/pw_streets/9343",
+   "@type": "PwStreet",
+   "id": 9343,
+   "city": "/api/pw_cities/769",
+   "name": "Кринична"
+  },
+  {
+   "@id": "/api/pw_streets/9344",
+   "@type": "PwStreet",
+   "id": 9344,
+   "city": "/api/pw_cities/769",
+   "name": "Берчені"
+  },
+  {
+   "@id": "/api/pw_streets/9345",
+   "@type": "PwStreet",
+   "id": 9345,
+   "city": "/api/pw_cities/769",
+   "name": "Свободи"
+  },
+  {
+   "@id": "/api/pw_streets/9346",
+   "@type": "PwStreet",
+   "id": 9346,
+   "city": "/api/pw_cities/769",
+   "name": "І. Запісочного"
+  },
+  {
+   "@id": "/api/pw_streets/9347",
+   "@type": "PwStreet",
+   "id": 9347,
+   "city": "/api/pw_cities/769",
+   "name": "Українська"
+  },
+  {
+   "@id": "/api/pw_streets/9348",
+   "@type": "PwStreet",
+   "id": 9348,
+   "city": "/api/pw_cities/769",
+   "name": "Залізнична"
+  },
+  {
+   "@id": "/api/pw_streets/9349",
+   "@type": "PwStreet",
+   "id": 9349,
+   "city": "/api/pw_cities/769",
+   "name": "Стародоманинська"
+  },
+  {
+   "@id": "/api/pw_streets/9373",
+   "@type": "PwStreet",
+   "id": 9373,
+   "city": "/api/pw_cities/769",
+   "name": "Корзо"
+  }
+ ],
+ "hydra:totalItems": 610,
+ "hydra:view": {
+  "@id": "/api/pw_streets?pagination=false&city.id=769",
+  "@type": "hydra:PartialCollectionView"
+ },
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_streets{?name,city.id,city.id[]}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id",
+    "property": "city.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id[]",
+    "property": "city.id",
+    "required": false
+   }
+  ]
+ },
+ "_trimmed": "16 of 610"
+}

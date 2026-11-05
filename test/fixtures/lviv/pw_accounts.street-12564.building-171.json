@@ -1,0 +1,128 @@
+{
+ "@context": "/api/contexts/PwAccount",
+ "@id": "/api/pw_accounts",
+ "@type": "hydra:Collection",
+ "hydra:totalItems": 157,
+ "hydra:member": [
+  {
+   "@id": "/api/pw_accounts/10",
+   "@type": "PwAccount",
+   "id": 10,
+   "city": "/api/pw_cities/693",
+   "buildingName": "171",
+   "chergGpv": "5.1",
+   "chergGav": "Не входить",
+   "chergAchr": "Не входить",
+   "chergGvsp": "Не входить",
+   "chergSgav": "3",
+   "disconnectionTask": false,
+   "planedReplaceCounter": false
+  },
+  {
+   "@id": "/api/pw_accounts/92",
+   "@type": "PwAccount",
+   "id": 92,
+   "city": "/api/pw_cities/693",
+   "buildingName": "171",
+   "chergGpv": "5.1",
+   "chergGav": "Не входить",
+   "chergAchr": "Не входить",
+   "chergGvsp": "Не входить",
+   "chergSgav": "3",
+   "disconnectionTask": false,
+   "planedReplaceCounter": false
+  },
+  {
+   "@id": "/api/pw_accounts/117",
+   "@type": "PwAccount",
+   "id": 117,
+   "city": "/api/pw_cities/693",
+   "buildingName": "171",
+   "chergGpv": "5.1",
+   "chergGav": "Не входить",
+   "chergAchr": "Не входить",
+   "chergGvsp": "Не входить",
+   "chergSgav": "3",
+   "disconnectionTask": false,
+   "planedReplaceCounter": false
+  }
+ ],
+ "hydra:view": {
+  "@id": "/api/pw_accounts?buildingName=171&city.id=693&pagination=false&street.id=12564",
+  "@type": "hydra:PartialCollectionView"
+ },
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_accounts{?city.id,city.id[],street.id,street.id[],otg.id,otg.id[],buildingName,buildingName[],acc,acc[],name}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id",
+    "property": "city.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id[]",
+    "property": "city.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "street.id",
+    "property": "street.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "street.id[]",
+    "property": "street.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id[]",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "buildingName",
+    "property": "buildingName",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "buildingName[]",
+    "property": "buildingName",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "acc",
+    "property": "acc",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "acc[]",
+    "property": "acc",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   }
+  ]
+ },
+ "_trimmed": "kept 3 of 157 members (distinct cherg* combos)"
+}

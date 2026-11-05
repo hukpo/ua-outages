@@ -3,7 +3,7 @@ import { Http, type HttpOptions } from './http.js'
 import { createProviders } from './providers/index.js'
 import type { Provider, ProviderContext } from './providers/provider.js'
 import { normalizeGroup } from './schedule.js'
-import { bestMatch, normalizeHouse } from './text.js'
+import { bestMatch, matchScore, normalizeHouse } from './text.js'
 import type {
   AddressQuery,
   City,
@@ -136,8 +136,14 @@ export class OutageClient {
     if (p.searchCities) {
       if (!address.city)
         throw new OutageError('not-found', `${p.info.name}: specify a city or village`, { region })
-      const cities = await p.searchCities(this.ctx, address.city)
-      city = pick(address.city, cities, (c) => c.name, 'settlement', 'city', region)
+      let cities = await p.searchCities(this.ctx, address.city)
+      if (address.district) {
+        const district = address.district
+        cities = cities.filter((c) => !c.district || matchScore(district, c.district, 'settlement') > 0)
+      }
+      city = pick(address.city, cities, (c) => c.name, 'settlement', 'city', region, (c) =>
+        c.district ? `${c.name} (${c.district})` : c.name,
+      )
     }
 
     const streets = await p.searchStreets!(this.ctx, address.street, city)
@@ -242,6 +248,7 @@ function pick<T>(
   kind: 'street' | 'settlement',
   label: string,
   region: RegionId,
+  describe: (t: T) => string = name,
 ): T {
   const m = bestMatch(query, items, name, kind)
   if (!m)
@@ -249,7 +256,7 @@ function pick<T>(
   if (m.ambiguous)
     throw new OutageError(
       'not-found',
-      `"${query}" matches several: ${items.slice(0, 8).map(name).join('; ')}. Be more specific.`,
+      `"${query}" matches several: ${items.slice(0, 8).map(describe).join('; ')}. Be more specific${kind === 'settlement' ? ' or pass a district' : ''}.`,
       { region },
     )
   return m.item

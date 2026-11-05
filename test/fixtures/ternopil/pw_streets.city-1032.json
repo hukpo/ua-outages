@@ -1,0 +1,150 @@
+{
+ "@context": "/api/contexts/PwStreet",
+ "@id": "/api/pw_streets",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_streets/9982",
+   "@type": "PwStreet",
+   "id": 9982,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Микулинецька"
+  },
+  {
+   "@id": "/api/pw_streets/9985",
+   "@type": "PwStreet",
+   "id": 9985,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Садова"
+  },
+  {
+   "@id": "/api/pw_streets/9986",
+   "@type": "PwStreet",
+   "id": 9986,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Фестивальна"
+  },
+  {
+   "@id": "/api/pw_streets/9987",
+   "@type": "PwStreet",
+   "id": 9987,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Молодіжна"
+  },
+  {
+   "@id": "/api/pw_streets/9991",
+   "@type": "PwStreet",
+   "id": 9991,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Галицька"
+  },
+  {
+   "@id": "/api/pw_streets/9993",
+   "@type": "PwStreet",
+   "id": 9993,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Петра Батьківського"
+  },
+  {
+   "@id": "/api/pw_streets/9995",
+   "@type": "PwStreet",
+   "id": 9995,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Поліська"
+  },
+  {
+   "@id": "/api/pw_streets/9996",
+   "@type": "PwStreet",
+   "id": 9996,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Бродівська"
+  },
+  {
+   "@id": "/api/pw_streets/9997",
+   "@type": "PwStreet",
+   "id": 9997,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Збаразька"
+  },
+  {
+   "@id": "/api/pw_streets/9998",
+   "@type": "PwStreet",
+   "id": 9998,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Дубовецька"
+  },
+  {
+   "@id": "/api/pw_streets/9999",
+   "@type": "PwStreet",
+   "id": 9999,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Білогірська"
+  },
+  {
+   "@id": "/api/pw_streets/10000",
+   "@type": "PwStreet",
+   "id": 10000,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Глибочанська"
+  },
+  {
+   "@id": "/api/pw_streets/10001",
+   "@type": "PwStreet",
+   "id": 10001,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Проектна"
+  },
+  {
+   "@id": "/api/pw_streets/10002",
+   "@type": "PwStreet",
+   "id": 10002,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Медобірна"
+  },
+  {
+   "@id": "/api/pw_streets/10003",
+   "@type": "PwStreet",
+   "id": 10003,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Зарічна"
+  },
+  {
+   "@id": "/api/pw_streets/10035",
+   "@type": "PwStreet",
+   "id": 10035,
+   "city": "/api/pw_cities/1032",
+   "name": "вул. Руська"
+  }
+ ],
+ "hydra:totalItems": 299,
+ "hydra:view": {
+  "@id": "/api/pw_streets?pagination=false&city.id=1032",
+  "@type": "hydra:PartialCollectionView"
+ },
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_streets{?name,city.id,city.id[]}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id",
+    "property": "city.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id[]",
+    "property": "city.id",
+    "required": false
+   }
+  ]
+ },
+ "_trimmed": "16 of 299"
+}

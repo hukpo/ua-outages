@@ -195,3 +195,35 @@ describe('direct address lookup', () => {
     expect(raw.status).toBe(404)
   })
 })
+
+describe('villages with the same name', () => {
+  const twoVillages = () =>
+    fakeProvider({
+      searchCities: async () => [
+        { id: 'c1', name: 'с. Хмелівка', district: 'Красилівська громада' },
+        { id: 'c2', name: 'с. Хмелівка', district: 'Старокостянтинівська громада' },
+      ],
+      searchStreets: async (_ctx, _q, city) => [{ id: `s-${city!.id}`, name: 'вул. Центральна', cityId: city!.id }],
+      groupOf: async (_ctx, house, street) => ({
+        region: 'kyiv',
+        group: street.cityId === 'c2' ? '2.2' : '1.1',
+        address: { street: street.name, house: house.number },
+      }),
+    })
+
+  it('asks for a district and names them', async () => {
+    await expect(
+      client(twoVillages()).findGroup('kyiv', { city: 'Хмелівка', street: 'Центральна', house: '1' }),
+    ).rejects.toThrow(/Старокостянтинівська громада.*pass a district/)
+  })
+
+  it('uses the district to pick one', async () => {
+    const m = await client(twoVillages()).findGroup('kyiv', {
+      city: 'Хмелівка',
+      district: 'Старокостянтинівська',
+      street: 'Центральна',
+      house: '1',
+    })
+    expect(m.group).toBe('2.2')
+  })
+})

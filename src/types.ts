@@ -119,6 +119,8 @@ export interface House {
 export interface AddressQuery {
   /** Needed in regions with more than one settlement */
   city?: string
+  /** District or community, to tell apart villages with the same name */
+  district?: string
   street: string
   house: string
 }

@@ -1,0 +1,84 @@
+{
+ "@context": "/api/contexts/PwAccount",
+ "@id": "/api/pw_accounts",
+ "@type": "hydra:Collection",
+ "hydra:totalItems": 0,
+ "hydra:member": [],
+ "hydra:view": {
+  "@id": "/api/pw_accounts?buildingName=171&city.id=693&pagination=false&street.id=12564",
+  "@type": "hydra:PartialCollectionView"
+ },
+ "hydra:search": {
+  "@type": "hydra:IriTemplate",
+  "hydra:template": "/api/pw_accounts{?city.id,city.id[],street.id,street.id[],otg.id,otg.id[],buildingName,buildingName[],acc,acc[],name}",
+  "hydra:variableRepresentation": "BasicRepresentation",
+  "hydra:mapping": [
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id",
+    "property": "city.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "city.id[]",
+    "property": "city.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "street.id",
+    "property": "street.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "street.id[]",
+    "property": "street.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "otg.id[]",
+    "property": "otg.id",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "buildingName",
+    "property": "buildingName",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "buildingName[]",
+    "property": "buildingName",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "acc",
+    "property": "acc",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "acc[]",
+    "property": "acc",
+    "required": false
+   },
+   {
+    "@type": "IriTemplateMapping",
+    "variable": "name",
+    "property": "name",
+    "required": false
+   }
+  ]
+ }
+}
