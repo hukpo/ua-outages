@@ -127,6 +127,8 @@ export class OutageClient {
    * house can't be matched unambiguously; the message lists the closest candidates.
    */
   async findGroup(region: RegionId, address: AddressQuery): Promise<GroupMatch> {
+    const direct = this.provider(region)
+    if (direct.lookupAddress) return direct.lookupAddress(this.ctx, address)
     const p = this.addressProvider(region)
 
     let city: City | undefined

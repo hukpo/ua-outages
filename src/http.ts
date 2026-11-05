@@ -20,6 +20,8 @@ export interface RequestOptions {
   region?: RegionId
   /** Response charset when the server doesn't send UTF-8, e.g. "windows-1251" */
   encoding?: string
+  /** Non-2xx statuses that are answers, not errors (e.g. 404 = "address not found") */
+  acceptStatus?: number[]
 }
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
@@ -106,7 +108,7 @@ export class Http {
           { region: opts.region, url, cause },
         )
       }
-      if (res.ok) return res
+      if (res.ok || opts.acceptStatus?.includes(res.status)) return res
       if (res.status >= 500 && attempt < this.retries) continue
       throw new OutageError(
         res.status === 403 || res.status === 429 ? 'blocked' : 'http',

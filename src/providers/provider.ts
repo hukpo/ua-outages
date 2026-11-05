@@ -31,4 +31,10 @@ export interface Provider {
   searchStreets?(ctx: ProviderContext, query: string, city?: City): Promise<Street[]>
   searchHouses?(ctx: ProviderContext, street: Street, query?: string): Promise<House[]>
   groupOf?(ctx: ProviderContext, house: House, street: Street, city?: City): Promise<GroupMatch>
+
+  /**
+   * For operators without street/house directories that answer a free-text address directly.
+   * `findGroup` uses it instead of the search chain when present.
+   */
+  lookupAddress?(ctx: ProviderContext, address: AddressQuery): Promise<GroupMatch>
 }

@@ -177,3 +177,21 @@ describe('regions without a machine-readable schedule', () => {
     expect(r.regions[0]).toMatchObject({ status: 'empty', address: { ok: true } })
   })
 })
+
+describe('direct address lookup', () => {
+  it('is used instead of the search chain', async () => {
+    const p = fakeProvider({
+      searchStreets: undefined,
+      lookupAddress: async (_ctx, a) => ({ region: 'kyiv', group: '4.2', address: { street: a.street, house: a.house } }),
+    })
+    expect((await client(p).findGroup('kyiv', { street: 'Будь-яка', house: '1' })).group).toBe('4.2')
+  })
+
+  it('lets providers treat some statuses as answers', async () => {
+    const { Http } = await import('../src/http.js')
+    const http = new Http({ fetch: async () => new Response('{"error":"not found"}', { status: 404 }) })
+    expect(await http.json('https://x.test', { acceptStatus: [404] })).toEqual({ error: 'not found' })
+    const raw = await http.raw('https://x.test', { acceptStatus: [404] })
+    expect(raw.status).toBe(404)
+  })
+})
