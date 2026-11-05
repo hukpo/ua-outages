@@ -1,4 +1,5 @@
 import { dtekProvider } from './dtek.js'
+import { mykolaivProvider } from './mykolaiv.js'
 import type { Provider } from './provider.js'
 import { yasnoProvider } from './yasno.js'
 
@@ -68,5 +69,6 @@ export function createProviders(): Provider[] {
       },
       code: 'dem',
     }),
+    mykolaivProvider(),
   ]
 }
