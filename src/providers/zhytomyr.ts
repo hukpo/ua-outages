@@ -5,6 +5,7 @@ import { toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupId, GroupMatch, House, IntervalKind, RegionInfo, RegionSchedule, Street } from '../types.js'
 import { parseUaDateTime } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mapLimit } from '../util.js'
 
 /**
  * Zhytomyroblenergo (ztoe.com.ua). One server-rendered PHP page in windows-1251 serves both:
@@ -258,15 +259,3 @@ function decodeEntities(s: string): string {
     .replace(/&amp;/g, '&')
 }
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i]!)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
-}

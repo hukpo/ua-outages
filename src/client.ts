@@ -17,6 +17,7 @@ import type {
   RegionSchedule,
   Street,
 } from './types.js'
+import { mapLimit } from './util.js'
 
 export interface OutageClientOptions extends HttpOptions {
   /** How long fetched schedules are reused, default 5 min. 0 disables the cache. */
@@ -254,15 +255,3 @@ function pick<T>(
   return m.item
 }
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i]!)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
-}

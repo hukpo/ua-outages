@@ -4,6 +4,7 @@ import { matchScore } from '../text.js'
 import type { AddressQuery, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { cookieHeader } from '../util.js'
 
 /**
  * DTEK grid-operator sites (www.dtek-<code>.com.ua). The /ua/shutdowns page embeds the
@@ -165,11 +166,6 @@ export function parseDisconScript(html: string): Record<string, unknown> {
     }
   }
   return out
-}
-
-function cookieHeader(headers: Headers): string {
-  const list = typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : []
-  return list.map((c) => c.split(';')[0]).join('; ')
 }
 
 function filterByName(names: string[], query: string, kind: 'street' | 'settlement'): string[] {

@@ -4,6 +4,7 @@ import { matchScore, normalizeHouse } from '../text.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupId, GroupMatch, House, IntervalKind, RegionInfo, RegionSchedule, Street } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { cookieHeader, mapLimit } from '../util.js'
 
 /**
  * Kirovohradoblenergo (kiroe.com.ua). The /electricity-blackout page hands out a PHP session
@@ -288,20 +289,3 @@ function isEmpty(data: unknown): boolean {
   return typeof data === 'object' && Object.keys(data).length === 0
 }
 
-function cookieHeader(headers: Headers): string {
-  const list = typeof headers.getSetCookie === 'function' ? headers.getSetCookie() : []
-  return list.map((c) => c.split(';')[0]).join('; ')
-}
-
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i]!)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
-}

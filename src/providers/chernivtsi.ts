@@ -4,6 +4,7 @@ import { matchScore, normalizeHouse, normalizeSettlement, normalizeStreet, stree
 import { kyivInstant, toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupId, GroupMatch, House, IntervalKind, RegionInfo, RegionSchedule, Street } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mapLimit } from '../util.js'
 
 /**
  * Chernivtsioblenergo (oblenergo.cv.ua). The schedule is server-rendered HTML with 48
@@ -304,15 +305,3 @@ function decode(s: string): string {
     .replace(/&nbsp;/g, ' ')
 }
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i]!)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
-}

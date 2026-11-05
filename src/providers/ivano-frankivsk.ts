@@ -4,6 +4,7 @@ import { parseClock, toKyivIso } from '../time.js'
 import type { AddressQuery, DaySchedule, GroupId, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { parseUaDateTime } from './gpv.js'
+import { mapLimit } from '../util.js'
 
 /**
  * Prykarpattiaoblenergo (svitlo.oe.if.ua). The SPA talks to a small JSON backend: one schedule
@@ -196,15 +197,3 @@ function parseDate(text: unknown): string | null {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null
 }
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i]!)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
-}
