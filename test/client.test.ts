@@ -133,3 +133,33 @@ describe('OutageClient', () => {
     expect(broken.regions[0]).toMatchObject({ status: 'error', message: 'parse: format changed' })
   })
 })
+
+describe('Http', () => {
+  it('decodes windows-1251 pages', async () => {
+    const { Http } = await import('../src/http.js')
+    const bytes = new Uint8Array([0xd7, 0xe5, 0xf0, 0xe3, 0xe0]) // "Черга"
+    const http = new Http({ fetch: async () => new Response(bytes) })
+    expect(await http.text('https://x.test', { encoding: 'windows-1251' })).toBe('Черга')
+  })
+
+  it('classifies bot checks, HTTP errors and timeouts', async () => {
+    const { Http } = await import('../src/http.js')
+    const blocked = new Http({ fetch: async () => new Response('<script src="/_Incapsula_Resource?x=1"></script>') })
+    await expect(blocked.text('https://x.test')).rejects.toMatchObject({ code: 'blocked' })
+    const notFound = new Http({ fetch: async () => new Response('nope', { status: 404 }) })
+    await expect(notFound.text('https://x.test')).rejects.toMatchObject({ code: 'http', details: { status: 404 } })
+    let n = 0
+    const flaky = new Http({
+      retries: 1,
+      fetch: async () => (n++ === 0 ? new Response('', { status: 502 }) : new Response('ok')),
+    })
+    expect(await flaky.text('https://x.test')).toBe('ok')
+    const slow = new Http({
+      timeoutMs: 20,
+      retries: 0,
+      fetch: (_u, init) =>
+        new Promise((_, reject) => init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason))),
+    })
+    await expect(slow.text('https://x.test')).rejects.toMatchObject({ code: 'network' })
+  })
+})

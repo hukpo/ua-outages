@@ -18,6 +18,8 @@ export interface RequestOptions {
   /** Sent as JSON when an object, as-is when a string or URLSearchParams */
   body?: unknown
   region?: RegionId
+  /** Response charset when the server doesn't send UTF-8, e.g. "windows-1251" */
+  encoding?: string
 }
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
@@ -45,7 +47,9 @@ export class Http {
   /** Body plus response headers (for cookies). */
   async raw(url: string, opts: RequestOptions = {}): Promise<{ body: string; headers: Headers; status: number }> {
     const res = await this.request(url, opts)
-    const body = await res.text()
+    const body = opts.encoding
+      ? new TextDecoder(opts.encoding).decode(await res.arrayBuffer())
+      : await res.text()
     // challenge pages are small; real pages may embed the same scripts, so size matters
     if (body.length < 20_000 && BLOCK_MARKERS.some((m) => body.includes(m)))
       throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
