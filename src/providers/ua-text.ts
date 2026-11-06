@@ -118,7 +118,7 @@ export function parseGroupLines(text: string, kind: 'off' | 'maybe' = 'off'): Re
  * 09:30 - 16:30
  * ```
  *
- * Also accepts "1.1: 00:00-02:30, 09:30-16:30" on one line. Typical of OCR output.
+ * Also accepts "1.1: 00:00-02:30, 09:30-16:30" on one line.
  */
 export function parseGroupBlocks(text: string, kind: 'off' | 'maybe' = 'off'): Record<string, MinuteSlot[]> {
   const out: Record<string, MinuteSlot[]> = {}

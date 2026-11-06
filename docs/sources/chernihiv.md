@@ -65,3 +65,10 @@ Each `aData` row is a time segment whose `queue` field is a key into `aState` (l
 - OlegVapnik/svitlo (no license) — documents the Turnstile gating and the `info_schedule` stub; uses Cloudflare Browser Rendering. Also `/power_outages` + `/api/list_acc` for emergency lists (not ГПВ).
 - zenki-deve/Chernihiv-Svitlo-Bot (no license) — calls the endpoints with `token: None`. That **no longer works**.
 - mrkaktuz/outages-data (license NOASSERTION) — AGENTS.md notes the Turnstile gating.
+
+## How the SDK reads it (2026-11)
+
+- `src/providers/chernihiv.ts` downloads `schedule_groups.jpg` and reads it with `src/image/cards.ts`: baseline JPEG decoder (`src/image/jpeg.ts`), orange card detection, time lines split into glyphs, digits matched against a font model (`src/image/digit-model.ts`) built by `scripts/train-digits.ts` from the hand-labelled posters in `test/fixtures/chernihiv/posters`. The header date is read the same way and must be within ±2 days.
+- TLS: the server sends only its leaf certificate (no Sectigo DV R36 intermediate). Browsers and curl fill it in, Node fails with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. The SDK ships that public intermediate (`src/certs.ts`) and adds it to Node's roots for this request only.
+- More posters for training: the operator's Telegram channel (`https://t.me/s/chernigivoblenergo`) attaches every poster since October 2026, as ~470–530 px wide copies.
+- Format history: until early 2026 the same URL served a coloured table (12 subgroup columns × 48 half-hours, green/red/yellow), as a progressive JPEG. The card reader doesn't handle that layout; it reports `parse` ("expected 12 cards"). If the table comes back, it can be read with `readScheduleTable` once the JPEG decoder supports progressive files.

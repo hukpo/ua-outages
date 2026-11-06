@@ -1,7 +1,7 @@
 import { OutageError } from './errors.js'
 import { Http, type HttpOptions } from './http.js'
 import { createProviders } from './providers/index.js'
-import type { OcrFunction, Provider, ProviderContext } from './providers/provider.js'
+import type { Provider, ProviderContext } from './providers/provider.js'
 import { normalizeGroup } from './schedule.js'
 import { fuzzyScore, rankByName, searchFragments, type NameKind } from './fuzzy.js'
 import { normalizeHouse } from './text.js'
@@ -27,11 +27,6 @@ export interface OutageClientOptions extends HttpOptions {
   now?: () => Date
   /** Replace the built-in providers (tests, or your own sources) */
   providers?: readonly Provider[]
-  /**
-   * Text recognition for operators that publish the schedule as a picture with text
-   * (Chernihiv). Without it those regions throw `unsupported`.
-   */
-  ocr?: OcrFunction
 }
 
 export interface HealthCheckOptions {
@@ -69,7 +64,7 @@ export class OutageClient {
   private readonly searchCache = new Map<string, { at: number; value: Promise<unknown[]> }>()
 
   constructor(opts: OutageClientOptions = {}) {
-    this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()), ocr: opts.ocr }
+    this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()) }
     this.cacheTtlMs = opts.cacheTtlMs ?? 5 * 60_000
     this.providers = new Map((opts.providers ?? createProviders()).map((p) => [p.info.id, p]))
   }
@@ -341,7 +336,7 @@ export class OutageClient {
         return { ...base, status: 'stale', message: `Last updated ${s.updatedAt}` }
       return { ...base, status: 'ok' }
     } catch (e) {
-      // e.g. a region that needs an `ocr` function the app didn't configure
+      // e.g. a region that publishes only an image the SDK can't read
       if (e instanceof OutageError && e.code === 'unsupported')
         return { region, status: 'empty', latencyMs: 0, groups: 0, updatedAt: null, message: e.message }
       return {

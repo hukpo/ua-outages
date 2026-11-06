@@ -2,3 +2,4 @@ dist
 research
 test/fixtures
 node_modules
+src/image/digit-model.ts

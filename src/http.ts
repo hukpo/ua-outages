@@ -1,4 +1,5 @@
 import { OutageError } from './errors.js'
+import { httpsFetchWithCa } from './https-fetch.js'
 import type { RegionId } from './types.js'
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
@@ -22,6 +23,11 @@ export interface RequestOptions {
   encoding?: string
   /** Non-2xx statuses that are answers, not errors (e.g. 404 = "address not found") */
   acceptStatus?: number[]
+  /**
+   * Intermediate certificates (PEM) for a server that doesn't send its full chain. Applied to
+   * the built-in fetch only; a custom `fetch` handles TLS itself.
+   */
+  ca?: string[]
 }
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
@@ -37,12 +43,15 @@ const BLOCK_MARKERS = [
 
 export class Http {
   private readonly fetchImpl: FetchLike
+  private readonly customFetch: boolean
+  private readonly caFetch = new Map<string, FetchLike>()
   private readonly timeoutMs: number
   private readonly userAgent: string
   private readonly retries: number
 
   constructor(opts: HttpOptions = {}) {
     this.fetchImpl = opts.fetch ?? ((input, init) => globalThis.fetch(input, init))
+    this.customFetch = !!opts.fetch
     this.timeoutMs = opts.timeoutMs ?? 15_000
     this.userAgent = opts.userAgent ?? DEFAULT_UA
     this.retries = opts.retries ?? 1
@@ -73,8 +82,13 @@ export class Http {
 
   /** Raw bytes (images); no bot-check sniffing. */
   async bytes(url: string, opts: RequestOptions = {}): Promise<Uint8Array> {
+    return (await this.file(url, opts)).bytes
+  }
+
+  /** Binary body with the response headers (e.g. Last-Modified of an image) */
+  async file(url: string, opts: RequestOptions = {}): Promise<{ bytes: Uint8Array; headers: Headers }> {
     const res = await this.request(url, opts)
-    return new Uint8Array(await res.arrayBuffer())
+    return { bytes: new Uint8Array(await res.arrayBuffer()), headers: res.headers }
   }
 
   async json<T = unknown>(url: string, opts: RequestOptions = {}): Promise<T> {
@@ -88,6 +102,13 @@ export class Http {
         cause,
       })
     }
+  }
+
+  private fetchWithCa(ca: string[]): FetchLike {
+    const key = ca.join('')
+    let f = this.caFetch.get(key)
+    if (!f) this.caFetch.set(key, (f = httpsFetchWithCa(ca)))
+    return f
   }
 
   private async request(url: string, opts: RequestOptions): Promise<Response> {
@@ -104,10 +125,11 @@ export class Http {
       headers['Content-Type'] ??= 'application/json'
     }
 
+    const fetchImpl = opts.ca && !this.customFetch ? this.fetchWithCa(opts.ca) : this.fetchImpl
     for (let attempt = 0; ; attempt++) {
       let res: Response
       try {
-        res = await this.fetchImpl(url, {
+        res = await fetchImpl(url, {
           method: opts.method ?? (body ? 'POST' : 'GET'),
           headers,
           body,

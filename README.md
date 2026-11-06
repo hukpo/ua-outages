@@ -40,7 +40,7 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 | `rivne`           | Рівненська             | Рівнеобленерго                          | schedule page                                                  | ✅            | —             | addresses only in PDF                                                                                            | [roe.vsei.ua](https://www.roe.vsei.ua/disconnections)                                                    | —                                                                                            |
 | `volyn`           | Волинська              | Волиньобленерго                         | inneti archive API + table image (read by colour), lookup form | ✅ image      | ✅            | full address only, no autocomplete                                                                               | [energy.volyn.ua](https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/hrafik-vidkliuchen/) | [energy.volyn.ua](https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/cherga/) |
 | `khmelnytskyi`    | Хмельницька            | Хмельницькобленерго                     | archive page + table image (read by colour)                    | ✅ image      | ✅            |                                                                                                                  | [hoe.com.ua](https://hoe.com.ua/page/pogodinni-vidkljuchennja)                                           | [hoe.com.ua](https://hoe.com.ua/shutdown/queue)                                              |
-| `chernihiv`       | Чернігівська           | Чернігівобленерго                       | schedule image (text, needs your `ocr`)                        | ✅ with OCR   | —             | the schedule API and the lookup need a captcha; the same schedule is published as an image                       | [chernihivoblenergo.com.ua](https://chernihivoblenergo.com.ua/files/other/schedule_groups.jpg)           | [interruptions.energy.cn.ua](https://interruptions.energy.cn.ua/interruptions)               |
+| `chernihiv`       | Чернігівська           | Чернігівобленерго                       | schedule poster (times read from the picture)                  | ✅ image      | —             | the schedule API and the lookup need a captcha; the same schedule is published as a poster                       | [chernihivoblenergo.com.ua](https://chernihivoblenergo.com.ua/files/other/schedule_groups.jpg)           | [interruptions.energy.cn.ua](https://interruptions.energy.cn.ua/interruptions)               |
 | `zhytomyr`        | Житомирська            | Житомиробленерго                        | schedule page + lookup form                                    | ✅            | ✅            |                                                                                                                  | [ztoe.com.ua](https://www.ztoe.com.ua/unhooking-search.php)                                              | [ztoe.com.ua](https://www.ztoe.com.ua/unhooking-search.php)                                  |
 | `kirovohrad`      | Кіровоградська         | Кіровоградобленерго                     | kiroe.com.ua JSON                                              | ✅ today      | ✅            |                                                                                                                  | [kiroe.com.ua](https://kiroe.com.ua/electricity-blackout)                                                | [kiroe.com.ua](https://kiroe.com.ua/electricity-blackout)                                    |
 | `cherkasy`        | Черкаська              | Черкасиобленерго                        | news API                                                       | ✅            | —             | lookup server has a broken TLS chain                                                                             | [cherkasyoblenergo.com](https://www.cherkasyoblenergo.com/off)                                           | [cabinet.cherkasyoblenergo.com](https://cabinet.cherkasyoblenergo.com/)                      |
@@ -115,45 +115,7 @@ A `DaySchedule` is `{ date: 'YYYY-MM-DD', status, intervals }`:
 
 Khmelnytskyi and Volyn publish the schedule only as a table image. The SDK reads those itself: it decodes the PNG, finds the grid and classifies each cell by colour, with no dependencies. When an operator posts a text announcement as an image under the same date, it is skipped. A colour the SDK doesn't know is reported as a `parse` error instead of being guessed.
 
-Chernihiv publishes its schedule as an image of text cards ("1.1 → 00:00 - 02:30"). Reading that needs text recognition, which you plug in as `ocr`; the SDK fetches the image and parses whatever text you return. Without `ocr` the region throws `unsupported`.
-
-```ts
-// with a vision model (here OpenAI)
-import OpenAI from 'openai'
-const openai = new OpenAI()
-
-const outages = new OutageClient({
-  ocr: async ({ bytes, mimeType }) => {
-    const res = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: 'Transcribe all text in this image line by line, exactly as written. Output only the text.',
-            },
-            {
-              type: 'image_url',
-              image_url: { url: `data:${mimeType};base64,${Buffer.from(bytes).toString('base64')}` },
-            },
-          ],
-        },
-      ],
-    })
-    return res.choices[0]?.message.content ?? ''
-  },
-})
-
-// or locally with tesseract.js
-import Tesseract from 'tesseract.js'
-const local = new OutageClient({
-  ocr: async ({ bytes }) => (await Tesseract.recognize(Buffer.from(bytes), 'ukr+eng')).data.text,
-})
-```
-
-The parser expects all twelve groups and a date; if the recognition misses any, you get a `parse` error rather than a partial schedule.
+Chernihiv publishes a poster of twelve cards, one per group, with the off times written out ("00:00 - 02:30"). The SDK reads those too, without OCR: it decodes the JPEG, finds the orange cards, cuts each time line into glyphs and matches the digits against a model of the poster font, trained on hand-checked posters (`scripts/train-digits.ts`). The date comes from the poster header. A digit it isn't sure about, a time line it can't read or a date that isn't current gives a `parse` error, never a guess. On 30 older posters the model hadn't seen (Telegram copies at 40% of the original size), it read 24 exactly and refused the other 6. The original on the site is full size.
 
 ### Address → group
 
