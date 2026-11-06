@@ -5,11 +5,14 @@ import type { FetchLike } from '../src/http.js'
 export const fixture = (path: string) =>
   readFileSync(fileURLToPath(new URL(`./fixtures/${path}`, import.meta.url)), 'utf8')
 
+export const fixtureBytes = (path: string) =>
+  new Uint8Array(readFileSync(fileURLToPath(new URL(`./fixtures/${path}`, import.meta.url))))
+
 export interface Route {
   /** Matched against the full URL (string = substring) */
   match: string | RegExp
   method?: 'GET' | 'POST'
-  body: string | (() => string)
+  body: string | Uint8Array | (() => string)
   status?: number
   headers?: Record<string, string>
 }
@@ -27,7 +30,7 @@ export function mockFetch(routes: Route[]) {
     )
     if (!r) throw new Error(`mockFetch: no route for ${method} ${url}`)
     const body = typeof r.body === 'function' ? r.body() : r.body
-    return new Response(body, { status: r.status ?? 200, headers: r.headers })
+    return new Response(body as BodyInit, { status: r.status ?? 200, headers: r.headers })
   }
   return { fetch, calls }
 }

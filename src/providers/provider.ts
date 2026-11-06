@@ -1,10 +1,31 @@
 import type { Http } from '../http.js'
-import type { AddressQuery, City, GroupMatch, House, RegionInfo, RegionSchedule, Street } from '../types.js'
+import type {
+  AddressQuery,
+  City,
+  GroupMatch,
+  House,
+  RegionId,
+  RegionInfo,
+  RegionSchedule,
+  Street,
+} from '../types.js'
 
 export interface ProviderContext {
   http: Http
   now: () => Date
+  /** Text recognition supplied by the app, for operators that publish schedules as text images */
+  ocr?: OcrFunction
 }
+
+/**
+ * Turns an image into its text, top to bottom. Plug in whatever you use: a vision model
+ * (GPT, Claude, Gemini), tesseract.js, a cloud OCR API. The SDK parses the text itself.
+ */
+export type OcrFunction = (image: {
+  bytes: Uint8Array
+  mimeType: string
+  region: RegionId
+}) => Promise<string>
 
 /**
  * One grid operator area. Only `info` and `getSchedules` are required; address search

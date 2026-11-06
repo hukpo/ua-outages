@@ -1,4 +1,5 @@
 import { cherkasyProvider } from './cherkasy.js'
+import { chernihivProvider } from './chernihiv.js'
 import { chernivtsiProvider } from './chernivtsi.js'
 import { dtekProvider } from './dtek.js'
 import { ivanoFrankivskProvider } from './ivano-frankivsk.js'
@@ -100,5 +101,6 @@ export function createProviders(): Provider[] {
     rivneProvider(),
     volynProvider(),
     khmelnytskyiProvider(),
+    chernihivProvider(),
   ]
 }

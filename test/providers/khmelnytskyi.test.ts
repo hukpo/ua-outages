@@ -25,10 +25,6 @@ function client(queues = 'khmelnytskyi/shutdown-queues-280957-house-2.html') {
 }
 
 describe('Khmelnytskoblenergo', () => {
-  it('has no machine-readable schedule', async () => {
-    await expect(client().client.getSchedules('khmelnytskyi')).rejects.toMatchObject({ code: 'unsupported' })
-  })
-
   it('walks settlement → street → house → subgroup', async () => {
     const { client: c, calls } = client()
     const m = await c.findGroup('khmelnytskyi', {

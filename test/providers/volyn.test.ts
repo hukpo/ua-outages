@@ -20,17 +20,6 @@ function client(body = RESULT) {
 }
 
 describe('Volynoblenergo', () => {
-  it('has no machine-readable schedule', async () => {
-    const c = client().client
-    expect(c.region('volyn').capabilities).toMatchObject({
-      schedule: false,
-      addressSearch: true,
-      streetSearch: false,
-    })
-    await expect(c.getSchedules('volyn')).rejects.toMatchObject({ code: 'unsupported' })
-    expect((await c.healthCheck()).regions[0]).toMatchObject({ status: 'empty' })
-  })
-
   it('posts bare names and finds the group of a house', async () => {
     const { client: c, calls } = client()
     const m = await c.findGroup('volyn', { city: 'м. Луцьк', street: 'вул. Винниченка', house: '8' })

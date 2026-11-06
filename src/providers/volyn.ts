@@ -1,12 +1,16 @@
 import { OutageError } from '../errors.js'
+import type { TableLayout } from '../image/table.js'
 import { compareGroups, normalizeGroup } from '../schedule.js'
+import { addDays, kyivDate, kyivInstant } from '../time.js'
 import { normalizeHouse, normalizeSettlement, normalizeStreet } from '../text.js'
 import type { AddressQuery, GroupId, GroupMatch, RegionInfo } from '../types.js'
+import { scheduleFromImages, type DatedImages } from './image-schedule.js'
 import type { Provider } from './provider.js'
 
 /**
- * Volynoblenergo (energy.volyn.ua). The hourly schedule is published only as an image, so
- * there is no schedule here. The address → group form takes a free-text settlement and street
+ * Volynoblenergo (energy.volyn.ua). The hourly schedule is published only as a PNG with two
+ * tables (00–12 and 12–24, half-hour cells); the operator's archive API lists the images per
+ * date, and the cells are read by colour (see `src/image`). The address → group form takes a free-text settlement and street
  * and answers with a table of every matching record, so it maps to `lookupAddress`.
  */
 const SITE = 'https://energy.volyn.ua'
@@ -17,7 +21,7 @@ const INFO: RegionInfo = {
   name: 'Волинська область',
   operator: 'Волиньобленерго',
   website: `${SITE}/spozhyvacham/perervy-u-elektropostachanni/hrafik-vidkliuchen/`,
-  capabilities: { schedule: false, addressSearch: true },
+  capabilities: { schedule: true, addressSearch: true },
 }
 
 /** One row of the result table. */
@@ -37,12 +41,13 @@ export function volynProvider(): Provider {
     info: INFO,
     sampleAddress: { city: 'Луцьк', street: 'Винниченка', house: '8' },
 
-    async getSchedules() {
-      throw new OutageError(
-        'unsupported',
-        `${INFO.operator} publishes the hourly schedule only as an image`,
-        { region },
-      )
+    async getSchedules(ctx) {
+      const archive = await ctx.http.json<unknown>(`${IMAGE_API}/api/archive_gpv_graphs?page=1`, {
+        region,
+        headers: { Accept: 'application/ld+json' },
+      })
+      const dates = latestGraphs(archive, addDays(kyivDate(ctx.now()), -1))
+      return scheduleFromImages(ctx, region, dates, (path) => `${IMAGE_API}${path}`, LAYOUT)
     },
 
     async lookupAddress(ctx, address) {
@@ -165,4 +170,46 @@ function bare(name: string, kind: 'street' | 'settlement'): string {
       ? /(^|\s)(?:вулиця|вул|проспект|просп|пр-т|провулок|пров|бульвар|бульв|бул|площа|пл|набережна|наб|пр)(?:\.|(?=\s|$))/giu
       : /(^|\s)(?:місто|м|село|с|селище|смт|с-ще|сел)(?:\.|(?=\s|$))/giu
   return name.replace(re, ' ').replace(/\s+/g, ' ').trim()
+}
+
+const IMAGE_API = 'https://api-voe-poweron.inneti.net'
+
+/** Two tables (00–12, 12–24) of 24 half-hour cells */
+const LAYOUT: TableLayout = {
+  columns: 24,
+  rows: 12,
+  tables: 2,
+  halves: false,
+  palette: { on: [185, 200, 215], off: [68, 110, 155] },
+}
+
+/**
+ * The newest image per schedule date, for `from` and later. `dateCreate` carries Kyiv wall
+ * time labelled "+00:00" (the image itself says "станом на 22:26" for "22:26:04+00:00").
+ * Exported for tests.
+ */
+export function latestGraphs(data: unknown, from: string): DatedImages[] {
+  const members = Array.isArray(data)
+    ? data
+    : ((data as { 'hydra:member'?: unknown[] } | null)?.['hydra:member'] ?? null)
+  if (!Array.isArray(members))
+    throw new OutageError('parse', 'Volyn archive: expected a list', { region: 'volyn' })
+  const byDate = new Map<string, { date: string; path: string; at: Date }[]>()
+  for (const m of members as {
+    dateGraph?: string
+    dateCreate?: string
+    imageUrl?: { contentUrl?: string }
+  }[]) {
+    const date = m.dateGraph?.slice(0, 10)
+    const path = m.imageUrl?.contentUrl
+    const c = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(m.dateCreate ?? '')
+    if (!date || !path || !c || date < from) continue
+    const at = kyivInstant(c[1]!, Number(c[2]) * 60 + Number(c[3]))
+    const list = byDate.get(date) ?? []
+    list.push({ date, path, at })
+    byDate.set(date, list)
+  }
+  return [...byDate.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, list]) => ({ date, images: list.sort((a, b) => b.at.getTime() - a.at.getTime()) }))
 }

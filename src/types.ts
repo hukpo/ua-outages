@@ -1,6 +1,6 @@
 /**
- * Region ids, one per grid operator area. Not covered: Vinnytsia and Chernihiv (data behind a
- * captcha), Kherson (no public schedule), Luhansk and Crimea.
+ * Region ids, one per grid operator area. Not covered: Vinnytsia (data behind a bot check),
+ * Kherson (no public schedule), Luhansk and Crimea.
  */
 export type RegionId =
   | 'kyiv'
@@ -17,6 +17,7 @@ export type RegionId =
   | 'volyn'
   | 'chernivtsi'
   | 'khmelnytskyi'
+  | 'chernihiv'
   | 'zhytomyr'
   | 'cherkasy'
   | 'kirovohrad'

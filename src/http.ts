@@ -71,6 +71,12 @@ export class Http {
     return { body, headers: res.headers, status: res.status }
   }
 
+  /** Raw bytes (images); no bot-check sniffing. */
+  async bytes(url: string, opts: RequestOptions = {}): Promise<Uint8Array> {
+    const res = await this.request(url, opts)
+    return new Uint8Array(await res.arrayBuffer())
+  }
+
   async json<T = unknown>(url: string, opts: RequestOptions = {}): Promise<T> {
     const body = await this.text(url, opts)
     try {

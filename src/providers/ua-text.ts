@@ -108,3 +108,33 @@ export function parseGroupLines(text: string, kind: 'off' | 'maybe' = 'off'): Re
   }
   return out
 }
+
+/**
+ * Card layouts, where a group stands on its own line and its times follow on the next lines:
+ *
+ * ```
+ * 1.1
+ * 00:00 - 02:30
+ * 09:30 - 16:30
+ * ```
+ *
+ * Also accepts "1.1: 00:00-02:30, 09:30-16:30" on one line. Typical of OCR output.
+ */
+export function parseGroupBlocks(text: string, kind: 'off' | 'maybe' = 'off'): Record<string, MinuteSlot[]> {
+  const out: Record<string, MinuteSlot[]> = {}
+  let current: string | null = null
+  for (const rawLine of text.split(/\n/)) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const firstTime = line.search(/\d{1,2}[:.]\d{2}\s*(?:[-–—−]|до|по)/)
+    const head = firstTime === -1 ? line : line.slice(0, firstTime)
+    const group = /(?<![\d:.])(\d{1,2})\s*[.,]\s*([12])(?!\d)/.exec(head)
+    if (group) {
+      current = normalizeGroup(`${group[1]}.${group[2]}`)
+      if (current) out[current] ??= []
+    }
+    if (firstTime === -1 || !current) continue
+    for (const [start, end] of findTimeRanges(line.slice(firstTime))) out[current]!.push({ start, end, kind })
+  }
+  return out
+}
