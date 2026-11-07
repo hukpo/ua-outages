@@ -77,6 +77,14 @@ function duration(ms) {
   const sec = s % 60
   return h ? `${h} год ${String(m).padStart(2, '0')} хв` : `${m} хв ${String(sec).padStart(2, '0')} с`
 }
+/** Ukrainian plural: one (1, 21), few (2–4, 22–24), many (the rest) */
+function plural(n, one, few, many) {
+  const d = n % 10
+  const t = n % 100
+  if (d === 1 && t !== 11) return one
+  if (d >= 2 && d <= 4 && (t < 12 || t > 14)) return few
+  return many
+}
 const hoursText = (h) => `${h.toLocaleString('uk-UA', { maximumFractionDigits: 1 })} год`
 
 // --- data ---
@@ -101,7 +109,16 @@ const dayOf = (region, group, date) =>
   REGIONS.get(region)?.days?.[date]?.[group] ?? HISTORY.days[date]?.[region]?.[group]
 
 /** 'on' | 'off' | 'maybe' | 'unknown' */
+/** The source works but announces no outages at all (no schedule in force) */
+const noSchedule = (region) => {
+  const r = REGIONS.get(region)
+  return !!r?.ok && !r.groups.length
+}
+/** Stand-in group for the lights of a region with no schedule */
+const ANY = '*'
+
 function stateAt(region, group, date, min) {
+  if (group === ANY) return noSchedule(region) ? 'on' : 'unknown'
   const d = dayOf(region, group, date)
   if (!d || d.s === 'u' || d.s === 'e') return 'unknown'
   for (const [a, b, k] of d.i) if (min >= a && min < b) return k ? 'maybe' : 'off'
@@ -113,7 +130,8 @@ const intervalsOf = (region, group, date) => dayOf(region, group, date)?.i ?? []
 
 function regionShare(region, date, min) {
   const r = REGIONS.get(region)
-  if (!r?.ok || !r.groups.length) return null
+  if (noSchedule(region)) return { off: 0, maybe: 0, offCount: 0, known: 0, none: true }
+  if (!r?.ok) return null
   let off = 0
   let maybe = 0
   let known = 0
@@ -178,7 +196,8 @@ function buildDots() {
     const step = s.id === 'kyiv' ? 1.9 : 4.6
     const pool = []
     for (const region of shapeRegions(s.id))
-      for (const g of REGIONS.get(region)?.groups ?? []) pool.push([region, g])
+      if (noSchedule(region)) pool.push([region, ANY])
+      else for (const g of REGIONS.get(region)?.groups ?? []) pool.push([region, g])
     for (let y = y0; y < y1; y += step)
       for (let x = x0; x < x1; x += step) {
         const px = x + (rnd() - 0.5) * step * 0.7
@@ -395,6 +414,10 @@ function renderRegionCard() {
       html += `<p class="hint">На ${dayName(view.date)} графік ще не опубліковано.</p>`
       continue
     }
+    if (share.none) {
+      html += `<p>Відключень за графіком не оголошено: ${escapeHTML(r.operator)} зараз не публікує графіка.</p>`
+      continue
+    }
     html += `<p>${share.offCount} з ${share.known} черг без світла о ${hhmm(view.min)}</p>`
     if (r.stale)
       html += `<p class="hint">Сайт обленерго зараз не відповідає, тож це графік, отриманий ${new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' }).format(new Date(r.fetchedAt))}.</p>`
@@ -472,7 +495,7 @@ function onTimeChange(full = true) {
   $('stat-text').textContent =
     pct == null
       ? 'На цей час графіків ще немає.'
-      : `черг ${view.live ? 'зараз ' : ''}без світла за графіком${view.live ? '' : `, ${when}`}. Дані з ${share.regions} областей.`
+      : `черг ${view.live ? 'зараз ' : ''}без світла за графіком${view.live ? '' : `, ${when}`}. Дані з ${share.regions} ${plural(share.regions, 'області', 'областей', 'областей')}.`
   $('clock').textContent = hhmm(view.min)
   $('scrub').value = String(Math.round(view.min))
   $('live').hidden = view.live
@@ -544,7 +567,7 @@ function fillRegionSelect() {
   regionSelect.innerHTML = rs
     .map(
       (r) =>
-        `<option value="${r.id}" ${r.ok && r.groups.length ? '' : 'disabled'}>${r.name}${r.ok && r.groups.length ? '' : ' (немає графіка)'}</option>`,
+        `<option value="${r.id}" ${r.ok && r.groups.length ? '' : 'disabled'}>${r.name}${r.ok && r.groups.length ? '' : r.ok ? ' (відключень не оголошено)' : ' (немає даних)'}</option>`,
     )
     .join('')
 }
@@ -933,8 +956,8 @@ function renderSources() {
         : r.stale
           ? `<span class="dot quiet"></span>${friendlyError(r.message)}; показано графік, отриманий ${fmt(r.fetchedAt)}`
           : has
-            ? `<span class="dot"></span>працює, ${r.groups.length} черг`
-            : `<span class="dot quiet"></span>графік не опубліковано`
+            ? `<span class="dot"></span>працює, ${r.groups.length} черг${r.relayed ? ', дані зібрано з України' : ''}`
+            : `<span class="dot"></span>працює, відключень не оголошено`
       return `<tr><td>${r.name}</td><td><a href="${r.website}" target="_blank" rel="noopener">${escapeHTML(r.operator)}</a></td><td>${state}</td><td>${r.updatedAt ? fmt(r.updatedAt) : '—'}</td></tr>`
     })
     .join('')

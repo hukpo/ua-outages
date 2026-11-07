@@ -6,8 +6,19 @@ import { fixture, mockFetch } from '../helpers.js'
 const NOW = new Date('2026-11-05T23:30:00+02:00')
 const API = 'https://api-outage-zakarpat-energy.inneti.net/api'
 
-function client(queues = fixture('zakarpattia/pw_address_queues.city-769.street-9373.json')) {
+const option = (key: string, value: string) =>
+  JSON.stringify({
+    'hydra:member': [{ option_key: key, value, date: '2026-06-30T20:08:40+00:00' }],
+    'hydra:totalItems': 1,
+  })
+
+function client(
+  queues = fixture('zakarpattia/pw_address_queues.city-769.street-9373.json'),
+  todayImage = '',
+) {
   const { fetch, calls } = mockFetch([
+    { match: `${API}/options?option_key=pw_gpv_image_today`, body: option('pw_gpv_image_today', todayImage) },
+    { match: `${API}/options?option_key=pw_gpv_image_tomorrow`, body: option('pw_gpv_image_tomorrow', '') },
     { match: `${API}/pw_cities?pagination=false`, body: fixture('zakarpattia/pw_cities.json') },
     {
       match: `${API}/pw_streets?pagination=false&city.id=769`,
@@ -22,19 +33,27 @@ function client(queues = fixture('zakarpattia/pw_address_queues.city-769.street-
 }
 
 describe('Zakarpattiaoblenergo', () => {
-  it('has no machine-readable schedule', async () => {
-    const { client: c, calls } = client()
+  it('has no groups while no schedule picture is published', async () => {
+    const { client: c } = client()
     expect(c.region('zakarpattia').capabilities).toMatchObject({
-      schedule: false,
+      schedule: true,
       addressSearch: true,
       streetSearch: true,
     })
-    await expect(c.getSchedules('zakarpattia')).rejects.toThrow(
-      expect.objectContaining({ code: 'unsupported' }),
-    )
-    expect(calls).toHaveLength(0)
+    const s = await c.getSchedules('zakarpattia')
+    expect(s.groups).toEqual([])
     const h = await c.healthCheck()
     expect(h.regions[0]!.status).toBe('empty')
+  })
+
+  it('reports a published schedule picture as unsupported, with its address', async () => {
+    const { client: c } = client(undefined, '/media/gpv-today.png')
+    await expect(c.getSchedules('zakarpattia')).rejects.toThrow(
+      expect.objectContaining({
+        code: 'unsupported',
+        message: expect.stringContaining('https://api-outage-zakarpat-energy.inneti.net/media/gpv-today.png'),
+      }),
+    )
   })
 
   it('finds the group of a house from the per-group house lists', async () => {

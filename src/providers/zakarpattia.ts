@@ -1,4 +1,5 @@
 import { OutageError } from '../errors.js'
+import { toKyivIso } from '../time.js'
 import type { GroupId, RegionInfo } from '../types.js'
 import { hydraList, parseCherg, powerOnAddressSearch, type PowerOnBuilding } from './poweron.js'
 import type { Provider } from './provider.js'
@@ -7,8 +8,10 @@ import type { Provider } from './provider.js'
  * Zakarpattiaoblenergo (outage.zakarpat.energy), a PowerOn platform backend.
  *
  * The schedule itself is published only as a picture (`/options?option_key=pw_gpv_image_today`
- * points to a PNG), so `getSchedules` is unsupported. The address lookup works:
- * `pw_address_queues` returns, per street and group, a comma-separated list of houses.
+ * points to a PNG). While no picture is published, `getSchedules` returns no groups (no
+ * outages announced); once one is, it throws `unsupported` with its address, since no sample of
+ * that picture exists yet to build a reader from. The address lookup works: `pw_address_queues`
+ * returns, per street and group, a comma-separated list of houses.
  */
 const API = 'https://api-outage-zakarpat-energy.inneti.net/api'
 
@@ -17,7 +20,13 @@ const INFO: RegionInfo = {
   name: 'Закарпатська область',
   operator: 'Закарпаттяобленерго',
   website: 'https://zakarpat.energy/customers/break-in-electricity-supply/schedule/',
-  capabilities: { schedule: false, addressSearch: true },
+  capabilities: { schedule: true, addressSearch: true },
+}
+
+const IMAGE_HOST = 'https://api-outage-zakarpat-energy.inneti.net'
+
+interface Option {
+  value?: string | null
 }
 
 interface AddressQueue {
@@ -31,12 +40,24 @@ export function zakarpattiaProvider(): Provider {
     info: INFO,
     sampleAddress: { city: 'Ужгород', street: 'Корзо', house: '9' },
 
-    async getSchedules() {
-      throw new OutageError(
-        'unsupported',
-        'Zakarpattia: the operator publishes the schedule only as an image (https://outage.zakarpat.energy/schedule_queues); use findGroup for the group of an address',
-        { region },
+    async getSchedules(ctx) {
+      const images = await Promise.all(
+        ['pw_gpv_image_today', 'pw_gpv_image_tomorrow'].map(async (key) => {
+          const data = await ctx.http.json(`${API}/options?option_key=${key}`, { region })
+          const value = hydraList<Option>(data, `Zakarpattia ${key}`, region)[0]?.value
+          if (value !== undefined && value !== null && typeof value !== 'string')
+            throw new OutageError('parse', `Zakarpattia ${key}: unexpected value`, { region })
+          return value?.trim() ?? ''
+        }),
       )
+      const published = images.find(Boolean)
+      if (published)
+        throw new OutageError(
+          'unsupported',
+          `Zakarpattia: the schedule is published only as an image (${new URL(published, IMAGE_HOST).href}); use findGroup for the group of an address`,
+          { region },
+        )
+      return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt: toKyivIso(ctx.now()) }
     },
 
     ...powerOnAddressSearch({

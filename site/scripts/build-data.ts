@@ -9,15 +9,25 @@
  *
  * State lives only on the published site: set PREVIOUS_SITE (e.g. the Pages URL) and the script
  * starts from the history.json and now.json published there, otherwise from a local `_site/`.
- * A source that fails keeps its last schedule (marked stale) while that still covers today.
+ * A source that fails here is taken from the relay (relay.ts, run in Ukraine) while its data is
+ * fresh, otherwise its last published schedule is kept (marked stale) while it covers today.
  */
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { OutageClient, kyivDate } from '../../src/index.js'
-import type { DaySchedule, RegionId, RegionInfo } from '../../src/index.js'
+import type { RegionId } from '../../src/index.js'
 import { addDays, kyivInstant } from '../../src/time.js'
 import { mapLimit } from '../../src/util.js'
+import {
+  RELAY_BRANCH,
+  collect,
+  logEntry,
+  pick,
+  type CompactDay,
+  type Days,
+  type RegionEntry,
+} from './collect.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const OUT = join(ROOT, '_site')
@@ -25,43 +35,14 @@ const HISTORY_DAYS = 120
 /** Past days kept in the calendar feeds, so last week's outages don't vanish from calendars */
 const CALENDAR_PAST_DAYS = 14
 
-/** One group's day: status code and [startMin, endMin, kind] with kind 0 = off, 1 = maybe */
-interface CompactDay {
-  s: 's' | 'n' | 'e' | 'u'
-  i: [number, number, 0 | 1][]
-}
-type Days = Record<string, Record<string, CompactDay>>
 type History = { days: Record<string, Record<string, Record<string, CompactDay>>> }
-
-interface RegionEntry {
-  id: RegionId
-  name: string
-  operator: string
-  website: string
-  ok: boolean
-  /** The source failed this time; `days` come from the last run that reached it (`fetchedAt`) */
-  stale?: boolean
-  message?: string
-  latencyMs: number
-  updatedAt?: string | null
-  fetchedAt?: string
-  groups: string[]
-  days?: Days
-}
 type Now = { generatedAt: string; today: string; regions: RegionEntry[] }
+type Relay = { generatedAt: string; regions: RegionEntry[] }
 
-const STATUS = { scheduled: 's', 'no-outages': 'n', emergency: 'e', unknown: 'u' } as const
-
-/** Wall-clock minutes of an ISO time inside `day`; the next midnight is 1440 */
-function minutesIn(day: string, iso: string): number {
-  if (iso.slice(0, 10) > day) return 1440
-  return Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16))
-}
-
-const compact = (d: DaySchedule): CompactDay => ({
-  s: STATUS[d.status],
-  i: d.intervals.map((x) => [minutesIn(d.date, x.from), minutesIn(d.date, x.to), x.kind === 'off' ? 0 : 1]),
-})
+/** The relay's data is used while it is at most this old */
+const RELAY_MAX_AGE_MS = 60 * 60_000
+const RELAY_URL =
+  process.env.RELAY_URL ?? `https://raw.githubusercontent.com/hukpo/ua-outages/${RELAY_BRANCH}/relay.json`
 
 /** A data file of the previously published site, or of a local `_site/` */
 async function previous<T>(file: string): Promise<T | null> {
@@ -158,57 +139,52 @@ function calendar(r: RegionEntry, group: string, list: CalEvent[], stamp: Date):
 
 // --- build ---
 
-const pick = (info: RegionInfo) => ({
-  id: info.id,
-  name: info.name,
-  operator: info.operator,
-  website: info.website,
-})
+async function relayed(): Promise<Relay | null> {
+  try {
+    const r = await fetch(RELAY_URL, { cache: 'no-store' })
+    if (!r.ok) return null
+    const relay = (await r.json()) as Relay
+    const age = Date.now() - new Date(relay.generatedAt).getTime()
+    if (age > RELAY_MAX_AGE_MS) {
+      console.warn(`relay data is ${Math.round(age / 60_000)} min old, not used`)
+      return null
+    }
+    return relay
+  } catch (e) {
+    console.warn(`can't read the relay: ${(e as Error).message}`)
+    return null
+  }
+}
 
 const client = new OutageClient({ cacheTtlMs: 0, timeoutMs: 25_000, retries: 2 })
 const now = new Date()
 const today = kyivDate(now)
 cpSync(join(ROOT, 'site/public'), OUT, { recursive: true })
 mkdirSync(join(OUT, 'data'), { recursive: true })
-const history = (await previous<History>('history.json')) ?? { days: {} }
-const before = await previous<Now>('now.json')
+const [history, before, relay] = await Promise.all([
+  previous<History>('history.json').then((h) => h ?? { days: {} }),
+  previous<Now>('now.json'),
+  relayed(),
+])
 
 const regions = await mapLimit(client.regions(), 6, async (info): Promise<RegionEntry> => {
-  const started = performance.now()
-  try {
-    const s = await client.getSchedules(info.id, { fresh: true })
-    const latencyMs = Math.round(performance.now() - started)
-    const days: Days = {}
-    for (const g of s.groups)
-      for (const d of s.schedules[g] ?? []) {
-        if (d.date < today) continue
-        ;(days[d.date] ??= {})[g] = compact(d)
-        ;((history.days[d.date] ??= {})[info.id] ??= {})[g] = compact(d)
-      }
-    console.log(`ok    ${info.id.padEnd(16)} ${s.groups.length} groups  ${latencyMs} ms`)
-    return {
-      ...pick(info),
-      ok: true,
-      latencyMs,
-      updatedAt: s.updatedAt,
-      fetchedAt: s.fetchedAt,
-      groups: s.groups,
-      days,
-    }
-  } catch (e) {
-    const message = (e as Error).message
-    const latencyMs = Math.round(performance.now() - started)
-    // keep showing the last schedule that reached us, while it still covers today
-    const last = before?.regions.find((r) => r.id === info.id && r.ok && r.groups.length)
-    const days = Object.fromEntries(Object.entries(last?.days ?? {}).filter(([day]) => day >= today))
-    if (last && Object.keys(days).length) {
-      console.log(`stale ${info.id.padEnd(16)} ${message}; keeping data from ${last.fetchedAt}`)
-      return { ...last, ...pick(info), stale: true, message, latencyMs, days }
-    }
-    console.log(`error ${info.id.padEnd(16)} ${message}`)
-    return { ...pick(info), ok: false, message, latencyMs, groups: [] }
-  }
+  const direct = await collect(client, info, now)
+  if (direct.ok) return direct
+  // 1. the relay in Ukraine reached it
+  const viaRelay = relay?.regions.find((r) => r.id === info.id && r.ok)
+  if (viaRelay) return { ...viaRelay, ...pick(info), relayed: true, latencyMs: direct.latencyMs }
+  // 2. the last schedule published, while it still covers today
+  const last = before?.regions.find((r) => r.id === info.id && r.ok && r.groups.length)
+  const days = Object.fromEntries(Object.entries(last?.days ?? {}).filter(([day]) => day >= today))
+  if (last && Object.keys(days).length)
+    return { ...last, ...pick(info), stale: true, message: direct.message, latencyMs: direct.latencyMs, days }
+  return direct
 })
+regions.forEach(logEntry)
+
+for (const r of regions)
+  for (const [day, groups] of Object.entries(r.ok ? (r.days ?? {}) : {}))
+    for (const [g, d] of Object.entries(groups)) ((history.days[day] ??= {})[r.id] ??= {})[g] = d
 
 for (const r of regions) {
   if (!r.ok) continue
@@ -225,8 +201,9 @@ for (const day of Object.keys(history.days)) if (day < oldest) delete history.da
 const out: Now = { generatedAt: now.toISOString(), today, regions }
 writeFileSync(join(OUT, 'data/now.json'), JSON.stringify(out))
 writeFileSync(join(OUT, 'data/history.json'), JSON.stringify(history))
-const ok = regions.filter((r) => r.ok && !r.stale).length
-const stale = regions.filter((r) => r.stale).length
+const count = (f: (r: RegionEntry) => boolean | undefined) => regions.filter(f).length
 console.log(
-  `\n${ok}/${regions.length} regions fresh, ${stale} stale, ${Object.keys(history.days).length} days in the archive → _site/`,
+  `\n${count((r) => r.ok && !r.stale && !r.relayed)} direct, ${count((r) => r.relayed)} relayed, ` +
+    `${count((r) => r.stale)} stale, ${count((r) => !r.ok)} failed of ${regions.length}; ` +
+    `${Object.keys(history.days).length} days in the archive → _site/`,
 )
