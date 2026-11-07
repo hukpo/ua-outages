@@ -73,10 +73,11 @@ function lineShapes(m: Mask, line: { start: number; end: number }): Glyph[] {
   return shapes(m, lineGlyphs(m, line))
 }
 
-function shapes(m: Mask, boxes: Box[]): Glyph[] {
+function shapes(m: Mask, glyphBoxes: Box[]): Glyph[] {
   // digit height: the median glyph height (icons are taller, punctuation shorter)
-  const heights = boxes.map((b) => b.y1 - b.y0).sort((a, b) => a - b)
+  const heights = glyphBoxes.map((b) => b.y1 - b.y0).sort((a, b) => a - b)
   const H = heights[Math.floor(heights.length / 2)] ?? 0
+  const boxes = splitTouching(m, glyphBoxes, H)
   // baseline: bottom of the digit-sized glyphs; a dash floats mid-height, a dot sits on it
   const bottoms = boxes
     .filter((b) => b.y1 - b.y0 >= 0.85 * H)
@@ -91,6 +92,44 @@ function shapes(m: Mask, boxes: Box[]): Glyph[] {
     if (h >= 0.85 * H && h <= 1.15 * H && w <= 0.8 * H) return { ch: 'd', box }
     return { ch: '?', box }
   })
+}
+
+/**
+ * Bold fonts set tight make neighbouring digits touch ("07" as one blob). A digit-tall glyph
+ * about as wide as two digits is cut at the column with the least ink near its middle.
+ */
+function splitTouching(m: Mask, boxes: Box[], H: number): Box[] {
+  const digitTall = (b: Box) => b.y1 - b.y0 >= 0.85 * H && b.y1 - b.y0 <= 1.15 * H
+  const widths = boxes
+    .filter((b) => digitTall(b) && b.x1 - b.x0 <= 0.8 * H)
+    .map((b) => b.x1 - b.x0)
+    .sort((a, b) => a - b)
+  const W = widths[Math.floor(widths.length / 2)]
+  if (!W) return boxes
+  return boxes.flatMap((b) => {
+    const w = b.x1 - b.x0
+    if (!digitTall(b) || w < 1.7 * W || w > 2.3 * W) return [b]
+    let cut = -1
+    let least = Infinity
+    for (let x = Math.round(b.x0 + 0.35 * w); x <= Math.round(b.x0 + 0.65 * w); x++) {
+      let ink = 0
+      for (let y = b.y0; y < b.y1; y++) ink += m.bits[y * m.width + x]!
+      if (ink < least) [least, cut] = [ink, x]
+    }
+    return [trimRows(m, { ...b, x1: cut }), trimRows(m, { ...b, x0: cut })]
+  })
+}
+
+/** The box shrunk vertically to the rows that have ink in its columns */
+function trimRows(m: Mask, b: Box): Box {
+  let { y0, y1 } = b
+  const rowHas = (y: number) => {
+    for (let x = b.x0; x < b.x1; x++) if (m.bits[y * m.width + x]) return true
+    return false
+  }
+  while (y0 < y1 && !rowHas(y0)) y0++
+  while (y1 > y0 && !rowHas(y1 - 1)) y1--
+  return { ...b, y0, y1 }
 }
 
 /** Recognises the digit-shaped glyphs ('?' when unsure). */

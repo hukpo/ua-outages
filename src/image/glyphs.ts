@@ -111,8 +111,10 @@ const colInk = (m: Mask, x: number, y0: number, y1: number) => {
 /**
  * A copy of the mask without connected ink blobs taller than `factor` × the median blob
  * height, e.g. a logo next to two lines of text that would otherwise join them into one.
+ * The default leaves a date set up to ~2.8× bigger than the body text (Chernihiv, 2026-11-07:
+ * logo parts 3.3–3.7×, date 2.6×).
  */
-export function withoutLargeBlobs(m: Mask, factor = 2.5): Mask {
+export function withoutLargeBlobs(m: Mask, factor = 3): Mask {
   const { width, height } = m
   const label = new Int32Array(width * height).fill(-1)
   const blobs: { y0: number; y1: number; pixels: number[] }[] = []
