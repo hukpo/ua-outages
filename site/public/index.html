@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="uk">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Світло · графіки відключень по всій Україні</title>
+    <meta
+      name="description"
+      content="Жива карта відключень світла в Україні: кожен вогник — будинок однієї з черг. Таймер для вашої черги, календар, спільні вікна для кількох адрес, історія."
+    />
+    <meta name="theme-color" content="#0a0e18" />
+    <meta property="og:title" content="Світло · Україна вночі" />
+    <meta property="og:description" content="Де зараз немає світла: графіки всіх обленерго на одній карті." />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0e18'/%3E%3Crect x='5' y='5' width='6' height='6' fill='%23ffcf5a'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <a class="wordmark" href="#top">Світло</a>
+      <nav aria-label="Розділи">
+        <a href="#map">Карта</a>
+        <a href="#together">Разом</a>
+        <a href="#history">Історія</a>
+        <a href="#sources">Джерела</a>
+      </nav>
+      <a class="button" href="#me">Моя черга</a>
+    </header>
+
+    <main id="top">
+      <section class="hero" id="map" aria-labelledby="hero-title">
+        <div class="hero-text">
+          <h1 id="hero-title">Україна вночі</h1>
+          <p class="lede">Кожен вогник — будинок однієї з черг. Він гасне, коли в черги немає світла.</p>
+          <div class="now-stat">
+            <p class="big-number" id="stat-share">—</p>
+            <p id="stat-text">Завантажую графіки…</p>
+          </div>
+          <div class="region-card" id="region-card" hidden></div>
+          <ul class="legend" aria-label="Позначення">
+            <li><span class="swatch lit"></span>світло є</li>
+            <li><span class="swatch off"></span>немає за графіком</li>
+            <li><span class="swatch maybe"></span>можливе відключення</li>
+            <li><span class="swatch none"></span>немає даних</li>
+          </ul>
+        </div>
+        <div class="map-wrap">
+          <canvas id="map-canvas" role="img" aria-label="Карта України з вогниками черг"></canvas>
+          <div class="timeline">
+            <div class="timeline-controls">
+              <div class="days" role="group" aria-label="День" id="day-buttons"></div>
+              <button type="button" class="ghost" id="play" aria-pressed="false">Прокрутити добу</button>
+              <button type="button" class="ghost" id="live" hidden>Повернутися до зараз</button>
+              <p class="clock" id="clock" aria-live="polite">--:--</p>
+            </div>
+            <div class="curve" id="curve">
+              <svg id="curve-svg" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <input
+                type="range"
+                id="scrub"
+                min="0"
+                max="1439"
+                step="5"
+                value="0"
+                aria-label="Час доби на карті"
+              />
+            </div>
+            <p class="curve-caption" id="curve-caption">
+              Частка черг без світла протягом доби по всіх областях з даними.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="witness" aria-labelledby="witness-title">
+        <figure class="witness-photo">
+          <img
+            src="assets/space.jpg"
+            width="1600"
+            height="899"
+            alt="Нічний супутниковий знімок: територія України майже темна, міста сусідніх країн світяться"
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>Нічний супутниковий знімок України та сусідніх країн.</figcaption>
+        </figure>
+        <div class="witness-text">
+          <h2 id="witness-title">24 листопада 2022</h2>
+          <p>
+            Наступного дня після масованого удару по енергосистемі Україна майже зникла з нічних знімків із
+            космосу. Відтоді графіки відключень стали частиною життя, а кожне обленерго публікує їх по-своєму:
+            таблицею, текстом, картинкою.
+          </p>
+          <p>Цей сайт збирає їх в одне місце і щоп'ятнадцять хвилин оновлює.</p>
+        </div>
+      </section>
+
+      <section class="me" id="me" aria-labelledby="me-title">
+        <div class="me-pick">
+          <h2 id="me-title">Моя черга</h2>
+          <form id="pick" class="pick">
+            <label
+              >Область
+              <select id="pick-region" required></select>
+            </label>
+            <label
+              >Черга
+              <select id="pick-group" required></select>
+            </label>
+          </form>
+          <p class="hint" id="pick-hint"></p>
+          <div class="places">
+            <h3>Мої адреси</h3>
+            <ul id="places"></ul>
+            <form id="save-place" class="save-place">
+              <label class="sr" for="place-name">Назва адреси</label>
+              <input id="place-name" placeholder="Дім, офіс, батьки…" maxlength="24" />
+              <button class="ghost" type="submit">Зберегти</button>
+            </form>
+          </div>
+        </div>
+        <div class="me-status" id="me-status">
+          <p class="state" id="state">—</p>
+          <p class="countdown" id="countdown"></p>
+          <div class="dial-row">
+            <svg
+              class="dial"
+              id="dial"
+              viewBox="-110 -110 220 220"
+              role="img"
+              aria-label="Доба по колу"
+            ></svg>
+            <div class="upcoming">
+              <h3>Найближчі відключення</h3>
+              <ol id="upcoming"></ol>
+            </div>
+          </div>
+          <div class="actions">
+            <a class="button" id="cal-apple" href="#">Підписатися в календарі</a>
+            <a class="ghost" id="cal-google" href="#" target="_blank" rel="noopener">Google Calendar</a>
+            <button class="ghost" type="button" id="share">Скопіювати посилання</button>
+            <button class="ghost" type="button" id="notify">Нагадати за 15 хв</button>
+          </div>
+          <p class="hint" id="action-hint"></p>
+        </div>
+        <figure class="me-photo">
+          <img
+            src="assets/kharkiv.jpg"
+            width="1600"
+            height="1200"
+            alt="Темний багатоповерховий будинок уночі, світло лише в кількох вікнах"
+            loading="lazy"
+            decoding="async"
+          />
+          <figcaption>Харків, березень 2024 року.</figcaption>
+        </figure>
+      </section>
+
+      <section class="together" id="together" aria-labelledby="together-title">
+        <div class="together-head">
+          <h2 id="together-title">Коли світло є в усіх</h2>
+          <figure class="together-photo">
+            <img
+              src="assets/spot.jpg"
+              width="1600"
+              height="1043"
+              alt="Зимова ніч у Києві: темні дерева й будинки, світиться лише кіоск"
+              loading="lazy"
+              decoding="async"
+            />
+          </figure>
+          <p>
+            Дім, офіс, батьки в іншому місті. Збережіть адреси вище, і тут з'являться години, коли світло є
+            всюди: для дзвінка, прання чи зустрічі.
+          </p>
+        </div>
+        <div id="together-body"></div>
+      </section>
+
+      <section class="history" id="history" aria-labelledby="history-title">
+        <div class="history-mine">
+          <h2 id="history-title">Скільки годин без світла</h2>
+          <p id="history-summary"></p>
+          <div class="heat" id="heat" role="img"></div>
+          <p class="hint" id="heat-hint"></p>
+        </div>
+        <div class="history-rank">
+          <h3>Області за останні 7 днів</h3>
+          <p class="hint">Середня кількість годин без світла на добу на одну чергу.</p>
+          <ol class="rank" id="rank"></ol>
+        </div>
+      </section>
+
+      <figure class="band">
+        <img
+          src="assets/kyiv.jpg"
+          width="1600"
+          height="1200"
+          alt="Київська вулиця вночі без світла, освітлена лише фарами машин"
+          loading="lazy"
+          decoding="async"
+        />
+        <figcaption>Київ, листопад 2022 року, після ракетних ударів по енергосистемі.</figcaption>
+      </figure>
+
+      <section class="sources" id="sources" aria-labelledby="sources-title">
+        <h2 id="sources-title">Звідки дані</h2>
+        <p>
+          Графіки беруться напряму з сайтів обленерго кожні 15 хвилин. Обленерго може змінити графік будь-якої
+          миті, тож перед важливими справами перевіряйте їхній сайт.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Область</th>
+                <th>Обленерго</th>
+                <th>Стан</th>
+                <th>Графік оновлено</th>
+              </tr>
+            </thead>
+            <tbody id="sources-body"></tbody>
+          </table>
+        </div>
+        <p class="hint" id="generated"></p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p class="footer-name">Світло</p>
+      <div class="footer-cols">
+        <p>
+          Зроблено на відкритому SDK
+          <a href="https://github.com/hukpo/ua-outages">ua-outages</a>: TypeScript-бібліотеці, що читає
+          графіки 20+ обленерго, зокрема з картинок.
+        </p>
+        <p>
+          Межі областей: <a href="https://www.naturalearthdata.com/">Natural Earth</a> (суспільне надбання).
+          Графіки: сайти обленерго, посилання в таблиці вище.
+        </p>
+        <p class="credits">
+          Фото:
+          <a
+            href="https://commons.wikimedia.org/wiki/File:Ukraine_at_night_from_space_(November_24,_2022).jpg"
+            >«Ukraine at night from space (November 24, 2022)»</a
+          >, суспільне надбання;
+          <a href="https://commons.wikimedia.org/w/index.php?curid=149299994"
+            >«Kyiv during the blackout…, November 2022»</a
+          >, Bektour, <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>;
+          <a href="https://commons.wikimedia.org/w/index.php?curid=185205593"
+            >«Spot of light – Blackout in Kyiv»</a
+          >, spoilt.exile, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>;
+          <a href="https://commons.wikimedia.org/w/index.php?curid=153992244"
+            >«Slovo House in Kharkiv during blackout in March 2024»</a
+          >, фото: Kharkivian (Сергій Петров),
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>. Усі через Wikimedia
+          Commons, зменшені й обрізані.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

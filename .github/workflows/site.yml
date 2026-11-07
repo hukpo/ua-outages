@@ -1,0 +1,49 @@
+name: Site
+
+# Rebuilds the public site (https://hukpo.github.io/ua-outages/) every 15 minutes: fetches every
+# region with the SDK, merges today's schedules into the archive published last time, writes a
+# calendar per group, and deploys to GitHub Pages.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+    paths: ['site/**', 'src/**', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsx site/scripts/build-data.ts
+        env:
+          PREVIOUS_SITE: https://hukpo.github.io/ua-outages/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

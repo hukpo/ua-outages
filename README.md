@@ -8,6 +8,8 @@ TypeScript SDK for Ukrainian power outage schedules (графіки погоди
 - **Health check.** See in one call which sources still parse, so you notice when an operator changes its site.
 - No runtime dependencies. Node 20+.
 
+**See it running: [hukpo.github.io/ua-outages](https://hukpo.github.io/ua-outages/).** A live map of Ukraine where every light is a house in one of the groups and goes dark when its group is scheduled off, plus a countdown for your group, calendar feeds, shared "power everywhere" windows for several addresses, and an archive. It is a static page rebuilt by GitHub Actions every 15 minutes from this SDK (`site/`, `.github/workflows/site.yml`).
+
 ```ts
 import { OutageClient, stateAt, nextOutage } from 'ua-outages'
 
