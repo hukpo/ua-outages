@@ -396,6 +396,8 @@ function renderRegionCard() {
       continue
     }
     html += `<p>${share.offCount} з ${share.known} черг без світла о ${hhmm(view.min)}</p>`
+    if (r.stale)
+      html += `<p class="hint">Сайт обленерго зараз не відповідає, тож це графік, отриманий ${new Intl.DateTimeFormat('uk-UA', { timeZone: 'Europe/Kyiv', hour: '2-digit', minute: '2-digit' }).format(new Date(r.fetchedAt))}.</p>`
     const groups = r.groups.length > 12 ? r.groups.slice(0, 12) : r.groups
     html += `<div class="mini-strips">${groups.map((g) => `<span>${g}</span>${stripHTML(id, g, view.date, view.min)}`).join('')}</div>`
     if (r.groups.length > 12) html += `<p class="hint">і ще ${r.groups.length - 12} черг</p>`
@@ -410,6 +412,7 @@ function friendlyError(msg = '') {
   if (/bot/i.test(msg)) return 'сайт обленерго перевіряє, чи ви не бот, і не віддає графік програмам'
   if (/only as an image/i.test(msg)) return 'обленерго публікує графік лише картинкою за адресою'
   if (/timeout|timed out/i.test(msg)) return 'сайт обленерго не відповів вчасно'
+  if (/403|Cannot reach/i.test(msg)) return 'сайт обленерго не відповідає серверам за кордоном'
   return 'сайт обленерго відповів не так, як очікувалось'
 }
 
@@ -927,9 +930,11 @@ function renderSources() {
       const has = r.ok && r.groups.length
       const state = !r.ok
         ? `<span class="dot bad"></span>${friendlyError(r.message)}`
-        : has
-          ? `<span class="dot"></span>працює, ${r.groups.length} черг`
-          : `<span class="dot quiet"></span>графік не опубліковано`
+        : r.stale
+          ? `<span class="dot quiet"></span>${friendlyError(r.message)}; показано графік, отриманий ${fmt(r.fetchedAt)}`
+          : has
+            ? `<span class="dot"></span>працює, ${r.groups.length} черг`
+            : `<span class="dot quiet"></span>графік не опубліковано`
       return `<tr><td>${r.name}</td><td><a href="${r.website}" target="_blank" rel="noopener">${escapeHTML(r.operator)}</a></td><td>${state}</td><td>${r.updatedAt ? fmt(r.updatedAt) : '—'}</td></tr>`
     })
     .join('')
