@@ -17,6 +17,7 @@ import { volynProvider } from './volyn.js'
 import { zakarpattiaProvider } from './zakarpattia.js'
 import { zaporizhzhiaProvider } from './zaporizhzhia.js'
 import { zhytomyrProvider } from './zhytomyr.js'
+import { UZ_PAGES, uzProvider } from './uz.js'
 import { yasnoProvider } from './yasno.js'
 
 /** Built-in providers for every supported region. */
@@ -102,5 +103,6 @@ export function createProviders(): Provider[] {
     volynProvider(),
     khmelnytskyiProvider(),
     chernihivProvider(),
+    ...UZ_PAGES.map(([id, oblast, page, branch]) => uzProvider({ id, oblast, page, branch })),
   ]
 }
