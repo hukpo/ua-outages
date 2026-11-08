@@ -6,7 +6,15 @@ import { kyivDate } from '../../src/index.js'
 import type { DaySchedule, OutageClient, RegionId, RegionInfo } from '../../src/index.js'
 
 /** Regions that answer from Ukraine but not from GitHub's runners (checked 2026-11-07) */
-export const RELAYED: RegionId[] = ['kharkiv', 'chernivtsi', 'poltava', 'zaporizhzhia']
+import { UZ_PAGES } from '../../src/providers/uz.js'
+export const RELAYED: RegionId[] = [
+  'kharkiv',
+  'chernivtsi',
+  'poltava',
+  'zaporizhzhia',
+  // uz.gov.ua doesn't answer from abroad either
+  ...UZ_PAGES.map(([id]) => id),
+]
 /** Branch the relay publishes `relay.json` to */
 export const RELAY_BRANCH = 'relay'
 

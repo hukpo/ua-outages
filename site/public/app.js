@@ -101,6 +101,8 @@ const shapeRegions = (shape) => SHAPE_REGIONS[shape] ?? (REGIONS.has(shape) ? [s
  * homes wired to the railway's grid, so they stay off the map's lights and the national numbers.
  */
 const isRail = (id) => id.startsWith('uz-')
+/** Why the railway's schedules are missing this time, or null */
+let railDown = null
 const railShape = (id) => id.slice(3).replace(/-(odesa|south)$/, '')
 const railRegions = (shape) => [...REGIONS.keys()].filter((id) => isRail(id) && railShape(id) === shape)
 const NOT_COVERED = {
@@ -1016,6 +1018,8 @@ function renderSources() {
   for (const [id, why] of Object.entries(NOT_COVERED))
     if (!REGIONS.has(id) && MAP?.regions[id])
       html += `<tr><td>${MAP.regions[id].name}</td><td>—</td><td><span class="dot quiet"></span>${why}</td><td>—</td></tr>`
+  if (railDown)
+    html += `<tr><td>Усі області</td><td><a href="https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen/" target="_blank" rel="noopener">Укрзалізниця</a></td><td><span class="dot bad"></span>${friendlyError(railDown).replace('сайт обленерго', 'сайт Укрзалізниці')}</td><td>—</td></tr>`
   $('sources-body').innerHTML = html
   $('generated').textContent = `Дані зібрано ${fmt(DATA.generatedAt)} за київським часом.`
 }
@@ -1073,7 +1077,12 @@ async function load() {
   MAP = map
   HISTORY = hist
   REGIONS.clear()
-  for (const r of now.regions) REGIONS.set(r.id, r)
+  railDown = null
+  for (const r of now.regions) {
+    // the railway's pages fail together; one line in the sources says so, instead of 26
+    if (isRail(r.id) && !r.ok) railDown = r.message
+    else REGIONS.set(r.id, r)
+  }
 }
 
 async function start() {

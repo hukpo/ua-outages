@@ -16,7 +16,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { OutageClient, kyivDate } from '../../src/index.js'
-import type { RegionId } from '../../src/index.js'
+import type { RegionId, RegionInfo } from '../../src/index.js'
 import { addDays, kyivInstant } from '../../src/time.js'
 import { mapLimit } from '../../src/util.js'
 import {
@@ -167,8 +167,32 @@ const [history, before, relay] = await Promise.all([
   relayed(),
 ])
 
+/**
+ * Some operators run many regions on one site (Ukrzaliznytsia has 26). When the site doesn't
+ * answer here, one try is enough: the rest fail with the same reason instead of each waiting
+ * for its own timeout.
+ */
+const host = (info: RegionInfo) => new URL(info.website).host
+const perHost = new Map<string, number>()
+for (const info of client.regions()) perHost.set(host(info), (perHost.get(host(info)) ?? 0) + 1)
+const probes = new Map<string, Promise<RegionEntry>>()
+async function collectOnce(info: RegionInfo): Promise<RegionEntry> {
+  const h = host(info)
+  if (perHost.get(h)! < 3) return collect(client, info, now)
+  const first = probes.get(h)
+  if (!first) {
+    const p = collect(client, info, now)
+    probes.set(h, p)
+    return p
+  }
+  const probe = await first
+  if (!probe.ok && /Cannot reach|timed? ?out/i.test(probe.message ?? ''))
+    return { ...pick(info), ok: false, message: probe.message, latencyMs: 0, groups: [] }
+  return collect(client, info, now)
+}
+
 const regions = await mapLimit(client.regions(), 6, async (info): Promise<RegionEntry> => {
-  const direct = await collect(client, info, now)
+  const direct = await collectOnce(info)
   if (direct.ok) return direct
   // 1. the relay in Ukraine reached it
   const viaRelay = relay?.regions.find((r) => r.id === info.id && r.ok)
