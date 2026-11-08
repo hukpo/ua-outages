@@ -402,10 +402,11 @@ function renderRegionCard() {
     return
   }
   let html = `<h3>${name}</h3>`
+  if (ids.length > 1) html += `<p class="hint">Тут дві компанії, і графіки в них різні.</p>`
   for (const id of ids) {
     const r = REGIONS.get(id)
     const share = regionShare(id, view.date, view.min)
-    if (ids.length > 1) html += `<p class="hint">${r.operator}</p>`
+    if (ids.length > 1) html += `<h4>${escapeHTML(r.operator.replace(/ \(через YASNO\)/, ''))}</h4>`
     if (!r.ok) {
       html += `<p class="hint">Зараз не вдалося отримати графік: ${escapeHTML(friendlyError(r.message))}</p>`
       continue
@@ -424,7 +425,7 @@ function renderRegionCard() {
     const groups = r.groups.length > 12 ? r.groups.slice(0, 12) : r.groups
     html += `<div class="mini-strips">${groups.map((g) => `<span>${g}</span>${stripHTML(id, g, view.date, view.min)}`).join('')}</div>`
     if (r.groups.length > 12) html += `<p class="hint">і ще ${r.groups.length - 12} черг</p>`
-    html += `<p><a href="#/${id}/${r.groups[0]}" data-pick="${id}">Обрати свою чергу тут</a></p>`
+    html += `<p><a href="#/${id}/${r.groups[0]}" data-pick="${id}">${ids.length > 1 ? 'Обрати чергу цієї компанії' : 'Обрати свою чергу тут'}</a></p>`
   }
   card.innerHTML = html
 }
@@ -588,8 +589,10 @@ function setCurrent(region, group, { scroll = false, updateHash = true } = {}) {
   try {
     localStorage.setItem('svitlo.current', JSON.stringify(current))
   } catch {}
-  $('pick-hint').innerHTML =
-    `Не знаєте своєї черги? Знайдіть адресу на <a href="${r.website}" target="_blank" rel="noopener">сайті ${escapeHTML(r.operator)}</a>.`
+  const shared = Object.values(SHAPE_REGIONS).find((ids) => ids.includes(region))
+  $('pick-hint').innerHTML = shared
+    ? `В області дві компанії, і графіки в них різні: ${shared.map((id) => escapeHTML(REGIONS.get(id)?.operator.replace(/ \(через YASNO\)/, '') ?? id)).join(' та ')}. На <a href="${r.website}" target="_blank" rel="noopener">сайті YASNO</a> оберіть компанію й знайдіть свою адресу: там видно і компанію, і чергу.`
+    : `Не знаєте своєї черги? Знайдіть адресу на <a href="${r.website}" target="_blank" rel="noopener">сайті ${escapeHTML(r.operator)}</a>.`
   renderMe()
   renderPlaces()
   renderTogether()

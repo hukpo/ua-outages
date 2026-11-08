@@ -37,7 +37,7 @@ export function createProviders(): Provider[] {
     yasnoProvider({
       info: {
         id: 'dnipro',
-        name: 'Дніпропетровська область',
+        name: 'Дніпропетровська область (ДТЕК)',
         operator: 'ДТЕК Дніпровські електромережі (через YASNO)',
         website: 'https://static.yasno.ua/dnipro/outages',
       },

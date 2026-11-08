@@ -335,6 +335,12 @@ h1 {
   font-size: 24px;
 }
 
+.region-card h4 {
+  margin-top: 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
 .mini-strips {
   display: grid;
   grid-template-columns: auto 1fr;
