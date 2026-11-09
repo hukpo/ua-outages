@@ -115,7 +115,11 @@ const NOT_COVERED = {
 
 /** A group's day: {s, i: [[start, end, kind]]} or undefined */
 const dayOf = (region, group, date) =>
-  REGIONS.get(region)?.days?.[date]?.[group] ?? HISTORY.days[date]?.[region]?.[group]
+  REGIONS.get(region)?.days?.[date]?.[group] ??
+  HISTORY.days[date]?.[region]?.[group] ??
+  // no schedule in force: from today on, the power stays on
+  (group !== ANY && noSchedule(region) && date >= kyivNow().date ? NO_OUTAGES : undefined)
+const NO_OUTAGES = { s: 'n', i: [] }
 
 /** 'on' | 'off' | 'maybe' | 'unknown' */
 /** The source works but announces no outages at all (no schedule in force) */
@@ -125,6 +129,19 @@ const noSchedule = (region) => {
 }
 /** Stand-in group for the lights of a region with no schedule */
 const ANY = '*'
+const STANDARD_GROUPS = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2']
+/**
+ * The groups to choose from. A region with no schedule in force still has its queues: the ones
+ * it used before, or the usual 1.1–6.2, so an address can be saved before outages are announced.
+ */
+function groupsOf(region) {
+  const r = REGIONS.get(region)
+  if (r?.groups.length) return r.groups
+  if (!noSchedule(region)) return []
+  const seen = new Set()
+  for (const day of Object.values(HISTORY.days)) for (const g of Object.keys(day[region] ?? {})) seen.add(g)
+  return seen.size ? [...seen].sort((a, b) => a.localeCompare(b, 'uk', { numeric: true })) : STANDARD_GROUPS
+}
 
 function stateAt(region, group, date, min) {
   if (group === ANY) return noSchedule(region) ? 'on' : 'unknown'
@@ -615,20 +632,22 @@ function fillRegionSelect() {
   regionSelect.innerHTML = rs
     .map(
       (r) =>
-        `<option value="${r.id}" ${r.ok && r.groups.length ? '' : 'disabled'}>${r.name}${r.ok && r.groups.length ? '' : r.ok ? ' (відключень не оголошено)' : ' (немає даних)'}</option>`,
+        `<option value="${r.id}" ${r.ok ? '' : 'disabled'}>${r.name}${r.ok && r.groups.length ? '' : r.ok ? ' (відключень не оголошено)' : ' (немає даних)'}</option>`,
     )
     .join('')
 }
 function fillGroupSelect(region, group) {
   const r = REGIONS.get(region)
-  groupSelect.innerHTML = (r?.groups ?? []).map((g) => `<option value="${g}">${g}</option>`).join('')
-  if (group && r?.groups.includes(group)) groupSelect.value = group
+  const gs = groupsOf(region)
+  groupSelect.innerHTML = gs.map((g) => `<option value="${g}">${g}</option>`).join('')
+  if (group && gs.includes(group)) groupSelect.value = group
 }
 
 function setCurrent(region, group, { scroll = false, updateHash = true } = {}) {
   const r = REGIONS.get(region)
-  if (!r?.ok || !r.groups.length) return
-  if (!r.groups.includes(group)) group = r.groups[0]
+  const gs = groupsOf(region)
+  if (!r?.ok || !gs.length) return
+  if (!gs.includes(group)) group = gs[0]
   current = { region, group }
   regionSelect.value = region
   fillGroupSelect(region, group)
@@ -637,11 +656,16 @@ function setCurrent(region, group, { scroll = false, updateHash = true } = {}) {
     localStorage.setItem('svitlo.current', JSON.stringify(current))
   } catch {}
   const shared = Object.values(SHAPE_REGIONS).find((ids) => ids.includes(region))
-  $('pick-hint').innerHTML = isRail(region)
-    ? `Це графік лише для адрес, підключених до мереж Укрзалізниці. Чи є серед них ваша, видно в переліку адрес на <a href="${r.website}" target="_blank" rel="noopener">сайті Укрзалізниці</a>.`
-    : shared
-      ? `В області дві компанії, і графіки в них різні: ${shared.map((id) => escapeHTML(REGIONS.get(id)?.operator.replace(/ \(через YASNO\)/, '') ?? id)).join(' та ')}. На <a href="${r.website}" target="_blank" rel="noopener">сайті YASNO</a> оберіть компанію й знайдіть свою адресу: там видно і компанію, і чергу.`
-      : `Не знаєте своєї черги? Знайдіть адресу на <a href="${r.website}" target="_blank" rel="noopener">сайті ${escapeHTML(r.operator)}</a>.`
+  const quiet = noSchedule(region)
+    ? `${escapeHTML(r.operator)} зараз не оголошує відключень. Оберіть свою чергу заздалегідь: коли з'явиться графік, він покажеться тут. `
+    : ''
+  $('pick-hint').innerHTML =
+    quiet +
+    (isRail(region)
+      ? `Це графік лише для адрес, підключених до мереж Укрзалізниці. Чи є серед них ваша, видно в переліку адрес на <a href="${r.website}" target="_blank" rel="noopener">сайті Укрзалізниці</a>.`
+      : shared
+        ? `В області дві компанії, і графіки в них різні: ${shared.map((id) => escapeHTML(REGIONS.get(id)?.operator.replace(/ \(через YASNO\)/, '') ?? id)).join(' та ')}. На <a href="${r.website}" target="_blank" rel="noopener">сайті YASNO</a> оберіть компанію й знайдіть свою адресу: там видно і компанію, і чергу.`
+        : `Не знаєте своєї черги? Знайдіть адресу на <a href="${r.website}" target="_blank" rel="noopener">сайті ${escapeHTML(r.operator)}</a>.`)
   renderMe()
   renderPlaces()
   renderTogether()
@@ -749,6 +773,7 @@ function renderMe() {
     line = `за графіком до ${hhmm(kyivNow(active.to).min)} · ще ${duration(active.to - now)}`
   else if (state === 'on' && next)
     line = `вимкнуть о ${hhmm(kyivNow(next.from).min)}${kyivNow(next.from).date !== n.date ? ` ${dayName(kyivNow(next.from).date)}` : ''} · через ${duration(next.from - now)}`
+  else if (state === 'on' && noSchedule(region)) line = `${r.operator} не оголошує відключень`
   else if (state === 'on' && until)
     line = `за графіком без відключень до кінця ${until - now > 36 * 3600e3 ? 'завтрашнього дня' : 'доби'}`
   else if (dayOf(region, group, n.date)?.s === 'e') line = EMERGENCY
