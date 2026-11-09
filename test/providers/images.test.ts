@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { decodePng } from '../../src/image/png.js'
 import { readScheduleTable } from '../../src/image/table.js'
-import { latestImages } from '../../src/providers/khmelnytskyi.js'
+import { latestImages, textSchedules } from '../../src/providers/khmelnytskyi.js'
 import { latestGraphs } from '../../src/providers/volyn.js'
 import type { DaySchedule } from '../../src/types.js'
 import { fixture, fixtureBytes, mockFetch } from '../helpers.js'
@@ -26,6 +26,7 @@ describe('PNG decoding', () => {
 describe('Khmelnytskoblenergo image schedule', () => {
   function client() {
     const { fetch, calls } = mockFetch([
+      { match: '/page/pogodinni-vidkljuchennja', body: '<div class="post"><p>Перевірити чергу</p></div>' },
       {
         match: '/page/arhiv-grafikiv-pogodinnih-vidkljuchen-2026',
         body: fixture('khmelnytskyi/archive-2026.html'),
@@ -63,7 +64,10 @@ describe('Khmelnytskoblenergo image schedule', () => {
 
   it('is empty when nothing is published for today or later', async () => {
     const s = await new OutageClient({
-      fetch: mockFetch([{ match: '/page/arhiv', body: fixture('khmelnytskyi/archive-2026.html') }]).fetch,
+      fetch: mockFetch([
+        { match: '/page/pogodinni-vidkljuchennja', body: '<div class="post"><p>Перевірити чергу</p></div>' },
+        { match: '/page/arhiv', body: fixture('khmelnytskyi/archive-2026.html') },
+      ]).fetch,
       now: () => new Date('2026-11-05T12:00:00+02:00'),
       cacheTtlMs: 0,
     }).getSchedules('khmelnytskyi')
@@ -72,12 +76,39 @@ describe('Khmelnytskoblenergo image schedule', () => {
 
   it('reports a date whose images hold no table', async () => {
     const { fetch } = mockFetch([
+      { match: '/page/pogodinni-vidkljuchennja', body: '<div class="post"><p>Перевірити чергу</p></div>' },
       { match: '/page/arhiv', body: fixture('khmelnytskyi/archive-2026.html') },
       { match: '.png', body: fixtureBytes('khmelnytskyi/announcement-2026-10-17-1658.png') },
     ])
     await expect(
       new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0 }).getSchedules('khmelnytskyi'),
     ).rejects.toMatchObject({ code: 'parse' })
+  })
+})
+
+describe('Khmelnytskoblenergo text schedule', () => {
+  const now = new Date('2026-11-09T14:00:00+02:00')
+  it('reads the newest announcement for a date from the schedule page', async () => {
+    const s = await new OutageClient({
+      fetch: mockFetch([
+        { match: '/page/pogodinni-vidkljuchennja', body: fixture('khmelnytskyi/page-2026-11-09.html') },
+        { match: '/page/arhiv', body: fixture('khmelnytskyi/archive-2026.html') },
+      ]).fetch,
+      now: () => now,
+      cacheTtlMs: 0,
+    }).getSchedules('khmelnytskyi')
+    expect(s.groups).toHaveLength(12)
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-09'])
+    // the update on top, not the first announcement below it (10:00-14:00; 22:00-24:00)
+    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['10:00-15:00', '18:00-21:00'])
+    expect(hhmm(s.schedules['4.2']![0]!)).toEqual(['14:00-18:00', '21:00-00:00'])
+    expect(hhmm(s.schedules['6.2']![0]!)).toEqual(['06:00-10:00', '15:00-18:00', '22:00-00:00'])
+  })
+
+  it('finds every announcement, newest first per date', () => {
+    const t = textSchedules(fixture('khmelnytskyi/page-2026-11-09.html'), now, '2026-11-08')
+    expect([...t.keys()]).toEqual(['2026-11-09'])
+    expect(t.get('2026-11-09')!['1.2']).toHaveLength(2)
   })
 })
 
