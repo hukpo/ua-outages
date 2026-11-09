@@ -18,7 +18,6 @@ import { fileURLToPath } from 'node:url'
 import { OutageClient, kyivDate } from '../../src/index.js'
 import type { RegionId, RegionInfo } from '../../src/index.js'
 import { addDays, kyivInstant } from '../../src/time.js'
-import { STANDARD_GROUPS } from '../../src/image/table.js'
 import { mapLimit } from '../../src/util.js'
 import {
   RELAY_BRANCH,
@@ -215,10 +214,7 @@ for (const r of regions) {
   if (!r.ok) continue
   const dir = join(OUT, 'cal', r.id)
   mkdirSync(dir, { recursive: true })
-  // a region with no schedule in force keeps its queues' feeds, so a subscription made now still works
-  const known = Object.values(history.days).flatMap((d) => Object.keys(d[r.id] ?? {}))
-  const groups = r.groups.length ? r.groups : known.length ? [...new Set(known)] : STANDARD_GROUPS
-  for (const g of groups)
+  for (const g of r.groups)
     writeFileSync(join(dir, `${g}.ics`), calendar(r, g, events(r.id, g, r.days ?? {}, history, today), now))
 }
 

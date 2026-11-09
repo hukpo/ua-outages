@@ -113,38 +113,45 @@ const NOT_COVERED = {
   sevastopol: 'Тимчасово окупована територія',
 }
 
-/** A group's day: {s, i: [[start, end, kind]]} or undefined */
-const dayOf = (region, group, date) =>
-  REGIONS.get(region)?.days?.[date]?.[group] ??
-  HISTORY.days[date]?.[region]?.[group] ??
-  // no schedule in force: from today on, the power stays on
-  (group !== ANY && noSchedule(region) && date >= kyivNow().date ? NO_OUTAGES : undefined)
+/**
+ * Stand-in group: the lights of a region with no queues, or an address saved before its
+ * oblenergo has published any queues.
+ */
+const ANY = '*'
+const queueLabel = (g) => (g === ANY ? 'без черги' : `черга ${g}`)
+
+/**
+ * Oblenergos that keep their table up with "Очікується" in every queue instead of taking it down
+ * when no schedule is in force. A day like that means no outages, like the rest of the west.
+ */
+const AWAITED_MEANS_NONE = new Set(['rivne'])
+/** "No queues" from a source that hasn't changed in this long isn't trusted as "no outages" */
+const STALE_NONE_MS = 7 * 86400e3
+
+/** The source works and has no schedule in force that day: no outages planned */
+function noSchedule(region, date = kyivNow().date) {
+  const r = REGIONS.get(region)
+  if (!r?.ok) return false
+  if (!r.groups.length) {
+    // the oblenergo answered with no queues at all. Unless what it answered is long out of date
+    // (a cached page): then we just don't know
+    const old = r.updatedAt && Date.parse(DATA.generatedAt) - Date.parse(r.updatedAt) > STALE_NONE_MS
+    return !old && date >= kyivNow().date
+  }
+  const day = r.days?.[date]
+  return AWAITED_MEANS_NONE.has(region) && !!day && r.groups.every((g) => !day[g] || day[g].s === 'u')
+}
 const NO_OUTAGES = { s: 'n', i: [] }
 
-/** 'on' | 'off' | 'maybe' | 'unknown' */
-/** The source works but announces no outages at all (no schedule in force) */
-const noSchedule = (region) => {
-  const r = REGIONS.get(region)
-  return !!r?.ok && !r.groups.length
-}
-/** Stand-in group for the lights of a region with no schedule */
-const ANY = '*'
-const STANDARD_GROUPS = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2']
-/**
- * The groups to choose from. A region with no schedule in force still has its queues: the ones
- * it used before, or the usual 1.1–6.2, so an address can be saved before outages are announced.
- */
-function groupsOf(region) {
-  const r = REGIONS.get(region)
-  if (r?.groups.length) return r.groups
-  if (!noSchedule(region)) return []
-  const seen = new Set()
-  for (const day of Object.values(HISTORY.days)) for (const g of Object.keys(day[region] ?? {})) seen.add(g)
-  return seen.size ? [...seen].sort((a, b) => a.localeCompare(b, 'uk', { numeric: true })) : STANDARD_GROUPS
+/** A group's day: {s, i: [[start, end, kind]]} or undefined */
+function dayOf(region, group, date) {
+  const d = REGIONS.get(region)?.days?.[date]?.[group] ?? HISTORY.days[date]?.[region]?.[group]
+  if ((!d || d.s === 'u') && noSchedule(region, date)) return NO_OUTAGES
+  return d
 }
 
+/** 'on' | 'off' | 'maybe' | 'unknown' */
 function stateAt(region, group, date, min) {
-  if (group === ANY) return noSchedule(region) ? 'on' : 'unknown'
   const d = dayOf(region, group, date)
   if (!d || d.s === 'u' || d.s === 'e') return 'unknown'
   for (const [a, b, k] of d.i) if (min >= a && min < b) return k ? 'maybe' : 'off'
@@ -163,7 +170,7 @@ const intervalsOf = (region, group, date) => dayOf(region, group, date)?.i ?? []
 
 function regionShare(region, date, min) {
   const r = REGIONS.get(region)
-  if (noSchedule(region)) return { off: 0, maybe: 0, offCount: 0, known: 0, none: true }
+  if (noSchedule(region, date)) return { off: 0, maybe: 0, offCount: 0, known: 0, none: true }
   if (!r?.ok) return null
   let off = 0
   let maybe = 0
@@ -230,7 +237,7 @@ function buildDots() {
     const step = s.id === 'kyiv' ? 1.9 : 4.6
     const pool = []
     for (const region of shapeRegions(s.id))
-      if (noSchedule(region)) pool.push([region, ANY])
+      if (!REGIONS.get(region)?.groups.length) pool.push([region, ANY])
       else for (const g of REGIONS.get(region)?.groups ?? []) pool.push([region, g])
     for (let y = y0; y < y1; y += step)
       for (let x = x0; x < x1; x += step) {
@@ -455,7 +462,7 @@ function renderRegionCard() {
       continue
     }
     if (share.none) {
-      html += `<p>Відключень за графіком не оголошено: ${escapeHTML(r.operator)} зараз не публікує графіка.</p>`
+      html += `<p>Графік не діє: ${escapeHTML(r.operator)} не планує відключень.</p>`
       continue
     }
     html += `<p>${share.offCount} з ${share.known} черг без світла о ${hhmm(view.min)}</p>`
@@ -632,33 +639,44 @@ function fillRegionSelect() {
   regionSelect.innerHTML = rs
     .map(
       (r) =>
-        `<option value="${r.id}" ${r.ok ? '' : 'disabled'}>${r.name}${r.ok && r.groups.length ? '' : r.ok ? ' (відключень не оголошено)' : ' (немає даних)'}</option>`,
+        `<option value="${r.id}" ${r.ok ? '' : 'disabled'}>${r.name}${!r.ok ? ' (немає даних)' : noSchedule(r.id) ? ' (графік не діє)' : ''}</option>`,
     )
     .join('')
 }
 function fillGroupSelect(region, group) {
-  const r = REGIONS.get(region)
-  const gs = groupsOf(region)
-  groupSelect.innerHTML = gs.map((g) => `<option value="${g}">${g}</option>`).join('')
-  if (group && gs.includes(group)) groupSelect.value = group
+  const gs = REGIONS.get(region)?.groups ?? []
+  // an address saved before the oblenergo published its queues
+  const none = !gs.length ? 'черг поки немає' : group === ANY ? 'Оберіть чергу' : null
+  groupSelect.innerHTML =
+    (none ? `<option value="${ANY}">${none}</option>` : '') +
+    gs.map((g) => `<option value="${g}">${g}</option>`).join('')
+  groupSelect.value = group
 }
 
 function setCurrent(region, group, { scroll = false, updateHash = true } = {}) {
   const r = REGIONS.get(region)
-  const gs = groupsOf(region)
-  if (!r?.ok || !gs.length) return
-  if (!gs.includes(group)) group = gs[0]
+  if (!r?.ok) return
+  const gs = r.groups
+  if (!gs.length) group = ANY
+  else if (group !== ANY && !gs.includes(group)) group = gs[0]
   current = { region, group }
   regionSelect.value = region
   fillGroupSelect(region, group)
-  if (updateHash) history.replaceState(null, '', `#/${region}/${group}`)
+  if (updateHash) history.replaceState(null, '', group === ANY ? `#/${region}` : `#/${region}/${group}`)
   try {
     localStorage.setItem('svitlo.current', JSON.stringify(current))
   } catch {}
   const shared = Object.values(SHAPE_REGIONS).find((ids) => ids.includes(region))
-  const quiet = noSchedule(region)
-    ? `${escapeHTML(r.operator)} зараз не оголошує відключень. Оберіть свою чергу заздалегідь: коли з'явиться графік, він покажеться тут. `
-    : ''
+  const op = escapeHTML(r.operator)
+  const quiet = !gs.length
+    ? noSchedule(region)
+      ? `Зараз у цій області графік не діє, тож черг поки немає. Збережіть адресу: щойно ${op} опублікує графік, оберете свою чергу. `
+      : `Для цієї області поки немає даних про черги. Збережіть адресу, і графік покажеться, щойно він з'явиться. `
+    : group === ANY
+      ? `${op} опублікувало графік. Оберіть свою чергу. `
+      : noSchedule(region)
+        ? `Сьогодні графік не діє: ${op} не планує відключень. `
+        : ''
   $('pick-hint').innerHTML =
     quiet +
     (isRail(region)
@@ -682,8 +700,12 @@ $('save-place').addEventListener('submit', (ev) => {
   if (!current) return
   const name =
     $('place-name').value.trim() ||
-    `${REGIONS.get(current.region).name.replace(' область', '')} ${current.group}`
-  places = places.filter((p) => !(p.region === current.region && p.group === current.group))
+    // the queue picked for an address saved without one: it keeps its name
+    places.find((p) => p.region === current.region && p.group === ANY)?.name ||
+    `${REGIONS.get(current.region).name.replace(' область', '')}${current.group === ANY ? '' : ` ${current.group}`}`
+  places = places.filter(
+    (p) => !(p.region === current.region && (p.group === current.group || p.group === ANY)),
+  )
   places.push({ name, ...current })
   savePlaces()
   $('place-name').value = ''
@@ -700,7 +722,7 @@ function renderPlaces() {
   list.innerHTML = places
     .map((p, i) => {
       const cur = current && p.region === current.region && p.group === current.group
-      return `<li><button type="button" class="open" data-open="${i}" aria-current="${cur}">${escapeHTML(p.name)} · ${p.group}</button><button type="button" class="remove" data-remove="${i}" aria-label="Видалити ${escapeHTML(p.name)}">×</button></li>`
+      return `<li><button type="button" class="open" data-open="${i}" aria-current="${cur}">${escapeHTML(p.name)}${p.group === ANY ? '' : ` · ${p.group}`}</button><button type="button" class="remove" data-remove="${i}" aria-label="Видалити ${escapeHTML(p.name)}">×</button></li>`
     })
     .join('')
 }
@@ -765,7 +787,12 @@ function renderMe() {
     on: 'Світло є',
     off: 'Світла немає',
     maybe: 'Можливе відключення',
-    unknown: dayOf(region, group, n.date)?.s === 'e' ? 'Аварійні відключення' : 'Графіка немає',
+    unknown:
+      dayOf(region, group, n.date)?.s === 'e'
+        ? 'Аварійні відключення'
+        : group === ANY && r.groups.length
+          ? 'Оберіть чергу'
+          : 'Графіка немає',
   }
   $('state').textContent = words[state]
   let line = ''
@@ -773,12 +800,14 @@ function renderMe() {
     line = `за графіком до ${hhmm(kyivNow(active.to).min)} · ще ${duration(active.to - now)}`
   else if (state === 'on' && next)
     line = `вимкнуть о ${hhmm(kyivNow(next.from).min)}${kyivNow(next.from).date !== n.date ? ` ${dayName(kyivNow(next.from).date)}` : ''} · через ${duration(next.from - now)}`
-  else if (state === 'on' && noSchedule(region)) line = `${r.operator} не оголошує відключень`
+  else if (state === 'on' && noSchedule(region))
+    line = `сьогодні графік не діє, ${r.operator} не планує відключень`
   else if (state === 'on' && until)
     line = `за графіком без відключень до кінця ${until - now > 36 * 3600e3 ? 'завтрашнього дня' : 'доби'}`
   else if (dayOf(region, group, n.date)?.s === 'e') line = EMERGENCY
+  else if (group === ANY && r.groups.length) line = `${r.operator} опублікувало графік, оберіть свою чергу`
   else line = `${r.operator} ще не опублікувало графік на цей час`
-  $('countdown').textContent = `${r.name}, черга ${group}: ${line}`
+  $('countdown').textContent = `${r.name}${group === ANY ? '' : `, черга ${group}`}: ${line}`
   renderDial(region, group, n)
   const items = ps.filter((p) => p.to > now).slice(0, 6)
   $('upcoming').innerHTML = items.length
@@ -792,10 +821,12 @@ function renderMe() {
     : `<li>Немає запланованих<span>на відомі дні</span></li>`
   const base = new URL('.', location.href)
   const cal = new URL(`cal/${region}/${group}.ics`, base)
+  // calendars are per queue
+  for (const id of ['cal-apple', 'cal-google']) $(id).style.display = group === ANY ? 'none' : ''
   $('cal-apple').href = cal.href.replace(/^https?:/, 'webcal:')
   $('cal-google').href =
     `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(cal.href.replace(/^https?:/, 'webcal:'))}`
-  document.title = `${words[state]} · черга ${group} · Світло`
+  document.title = `${words[state]} · ${group === ANY ? r.name : `черга ${group}`} · Світло`
 }
 
 function renderDial(region, group, n) {
@@ -833,9 +864,16 @@ function renderDial(region, group, n) {
 
 $('share').addEventListener('click', async () => {
   if (!current) return
-  const url = new URL(`#/${current.region}/${current.group}`, location.href).href
+  const url = new URL(
+    current.group === ANY ? `#/${current.region}` : `#/${current.region}/${current.group}`,
+    location.href,
+  ).href
   try {
-    if (navigator.share) await navigator.share({ title: `Черга ${current.group} · Світло`, url })
+    if (navigator.share)
+      await navigator.share({
+        title: `${queueLabel(current.group)[0].toUpperCase()}${queueLabel(current.group).slice(1)} · Світло`,
+        url,
+      })
     else {
       await navigator.clipboard.writeText(url)
       $('action-hint').textContent = 'Посилання скопійовано.'
@@ -924,7 +962,7 @@ function renderTogether() {
         : 'Спільних годин зі світлом немає.'
     html += `<div class="windows-day"><h3>${dayName(day)[0].toUpperCase() + dayName(day).slice(1)}</h3><div><p class="windows">${text}</p><div class="rows">`
     for (const p of list)
-      html += `<span>${escapeHTML(p.name)} · ${p.group}</span>${stripHTML(p.region, p.group, day, day === today ? nowMin : null)}`
+      html += `<span>${escapeHTML(p.name)}${p.group === ANY ? '' : ` · ${p.group}`}</span>${stripHTML(p.region, p.group, day, day === today ? nowMin : null)}`
     html += `<span>Світло всюди</span><div class="strip all">${all.map(([a, b]) => `<i style="left:${a / 14.4}%;width:${(b - a) / 14.4}%"></i>`).join('')}</div>`
     html += `<span></span><div class="hours">${[0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span>${String(h).padStart(2, '0')}</span>`).join('')}</div>`
     html += `</div></div></div>`
@@ -979,12 +1017,14 @@ function renderHistory() {
       )
     }
     $('heat').innerHTML = cells.join('')
-    $('heat').setAttribute('aria-label', `Години без світла по днях для черги ${group}`)
+    $('heat').setAttribute('aria-label', `Години без світла по днях, ${queueLabel(group)}`)
     $('history-summary').textContent = weekDays
       ? weekDays === 1
         ? `Черга ${group}: ${hoursText(week)} без світла сьогодні за графіком.`
         : `Черга ${group}: ${hoursText(week)} без світла за останні ${weekDays} ${weekDays < 5 ? 'дні' : 'днів'}, у середньому ${hoursText(week / weekDays)} на добу.`
-      : `Для черги ${group} архів ще порожній.`
+      : group === ANY
+        ? 'Архів ведеться для кожної черги окремо. Оберіть свою, коли обленерго опублікує черги.'
+        : `Для черги ${group} архів ще порожній.`
     $('heat-hint').textContent =
       `Кожна клітинка — доба, тиждень у стовпчику. Що темніша, то довше без світла. Архів веде цей сайт з ${humanDay(first)}${first.slice(0, 4) !== today.slice(0, 4) ? ' ' + first.slice(0, 4) : ''}.`
   }
@@ -1075,8 +1115,8 @@ function reveal() {
 // --- start ---
 
 function fromHash() {
-  const m = /^#\/([\w-]+)\/([\w.]+)$/.exec(location.hash)
-  return m ? { region: m[1], group: decodeURIComponent(m[2]) } : null
+  const m = /^#\/([\w-]+)(?:\/([\w.]+))?$/.exec(location.hash)
+  return m ? { region: m[1], group: m[2] ? decodeURIComponent(m[2]) : ANY } : null
 }
 addEventListener('hashchange', () => {
   const h = fromHash()
