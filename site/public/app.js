@@ -124,7 +124,7 @@ const queueLabel = (g) => (g === ANY ? 'без черги' : `черга ${g}`)
  * The operator says no outages for any queue that day (e.g. it cancelled the schedule). Silence
  * is not that: no queues at all, or every queue unknown (Rivne's "Очікується" included), means
  * nothing is published, and the page says so instead of promising light (the SDK's contract
- * since 0.1.2).
+ * since 0.2.0).
  */
 function noSchedule(region, date = kyivNow().date) {
   const r = REGIONS.get(region)
