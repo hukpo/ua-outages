@@ -139,6 +139,10 @@ function noSchedule(region, date = kyivNow().date) {
 }
 const NO_OUTAGES = { s: 'n', i: [] }
 
+/** The source has something for at least one queue on some day; queues listed with every day unknown don't count */
+const published = (r) =>
+  !!r?.ok && Object.values(r.days ?? {}).some((day) => Object.values(day).some((d) => d.s !== 'u'))
+
 /** A group's day: {s, i: [[start, end, kind]]} or undefined */
 function dayOf(region, group, date) {
   const d = REGIONS.get(region)?.days?.[date]?.[group] ?? HISTORY.days[date]?.[region]?.[group]
@@ -667,7 +671,9 @@ function setCurrent(region, group, { scroll = false, updateHash = true } = {}) {
   const quiet = !gs.length
     ? `${op} зараз не публікує графік, тож черг поки немає. Збережіть адресу, і графік покажеться, щойно він з'явиться. `
     : group === ANY
-      ? `${op} опублікувало графік. Оберіть свою чергу. `
+      ? published(r)
+        ? `${op} опублікувало графік. Оберіть свою чергу. `
+        : `${op} зараз не публікує графік. Оберіть свою чергу, і графік покажеться, щойно він з'явиться. `
       : noSchedule(region)
         ? `Сьогодні графік не діє: ${op} не планує відключень. `
         : ''
@@ -784,7 +790,7 @@ function renderMe() {
     unknown:
       dayOf(region, group, n.date)?.s === 'e'
         ? 'Аварійні відключення'
-        : group === ANY && r.groups.length
+        : group === ANY && published(r)
           ? 'Оберіть чергу'
           : 'Графіка немає',
   }
@@ -799,7 +805,7 @@ function renderMe() {
   else if (state === 'on' && until)
     line = `за графіком без відключень до кінця ${until - now > 36 * 3600e3 ? 'завтрашнього дня' : 'доби'}`
   else if (dayOf(region, group, n.date)?.s === 'e') line = EMERGENCY
-  else if (group === ANY && r.groups.length) line = `${r.operator} опублікувало графік, оберіть свою чергу`
+  else if (group === ANY && published(r)) line = `${r.operator} опублікувало графік, оберіть свою чергу`
   else line = `${r.operator} ще не опублікувало графік на цей час`
   $('countdown').textContent = `${r.name}${group === ANY ? '' : `, черга ${group}`}: ${line}`
   renderDial(region, group, n)
@@ -1064,8 +1070,7 @@ function renderSources() {
   let html = rows
     .map((r) => {
       // queues listed but every day unknown: the operator has published nothing
-      const has =
-        r.ok && Object.values(r.days ?? {}).some((day) => Object.values(day).some((d) => d.s !== 'u'))
+      const has = published(r)
       const state = !r.ok
         ? `<span class="dot bad"></span>${friendlyError(r.message)}`
         : r.stale
