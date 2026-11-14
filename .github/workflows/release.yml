@@ -35,3 +35,15 @@ jobs:
       # prepublishOnly runs typecheck, tests and build
       - if: steps.check.outputs.publish
         run: npm publish
+      # Whoever published it (this job or a maintainer's `npm publish`), the package on npm must
+      # be this tag's code: a stale dist/ once shipped 0.2.0 with 0.1.1's build. Fails loudly if not.
+      - name: Published package is this tag's build
+        run: |
+          npm run build
+          v="${GITHUB_REF_NAME#v}"
+          for i in 1 2 3 4 5 6; do
+            npm pack "ua-outages@$v" --pack-destination "$RUNNER_TEMP" >/dev/null 2>&1 && break
+            sleep 20
+          done
+          tar xzf "$RUNNER_TEMP/ua-outages-$v.tgz" -C "$RUNNER_TEMP"
+          diff -r dist "$RUNNER_TEMP/package/dist"
