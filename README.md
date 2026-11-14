@@ -40,7 +40,7 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 | `donetsk`         | Донецька                | ДТЕК Донецькі електромережі             | schedule page + /ua/ajax (same provider as Odesa)              | ⚠️ code ready | ⚠️ code ready | the site answers automated clients with a bot check, so requests come back `blocked`; untested against live data | [dtek-dem.com.ua](https://www.dtek-dem.com.ua/ua/shutdowns)                                              | [dtek-dem.com.ua](https://www.dtek-dem.com.ua/ua/shutdowns)                                  |
 | `lviv`            | Львівська               | Львівобленерго                          | api.loe.lviv.ua, power-api.loe.lviv.ua                         | ✅            | ✅            |                                                                                                                  | [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)                                                      | [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)                                          |
 | `ternopil`        | Тернопільська           | Тернопільобленерго                      | api-poweron.toe.com.ua                                         | ✅            | ✅            | schedule read per group via a reference address                                                                  | [poweron.toe.com.ua](https://poweron.toe.com.ua/)                                                        | [poweron.toe.com.ua](https://poweron.toe.com.ua/)                                            |
-| `zakarpattia`     | Закарпатська            | Закарпаттяобленерго                     | api-outage-zakarpat-energy.inneti.net                          | ✅ / image    | ✅            | no outages while no picture is published; a published picture is reported as `unsupported`                       | [zakarpat.energy](https://zakarpat.energy/customers/break-in-electricity-supply/schedule/)               | [outage.zakarpat.energy](https://outage.zakarpat.energy/schedule_queues)                     |
+| `zakarpattia`     | Закарпатська            | Закарпаттяобленерго                     | api-outage-zakarpat-energy.inneti.net                          | ✅ / image    | ✅            | no groups while no picture is published (nothing known); a published picture is reported as `unsupported`        | [zakarpat.energy](https://zakarpat.energy/customers/break-in-electricity-supply/schedule/)               | [outage.zakarpat.energy](https://outage.zakarpat.energy/schedule_queues)                     |
 | `ivano-frankivsk` | Івано-Франківська       | Прикарпаттяобленерго                    | be-svitlo.oe.if.ua                                             | ✅            | ✅            | full address only, no autocomplete                                                                               | [svitlo.oe.if.ua](https://svitlo.oe.if.ua/)                                                              | [svitlo.oe.if.ua](https://svitlo.oe.if.ua/)                                                  |
 | `chernivtsi`      | Чернівецька             | Чернівціобленерго                       | schedule page + district directories                           | ✅            | ✅            | groups numbered 1–12                                                                                             | [oblenergo.cv.ua](https://oblenergo.cv.ua/shutdowns/)                                                    | [oblenergo.cv.ua](https://oblenergo.cv.ua/shutdowns-search/)                                 |
 | `rivne`           | Рівненська              | Рівнеобленерго                          | schedule page                                                  | ✅            | —             | addresses only in PDF                                                                                            | [roe.vsei.ua](https://www.roe.vsei.ua/disconnections)                                                    | —                                                                                            |
@@ -56,7 +56,7 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 | `zaporizhzhia`    | Запорізька              | Запоріжжяобленерго                      | news page                                                      | ✅            | —             | no web lookup                                                                                                    | [zoe.com.ua](https://www.zoe.com.ua/outage/)                                                             | [Telegram bot](https://t.me/esozoebot)                                                       |
 | `mykolaiv`        | Миколаївська            | Миколаївобленерго                       | off.energy.mk.ua API                                           | ✅            | ✅            |                                                                                                                  | [off.energy.mk.ua](https://off.energy.mk.ua/)                                                            | [off.energy.mk.ua](https://off.energy.mk.ua/)                                                |
 
-**АТ «Укрзалізниця»** is a distribution operator too: homes near stations and along the lines are wired to the railway's grid and get its own schedule, which differs from the oblenergo's. It has one region per oblast page on [uz.gov.ua](https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen/): `uz-kyiv`, `uz-kyiv-region`, `uz-dnipro`, … (`uz-<region id>`), and two branches each in Vinnytsia (`uz-vinnytsia`, `uz-vinnytsia-odesa`) and Sumy (`uz-sumy`, `uz-sumy-south`). Today's schedule only, read from the HTML table; a page with no table means no outages. The page also lists each group's addresses (no lookup yet).
+**АТ «Укрзалізниця»** is a distribution operator too: homes near stations and along the lines are wired to the railway's grid and get its own schedule, which differs from the oblenergo's. It has one region per oblast page on [uz.gov.ua](https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen/): `uz-kyiv`, `uz-kyiv-region`, `uz-dnipro`, … (`uz-<region id>`), and two branches each in Vinnytsia (`uz-vinnytsia`, `uz-vinnytsia-odesa`) and Sumy (`uz-sumy`, `uz-sumy-south`). Today's schedule only, read from the HTML table; a page with no table publishes nothing, so every group comes back `unknown` for today. The page also lists each group's addresses (no lookup yet).
 
 **Not covered**
 
@@ -68,7 +68,7 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 Луганська область and Crimea are not covered. "today" means the operator publishes only the current day. "⚠️ code ready" means the provider is implemented but the operator currently blocks automated requests. "image" means the schedule is read from the table picture the operator publishes.
 <!-- regions:end -->
 
-"Address" means the SDK can turn an address into a group. Zakarpattia publishes its schedule only as a picture: while none is published `getSchedules` returns no groups (no outages announced); once one is, it throws `unsupported` with the picture's address. Its address lookup works either way.
+"Address" means the SDK can turn an address into a group. Zakarpattia publishes its schedule only as a picture: while none is published `getSchedules` returns no groups, which means nothing is known, not "no outages"; once one is, it throws `unsupported` with the picture's address. Its address lookup works either way.
 
 ### Why some regions are missing
 
@@ -99,7 +99,7 @@ The same option works for proxies, caching, logging and tests. When an operator 
 | ------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | `cacheTtlMs` | `300000`                 | Reuse a region's schedule for this long. `0` turns caching off. Concurrent requests for one region share a single fetch. |
 | `timeoutMs`  | `15000`                  | Per request.                                                                                                             |
-| `retries`    | `1`                      | Extra attempts after a network error or a 5xx.                                                                           |
+| `retries`    | `1`                      | Extra attempts after a network error or a 5xx. A bot-check page is never retried, whatever its status.                   |
 | `fetch`      | `globalThis.fetch`       | Bring your own (proxy, logging, tests).                                                                                  |
 | `userAgent`  | `ua-outages (+repo url)` |                                                                                                                          |
 | `providers`  | built-in                 | Replace or extend the regions.                                                                                           |
@@ -118,6 +118,30 @@ A `DaySchedule` is `{ date: 'YYYY-MM-DD', status, intervals }`:
 - `intervals` are sorted and merged: `{ from, to, kind }`, where `kind` is `off` or `maybe` ("можливе відключення", switching time).
 
 `updatedAt` is when the operator last changed the schedule, when the source says so.
+
+#### "No outages" vs "nothing published"
+
+The SDK never turns silence into "no outages". Read a result like this:
+
+| you get                                          | it means                                                                                                                                    |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| a day with `status: 'no-outages'`                | The operator said there are no outages for that group that day (a cancellation notice, or a published schedule with nothing in that group). |
+| a day with `status: 'scheduled'`, no `intervals` | A schedule is in force for that day and has no outage for that group.                                                                       |
+| a day with `status: 'unknown'`                   | Nothing is published for that group and day. Not "no outages".                                                                              |
+| every day of every group `unknown`               | The operator publishes nothing right now. The groups are still listed when the SDK knows them (e.g. Sumy marks every group "no data").      |
+| `groups: []`, `schedules: {}`                    | The operator publishes nothing right now and the SDK can't tell which groups it has. The same as all `unknown`: not "no outages".           |
+| a missing date                                   | Not published. Most operators publish today and, from the evening, tomorrow.                                                                |
+
+So "no outages" is only ever `no-outages` days or `scheduled` days without intervals; anything else should read as "the schedule isn't published", and show the operator's website. `stateAt()` returns `'unknown'` for such days.
+
+#### Cancelling
+
+```ts
+// stop as soon as your own deadline passes
+const s = await outages.getSchedules('sumy', { fresh: true, signal: AbortSignal.timeout(20_000) })
+```
+
+`getSchedules`, `getSchedule` and `healthCheck` take a `signal`. When it aborts, the call rejects right away with the signal's reason (an `AbortError` by default, not an `OutageError`), the request in flight is cancelled, and nothing more is sent to the operator: no further groups, pages or retries. A cancelled call doesn't affect other calls sharing the cache. With a `Promise.race` cap of your own, pass a signal too, otherwise the losing call keeps running in the background. Address search doesn't take a signal yet.
 
 ### Schedules published as pictures
 
@@ -177,7 +201,7 @@ const report = await outages.healthCheck({ address: true })
 // { ok, checkedAt, regions: [{ region, status: 'ok' | 'stale' | 'empty' | 'error', latencyMs, groups, updatedAt, message, address }] }
 ```
 
-- `empty`: the source works but publishes nothing right now. Usually it means there are no outages.
+- `empty`: the source works but publishes nothing right now (no groups, or every day `unknown`). Often there are no outages then, but the SDK can't tell.
 - `stale`: the schedule hasn't changed for `staleAfterHours` (default 72).
 - `error`: a network failure, a bot check (`blocked`), or a format change (`parse`).
 

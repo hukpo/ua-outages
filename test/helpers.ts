@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { expect } from 'vitest'
 import type { FetchLike } from '../src/http.js'
+import type { RegionSchedule } from '../src/types.js'
 
 export const fixture = (path: string) =>
   readFileSync(fileURLToPath(new URL(`./fixtures/${path}`, import.meta.url)), 'utf8')
@@ -33,4 +35,17 @@ export function mockFetch(routes: Route[]) {
     return new Response(body as BodyInit, { status: r.status ?? 200, headers: r.headers })
   }
   return { fetch, calls }
+}
+
+/**
+ * "Nothing published": the region's groups stay listed and every day is `unknown`, so it can't
+ * be mistaken for "no outages" (`groups: []` or `no-outages` days).
+ */
+export function expectUnpublished(s: RegionSchedule, groups: number) {
+  expect(s.groups).toHaveLength(groups)
+  expect(Object.keys(s.schedules).sort()).toEqual([...s.groups].sort())
+  for (const g of s.groups) {
+    expect(s.schedules[g]!.length).toBeGreaterThan(0)
+    for (const d of s.schedules[g]!) expect(d).toMatchObject({ status: 'unknown', intervals: [] })
+  }
 }

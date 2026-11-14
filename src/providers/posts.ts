@@ -1,4 +1,4 @@
-import { compareGroups, makeDay } from '../schedule.js'
+import { compareGroups, makeDay, unpublished } from '../schedule.js'
 import { addDays, kyivDate, toKyivIso } from '../time.js'
 import type { DaySchedule, RegionId, RegionSchedule } from '../types.js'
 import { findUaDate, parseGroupLines } from './ua-text.js'
@@ -53,7 +53,9 @@ export function postsToSchedule(
   }
 
   const dates = [...byDate.keys()].sort()
-  const groupSet = new Set<string>(dates.length ? (opts.groups ?? []) : [])
+  // no post with a schedule: the region's groups (when known) stay listed, unknown for today
+  if (!dates.length) return unpublished(region, opts.groups ?? [], now)
+  const groupSet = new Set<string>(opts.groups ?? [])
   for (const d of byDate.values()) for (const g of Object.keys(d.groups)) groupSet.add(g)
   const groups = [...groupSet].sort(compareGroups)
 

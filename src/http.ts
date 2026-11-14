@@ -1,6 +1,7 @@
 import { OutageError } from './errors.js'
 import { httpsFetchWithCa } from './https-fetch.js'
 import type { RegionId } from './types.js'
+import { abortable } from './util.js'
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -28,6 +29,8 @@ export interface RequestOptions {
    * the built-in fetch only; a custom `fetch` handles TLS itself.
    */
   ca?: string[]
+  /** Cancels this request, on top of the signal the `Http` instance may be bound to */
+  signal?: AbortSignal
 }
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
@@ -41,6 +44,9 @@ const BLOCK_MARKERS = [
   'Attention Required!',
 ]
 
+/** A bot-protection page rather than the operator's content. Challenge pages are small; real pages may embed the same scripts, so size matters. */
+const isChallenge = (body: string) => body.length < 20_000 && BLOCK_MARKERS.some((m) => body.includes(m))
+
 export class Http {
   private readonly fetchImpl: FetchLike
   private readonly customFetch: boolean
@@ -48,6 +54,8 @@ export class Http {
   private readonly timeoutMs: number
   private readonly userAgent: string
   private readonly retries: number
+  /** Set on copies made by `withSignal`: every request through them stops when it aborts */
+  private signal?: AbortSignal
 
   constructor(opts: HttpOptions = {}) {
     this.fetchImpl = opts.fetch ?? ((input, init) => globalThis.fetch(input, init))
@@ -55,6 +63,17 @@ export class Http {
     this.timeoutMs = opts.timeoutMs ?? 15_000
     this.userAgent = opts.userAgent ?? DEFAULT_UA
     this.retries = opts.retries ?? 1
+  }
+
+  /**
+   * The same client (settings, connections) whose requests all stop when `signal` aborts:
+   * none starts after that, and the one in flight is cancelled. `undefined` gives an unbound copy.
+   */
+  withSignal(signal: AbortSignal | undefined): Http {
+    const copy = Object.create(Http.prototype) as Http
+    Object.assign(copy, this)
+    copy.signal = signal
+    return copy
   }
 
   async text(url: string, opts: RequestOptions = {}): Promise<string> {
@@ -67,11 +86,11 @@ export class Http {
     opts: RequestOptions = {},
   ): Promise<{ body: string; headers: Headers; status: number }> {
     const res = await this.request(url, opts)
+    const signal = this.signalFor(opts)
     const body = opts.encoding
-      ? new TextDecoder(opts.encoding).decode(await res.arrayBuffer())
-      : await res.text()
-    // challenge pages are small; real pages may embed the same scripts, so size matters
-    if (body.length < 20_000 && BLOCK_MARKERS.some((m) => body.includes(m)))
+      ? new TextDecoder(opts.encoding).decode(await abortable(res.arrayBuffer(), signal))
+      : await abortable(res.text(), signal)
+    if (isChallenge(body))
       throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
         region: opts.region,
         url,
@@ -88,7 +107,8 @@ export class Http {
   /** Binary body with the response headers (e.g. Last-Modified of an image) */
   async file(url: string, opts: RequestOptions = {}): Promise<{ bytes: Uint8Array; headers: Headers }> {
     const res = await this.request(url, opts)
-    return { bytes: new Uint8Array(await res.arrayBuffer()), headers: res.headers }
+    const bytes = await abortable(res.arrayBuffer(), this.signalFor(opts))
+    return { bytes: new Uint8Array(bytes), headers: res.headers }
   }
 
   async json<T = unknown>(url: string, opts: RequestOptions = {}): Promise<T> {
@@ -111,7 +131,14 @@ export class Http {
     return f
   }
 
+  private signalFor(opts: RequestOptions): AbortSignal | undefined {
+    if (!opts.signal) return this.signal
+    if (!this.signal) return opts.signal
+    return anySignal([this.signal, opts.signal])
+  }
+
   private async request(url: string, opts: RequestOptions): Promise<Response> {
+    const signal = this.signalFor(opts)
     const headers: Record<string, string> = {
       'User-Agent': this.userAgent,
       Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
@@ -127,16 +154,23 @@ export class Http {
 
     const fetchImpl = opts.ca && !this.customFetch ? this.fetchWithCa(opts.ca) : this.fetchImpl
     for (let attempt = 0; ; attempt++) {
+      // a cancelled call sends nothing more, retries included
+      signal?.throwIfAborted()
+      const timeout = AbortSignal.timeout(this.timeoutMs)
       let res: Response
       try {
-        res = await fetchImpl(url, {
-          method: opts.method ?? (body ? 'POST' : 'GET'),
-          headers,
-          body,
-          signal: AbortSignal.timeout(this.timeoutMs),
-          redirect: 'follow',
-        })
+        res = await abortable(
+          fetchImpl(url, {
+            method: opts.method ?? (body ? 'POST' : 'GET'),
+            headers,
+            body,
+            signal: signal ? anySignal([timeout, signal]) : timeout,
+            redirect: 'follow',
+          }),
+          signal,
+        )
       } catch (cause) {
+        if (signal?.aborted) throw signal.reason
         if (attempt < this.retries) continue
         const timedOut = (cause as Error)?.name === 'TimeoutError'
         throw new OutageError(
@@ -146,6 +180,17 @@ export class Http {
         )
       }
       if (res.ok || opts.acceptStatus?.includes(res.status)) return res
+      // a bot check often comes as a 503: look before retrying, and never ask it twice
+      const errorBody = await abortable(res.text(), signal).catch(() => {
+        if (signal?.aborted) throw signal.reason
+        return ''
+      })
+      if (isChallenge(errorBody))
+        throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
+          region: opts.region,
+          url,
+          status: res.status,
+        })
       if (res.status >= 500 && attempt < this.retries) continue
       throw new OutageError(
         res.status === 403 || res.status === 429 ? 'blocked' : 'http',
@@ -154,6 +199,20 @@ export class Http {
       )
     }
   }
+}
+
+/** `AbortSignal.any`, which Node 20 has only from 20.3 */
+function anySignal(signals: AbortSignal[]): AbortSignal {
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals)
+  const ctrl = new AbortController()
+  for (const s of signals) {
+    if (s.aborted) {
+      ctrl.abort(s.reason)
+      break
+    }
+    s.addEventListener('abort', () => ctrl.abort(s.reason), { once: true })
+  }
+  return ctrl.signal
 }
 
 function host(url: string) {

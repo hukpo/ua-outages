@@ -125,19 +125,15 @@ const queueLabel = (g) => (g === ANY ? 'без черги' : `черга ${g}`)
  * when no schedule is in force. A day like that means no outages, like the rest of the west.
  */
 const AWAITED_MEANS_NONE = new Set(['rivne'])
-/** "No queues" from a source that hasn't changed in this long isn't trusted as "no outages" */
-const STALE_NONE_MS = 7 * 86400e3
 
-/** The source works and has no schedule in force that day: no outages planned */
+/**
+ * The source works and has no schedule in force that day: no outages planned. Silence is not
+ * that: a source with no queues at all, or with every queue unknown, has published nothing, and
+ * the page says so instead of promising light (the SDK's contract since 0.1.2).
+ */
 function noSchedule(region, date = kyivNow().date) {
   const r = REGIONS.get(region)
-  if (!r?.ok) return false
-  if (!r.groups.length) {
-    // the oblenergo answered with no queues at all. Unless what it answered is long out of date
-    // (a cached page): then we just don't know
-    const old = r.updatedAt && Date.parse(DATA.generatedAt) - Date.parse(r.updatedAt) > STALE_NONE_MS
-    return !old && date >= kyivNow().date
-  }
+  if (!r?.ok || !r.groups.length) return false
   const day = r.days?.[date]
   return AWAITED_MEANS_NONE.has(region) && !!day && r.groups.every((g) => !day[g] || day[g].s === 'u')
 }
@@ -669,9 +665,7 @@ function setCurrent(region, group, { scroll = false, updateHash = true } = {}) {
   const shared = Object.values(SHAPE_REGIONS).find((ids) => ids.includes(region))
   const op = escapeHTML(r.operator)
   const quiet = !gs.length
-    ? noSchedule(region)
-      ? `Зараз у цій області графік не діє, тож черг поки немає. Збережіть адресу: щойно ${op} опублікує графік, оберете свою чергу. `
-      : `Для цієї області поки немає даних про черги. Збережіть адресу, і графік покажеться, щойно він з'явиться. `
+    ? `${op} зараз не публікує графік, тож черг поки немає. Збережіть адресу, і графік покажеться, щойно він з'явиться. `
     : group === ANY
       ? `${op} опублікувало графік. Оберіть свою чергу. `
       : noSchedule(region)
@@ -1069,14 +1063,16 @@ function renderSources() {
     }).format(new Date(iso))
   let html = rows
     .map((r) => {
-      const has = r.ok && r.groups.length
+      // queues listed but every day unknown: the operator has published nothing
+      const has =
+        r.ok && Object.values(r.days ?? {}).some((day) => Object.values(day).some((d) => d.s !== 'u'))
       const state = !r.ok
         ? `<span class="dot bad"></span>${friendlyError(r.message)}`
         : r.stale
           ? `<span class="dot quiet"></span>${friendlyError(r.message)}; показано графік, отриманий ${fmt(r.fetchedAt)}`
           : has
             ? `<span class="dot"></span>працює, ${r.groups.length} черг${r.relayed ? ', дані зібрано з України' : ''}`
-            : `<span class="dot"></span>працює, відключень не оголошено`
+            : `<span class="dot quiet"></span>працює, графік зараз не опубліковано`
       return `<tr><td>${r.name}</td><td><a href="${r.website}" target="_blank" rel="noopener">${escapeHTML(r.operator)}</a></td><td>${state}</td><td>${r.updatedAt ? fmt(r.updatedAt) : '—'}</td></tr>`
     })
     .join('')

@@ -1,5 +1,5 @@
 import { OutageError } from '../errors.js'
-import { compareGroups, makeDay, normalizeGroup, type MinuteSlot } from '../schedule.js'
+import { compareGroups, makeDay, normalizeGroup, unpublished, type MinuteSlot } from '../schedule.js'
 import { parseClock, toKyivIso } from '../time.js'
 import type { AddressQuery, DaySchedule, GroupId, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -75,8 +75,11 @@ export function ivanoFrankivskProvider(): Provider {
     sampleAddress: { city: 'Івано-Франківськ', street: 'Галицька', house: '1' },
 
     async getSchedules(ctx) {
-      const responses = await mapLimit(GROUPS, CONCURRENCY, (g) =>
-        ctx.http.json<unknown>(`${API}/schedule-by-queue?queue=${g}`, { region }),
+      const responses = await mapLimit(
+        GROUPS,
+        CONCURRENCY,
+        (g) => ctx.http.json<unknown>(`${API}/schedule-by-queue?queue=${g}`, { region }),
+        ctx.signal,
       )
       return parseQueueSchedules(responses, ctx.now())
     },
@@ -155,7 +158,7 @@ export function parseQueueSchedules(responses: readonly unknown[], now: Date): R
   }
 
   const dates = [...byDate.keys()].sort()
-  if (!dates.length) return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt: toKyivIso(now) }
+  if (!dates.length) return unpublished(region, GROUPS, now)
 
   const groups = [...new Set([...GROUPS, ...dates.flatMap((d) => [...byDate.get(d)!.keys()])])].sort(
     compareGroups,

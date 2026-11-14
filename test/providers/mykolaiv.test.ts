@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { parseActive } from '../../src/providers/mykolaiv.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { fixture, mockFetch, expectUnpublished } from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:30:00+02:00')
 const API = 'https://off.energy.mk.ua/api'
@@ -54,10 +54,10 @@ describe('Mykolaivoblenergo', () => {
     expect(s.updatedAt).toMatch(/^2026-11-05T/)
   })
 
-  it('treats an empty active list as no schedule', () => {
+  it('treats an empty active list as nothing published: groups unknown, not "no outages"', () => {
     const slots = JSON.parse(fixture('mykolaiv/time-series.json'))
     const queues = JSON.parse(fixture('mykolaiv/outage-queue-by-type-3.json'))
-    expect(parseActive(slots, queues, [], NOW).groups).toEqual([])
+    expectUnpublished(parseActive(slots, queues, [], NOW), queues.length)
   })
 
   it('rejects a broken time series', () => {

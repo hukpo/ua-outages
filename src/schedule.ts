@@ -1,5 +1,13 @@
 import { kyivDate, kyivInstant, toKyivIso } from './time.js'
-import type { DaySchedule, DayStatus, GroupId, Interval, IntervalKind } from './types.js'
+import type {
+  DaySchedule,
+  DayStatus,
+  GroupId,
+  Interval,
+  IntervalKind,
+  RegionId,
+  RegionSchedule,
+} from './types.js'
 
 /** A span inside one day, in minutes from Kyiv midnight (end may be 1440). */
 export interface MinuteSlot {
@@ -56,6 +64,24 @@ export function cellsToIntervals(day: string, cells: readonly (IntervalKind | nu
 export function makeDay(day: string, slots: readonly MinuteSlot[], status?: DayStatus): DaySchedule {
   const intervals = slotsToIntervals(day, slots)
   return { date: day, status: status ?? 'scheduled', intervals }
+}
+
+/**
+ * A region whose operator publishes nothing right now: each of its groups gets today as
+ * `unknown`. Never `groups: []` when the groups are known, and never `no-outages`: nothing
+ * published is not the same as "no outages announced".
+ */
+export function unpublished(
+  region: RegionId,
+  groups: readonly GroupId[],
+  now: Date,
+  updatedAt: string | null = null,
+): RegionSchedule {
+  const today = kyivDate(now)
+  const sorted = [...new Set(groups)].sort(compareGroups)
+  const schedules: Record<GroupId, DaySchedule[]> = {}
+  for (const g of sorted) schedules[g] = [{ date: today, status: 'unknown', intervals: [] }]
+  return { region, groups: sorted, schedules, updatedAt, fetchedAt: toKyivIso(now) }
 }
 
 /**

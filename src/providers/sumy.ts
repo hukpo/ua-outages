@@ -230,13 +230,12 @@ export function parseSumySchedules(res: { data?: ScheduleEntry[] }, now: Date): 
     if (at && (!updated || Date.parse(at) > Date.parse(updated))) updated = at
   }
 
-  // every group "no data": nothing is published
-  const known = Object.keys(schedules).filter((g) => schedules[g]![0]!.status !== 'unknown')
-  const groups = known.length ? Object.keys(schedules).sort(compareGroups) : []
+  // a group marked "no data" stays listed with an `unknown` day, even when every group is: that
+  // means nothing is published, which must not read as "no outages"
   return {
     region,
-    groups,
-    schedules: groups.length ? schedules : {},
+    groups: Object.keys(schedules).sort(compareGroups),
+    schedules,
     updatedAt: updated,
     fetchedAt: toKyivIso(now),
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { parseUzPage, uzProvider } from '../../src/providers/uz.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { fixture, mockFetch, expectUnpublished } from '../helpers.js'
 
 const NOW = new Date('2026-11-08T14:00:00+02:00')
 const KYIV = fixture('uz/kyiv.2026-11-08.html')
@@ -59,9 +59,7 @@ describe('Укрзалізниця', () => {
     expect(hhmm(s, '6.2')).toEqual(['11:00–14:30', '21:30–00:00'])
   })
 
-  it('has no groups when no schedule is published', () => {
-    const s = parseUzPage(VOLYN, NOW, 'uz-volyn')
-    expect(s.groups).toEqual([])
-    expect(s.schedules).toEqual({})
+  it('lists the groups as unknown, not "no outages", when no schedule is published', () => {
+    expectUnpublished(parseUzPage(VOLYN, NOW, 'uz-volyn'), 12)
   })
 })

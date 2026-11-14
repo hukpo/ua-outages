@@ -1,5 +1,5 @@
 import { OutageError } from '../errors.js'
-import { compareGroups, makeDay, type MinuteSlot } from '../schedule.js'
+import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -156,12 +156,14 @@ export function parseActive(slots: Slot[], queues: Queue[], active: ActiveDay[],
   const groups = [...nameOf.values()].sort(compareGroups)
   const schedules: Record<string, DaySchedule[]> = {}
   const dates = [...byDate.keys()].sort()
+  // no active day: nothing published, which is not "no outages"
+  if (!dates.length) return unpublished(region, groups, now)
   for (const g of groups) schedules[g] = dates.map((d) => makeDay(d, byDate.get(d)!.get(g) ?? []))
 
   return {
     region,
-    groups: dates.length ? groups : [],
-    schedules: dates.length ? schedules : {},
+    groups,
+    schedules,
     updatedAt: updated ? toKyivIso(new Date(updated)) : null,
     fetchedAt: toKyivIso(now),
   }
