@@ -18,7 +18,7 @@ import type {
   RegionSchedule,
   Street,
 } from './types.js'
-import { mapLimit } from './util.js'
+import { abortable, mapLimit } from './util.js'
 
 export interface OutageClientOptions extends HttpOptions {
   /** How long fetched schedules are reused, default 5 min. 0 disables the cache. */
@@ -38,6 +38,8 @@ export interface HealthCheckOptions {
   staleAfterHours?: number
   /** Parallel requests, default 6 */
   concurrency?: number
+  /** Cancels the check: no further regions are fetched and the call rejects with the signal's reason */
+  signal?: AbortSignal
 }
 
 export interface HealthReport {
@@ -90,22 +92,38 @@ export class OutageClient {
 
   // --- schedules ---
 
-  /** All groups of a region. */
-  async getSchedules(region: RegionId, opts: { fresh?: boolean } = {}): Promise<RegionSchedule> {
+  /**
+   * All groups of a region.
+   *
+   * `signal` cancels the call: it rejects with the signal's reason right away and sends no
+   * further requests to the operator (the one in flight is aborted too).
+   */
+  async getSchedules(region: RegionId, opts: ScheduleOptions = {}): Promise<RegionSchedule> {
     const p = this.provider(region)
+    const { signal } = opts
+    signal?.throwIfAborted()
     const hit = this.cache.get(region)
     const now = Date.now()
-    if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return hit.value
-    const value = p.getSchedules(this.ctx)
+    if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return abortable(hit.value, signal)
+    const value = p.getSchedules(this.context(signal))
     if (this.cacheTtlMs > 0) {
-      this.cache.set(region, { at: now, value })
-      value.catch(() => this.cache.delete(region))
+      if (signal) {
+        // a cancellable call isn't shared while it runs, so another caller never inherits its
+        // cancellation; what it fetched is cached once it arrives
+        value.then(
+          () => this.cache.set(region, { at: now, value }),
+          () => {},
+        )
+      } else {
+        this.cache.set(region, { at: now, value })
+        value.catch(() => this.cache.delete(region))
+      }
     }
     return value
   }
 
   /** One group. Accepts loose spellings: "3.1", "GPV3.1", "черга 3.1". */
-  async getSchedule(region: RegionId, group: string, opts: { fresh?: boolean } = {}): Promise<GroupSchedule> {
+  async getSchedule(region: RegionId, group: string, opts: ScheduleOptions = {}): Promise<GroupSchedule> {
     const id = normalizeGroup(group)
     const all = await this.getSchedules(region, opts)
     const days = id ? all.schedules[id] : undefined
@@ -292,17 +310,24 @@ export class OutageClient {
   async healthCheck(opts: HealthCheckOptions = {}): Promise<HealthReport> {
     const ids = opts.regions ?? [...this.providers.keys()]
     const staleMs = (opts.staleAfterHours ?? 72) * 3600_000
-    const results = await mapLimit(ids, opts.concurrency ?? 6, async (id): Promise<RegionHealth> => {
-      const health = await this.checkRegion(id, staleMs)
-      const p = this.provider(id)
-      if (!opts.address || !p.sampleAddress || !p.info.capabilities.addressSearch) return health
-      try {
-        const m = await this.findGroup(id, p.sampleAddress)
-        return { ...health, address: { ok: true, group: m.group } }
-      } catch (e) {
-        return { ...health, address: { ok: false, message: (e as Error).message } }
-      }
-    })
+    const { signal } = opts
+    const results = await mapLimit(
+      ids,
+      opts.concurrency ?? 6,
+      async (id): Promise<RegionHealth> => {
+        const health = await this.checkRegion(id, staleMs, signal)
+        const p = this.provider(id)
+        if (!opts.address || !p.sampleAddress || !p.info.capabilities.addressSearch) return health
+        signal?.throwIfAborted()
+        try {
+          const m = await this.findGroup(id, p.sampleAddress)
+          return { ...health, address: { ok: true, group: m.group } }
+        } catch (e) {
+          return { ...health, address: { ok: false, message: (e as Error).message } }
+        }
+      },
+      signal,
+    )
     return {
       checkedAt: this.ctx.now().toISOString(),
       ok: results.every((r) => r.status !== 'error' && (r.address?.ok ?? true)),
@@ -310,7 +335,7 @@ export class OutageClient {
     }
   }
 
-  private async checkRegion(region: RegionId, staleMs: number): Promise<RegionHealth> {
+  private async checkRegion(region: RegionId, staleMs: number, signal?: AbortSignal): Promise<RegionHealth> {
     const info = this.provider(region).info
     // e.g. operators that publish the schedule only as an image: nothing to check
     if (!info.capabilities.schedule)
@@ -324,7 +349,7 @@ export class OutageClient {
       }
     const started = performance.now()
     try {
-      const s = await this.getSchedules(region, { fresh: true })
+      const s = await this.getSchedules(region, { fresh: true, signal })
       const latencyMs = Math.round(performance.now() - started)
       const base = { region, latencyMs, groups: s.groups.length, updatedAt: s.updatedAt }
       const hasData = Object.values(s.schedules).some((days) =>
@@ -336,6 +361,7 @@ export class OutageClient {
         return { ...base, status: 'stale', message: `Last updated ${s.updatedAt}` }
       return { ...base, status: 'ok' }
     } catch (e) {
+      if (signal?.aborted) throw signal.reason
       // e.g. a region that publishes only an image the SDK can't read
       if (e instanceof OutageError && e.code === 'unsupported')
         return { region, status: 'empty', latencyMs: 0, groups: 0, updatedAt: null, message: e.message }
@@ -351,6 +377,11 @@ export class OutageClient {
   }
 
   // --- internals ---
+
+  /** Provider context for one call; with a signal, its requests stop when the call is cancelled */
+  private context(signal?: AbortSignal): ProviderContext {
+    return signal ? { ...this.ctx, http: this.ctx.http.withSignal(signal), signal } : this.ctx
+  }
 
   private provider(id: RegionId): Provider {
     const p = this.providers.get(id)
@@ -406,6 +437,13 @@ const MAX_CANDIDATES = 200
 const CONFIDENT = 0.7
 /** …and only when the runner-up is further behind than this */
 const TIE = 0.025
+
+export interface ScheduleOptions {
+  /** Skip the cache and fetch from the operator */
+  fresh?: boolean
+  /** Cancels the call: it rejects with the signal's reason and sends no further requests */
+  signal?: AbortSignal
+}
 
 export interface SearchOptions {
   /** Max results, default 10 */

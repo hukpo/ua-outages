@@ -2,8 +2,16 @@ import type { Http } from '../http.js'
 import type { AddressQuery, City, GroupMatch, House, RegionInfo, RegionSchedule, Street } from '../types.js'
 
 export interface ProviderContext {
+  /** Already bound to `signal`: every request through it stops when the call is cancelled */
   http: Http
   now: () => Date
+  /**
+   * The caller's cancellation, if any. Requests stop by themselves; pass it to `mapLimit` and
+   * check it in long loops. Work shared between calls (a session several calls wait for) should
+   * run on `http.withSignal(undefined)` and be awaited with `abortable(…, signal)`, so one
+   * caller giving up doesn't fail the others.
+   */
+  signal?: AbortSignal
 }
 
 /**

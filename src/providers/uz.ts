@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
-import { makeDay, type MinuteSlot } from '../schedule.js'
+import { makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, RegionId, RegionInfo, RegionSchedule } from '../types.js'
 import type { Provider } from './provider.js'
@@ -101,8 +101,9 @@ export function parseUzPage(
   }
 }
 
+/** A page without a table publishes nothing; that is not "no outages" */
 function empty(region: RegionId, now: Date): RegionSchedule {
-  return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt: toKyivIso(now) }
+  return unpublished(region, STANDARD_GROUPS, now)
 }
 
 const text = (s: string) =>

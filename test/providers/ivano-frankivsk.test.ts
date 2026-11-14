@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { parseQueueSchedules, withoutTypes } from '../../src/providers/ivano-frankivsk.js'
 import { ivanoFrankivskProvider } from '../../src/providers/ivano-frankivsk.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { fixture, mockFetch, expectUnpublished } from '../helpers.js'
 
 const API = 'https://be-svitlo.oe.if.ua'
 const EMPTY = fixture('ivano-frankivsk/schedule-by-queue.1.1.current-empty.json')
@@ -65,9 +65,10 @@ describe('Prykarpattiaoblenergo', () => {
     ])
   })
 
-  it('returns no groups when nothing is published', async () => {
+  it('lists every group as unknown, not "no outages", when nothing is published', async () => {
     const s = await client().client.getSchedules('ivano-frankivsk')
-    expect(s).toMatchObject({ groups: [], schedules: {}, updatedAt: null })
+    expect(s.updatedAt).toBeNull()
+    expectUnpublished(s, 12)
   })
 
   it('rejects a changed format', () => {

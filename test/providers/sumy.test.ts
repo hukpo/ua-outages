@@ -4,7 +4,7 @@ import { OutageClient } from '../../src/client.js'
 import { OutageError } from '../../src/errors.js'
 import { decryptSumyResponse, parseSumySchedules, sumyProvider } from '../../src/providers/sumy.js'
 import type { DaySchedule } from '../../src/types.js'
-import { fixture, mockFetch, type Route } from '../helpers.js'
+import { fixture, mockFetch, type Route, expectUnpublished } from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:40:00+02:00')
 const API = 'https://www.soe.com.ua/next-api/shutdowns'
@@ -97,12 +97,10 @@ describe('Sumyoblenergo', () => {
     expect(s.schedules['1.1']).toEqual([{ date: '2026-11-05', status: 'scheduled', intervals: [] }])
   })
 
-  it('returns an empty schedule when every group has no data', () => {
-    const res = JSON.parse(fixture('sumy/schedules-2026-11-05.json'))
-    for (const e of res.data) Object.assign(e, { no_data: true, lst_time_disc: [] })
-    const s = parseSumySchedules(res, NOW)
-    expect(s.groups).toEqual([])
-    expect(s.schedules).toEqual({})
+  it('keeps every group as unknown, not "no outages", when every group has no data', () => {
+    const s = parseSumySchedules(JSON.parse(fixture('sumy/schedules-no-data.json')), NOW)
+    expectUnpublished(s, 12)
+    expect(s.schedules['1.1']).toEqual([{ date: '2026-11-05', status: 'unknown', intervals: [] }])
   })
 
   it('rejects a changed schedule format', () => {

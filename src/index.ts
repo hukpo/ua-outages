@@ -1,5 +1,11 @@
 export { OutageClient } from './client.js'
-export type { HealthCheckOptions, HealthReport, OutageClientOptions, SearchOptions } from './client.js'
+export type {
+  HealthCheckOptions,
+  HealthReport,
+  OutageClientOptions,
+  ScheduleOptions,
+  SearchOptions,
+} from './client.js'
 export { OutageError, isOutageError } from './errors.js'
 export { fuzzyScore, rankByName } from './fuzzy.js'
 export type { NameKind } from './fuzzy.js'

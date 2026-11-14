@@ -14,7 +14,7 @@ import type {
   Street,
 } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
-import { cookieHeader, mapLimit } from '../util.js'
+import { abortable, cookieHeader, mapLimit } from '../util.js'
 
 /**
  * Kirovohradoblenergo (kiroe.com.ua). The /electricity-blackout page hands out a PHP session
@@ -97,13 +97,14 @@ export function kirovohradProvider(): Provider {
   const session = (ctx: ProviderContext, renew = false): Promise<Session> => {
     if (renew || !current || Date.now() - currentAt > SESSION_TTL_MS) {
       currentAt = Date.now()
-      const p = bootstrap(ctx)
+      // shared by concurrent calls: one caller cancelling must not fail the others
+      const p = bootstrap({ ...ctx, http: ctx.http.withSignal(undefined), signal: undefined })
       current = p
       p.catch(() => {
         if (current === p) current = null
       })
     }
-    return current
+    return abortable(current, ctx.signal)
   }
 
   const post = async (ctx: ProviderContext, s: Session, path: string): Promise<unknown> => {

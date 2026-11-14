@@ -8,8 +8,8 @@ import type { Provider } from './provider.js'
  * Zakarpattiaoblenergo (outage.zakarpat.energy), a PowerOn platform backend.
  *
  * The schedule itself is published only as a picture (`/options?option_key=pw_gpv_image_today`
- * points to a PNG). While no picture is published, `getSchedules` returns no groups (no
- * outages announced); once one is, it throws `unsupported` with its address, since no sample of
+ * points to a PNG). While no picture is published, `getSchedules` returns no groups: nothing
+ * is known (the group list comes only with a schedule), which is not "no outages". Once one is, it throws `unsupported` with its address, since no sample of
  * that picture exists yet to build a reader from. The address lookup works: `pw_address_queues`
  * returns, per street and group, a comma-separated list of houses.
  */

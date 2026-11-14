@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { REPRESENTATIVES, parseGroupGraph, ternopilProvider } from '../../src/providers/ternopil.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { fixture, mockFetch, expectUnpublished } from '../helpers.js'
 
 const NOW = new Date('2026-10-17T19:00:00+03:00')
 const API = 'https://api-poweron.toe.com.ua/api'
@@ -104,10 +104,10 @@ describe('Ternopiloblenergo', () => {
     expect(s.updatedAt).toBe('2026-10-17T18:52:36+03:00')
   })
 
-  it('treats "nothing scheduled" for every representative as no schedule', async () => {
+  it('treats "nothing scheduled" for every representative as nothing published, not "no outages"', async () => {
     const empty = JSON.parse(fixture('ternopil/a_gpv_g.current-empty.json'))
     const s = await client(() => empty).client.getSchedules('ternopil')
-    expect(s.groups).toEqual([])
+    expectUnpublished(s, 12)
   })
 
   it('marks a group unknown when only its representative answers nothing', async () => {

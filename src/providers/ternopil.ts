@@ -1,9 +1,10 @@
 import { OutageError } from '../errors.js'
-import { cellsToIntervals } from '../schedule.js'
+import { cellsToIntervals, unpublished } from '../schedule.js'
 import { addDays, kyivDate, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, IntervalKind, RegionInfo, RegionSchedule } from '../types.js'
 import { STANDARD_GROUPS, parseCherg, parsePowerOnTime, powerOnAddressSearch } from './poweron.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mapLimit } from '../util.js'
 
 /**
  * Ternopiloblenergo (poweron.toe.com.ua), a PowerOn platform backend.
@@ -110,7 +111,12 @@ export function ternopilProvider(): Provider {
     async getSchedules(ctx) {
       const groups = Object.keys(REPRESENTATIVES)
       // a few at a time: twelve requests per refresh is already more than the site makes
-      const results = await mapLimit(groups, 3, (g) => fetchWithRetry(ctx, g, ['unknown-address']))
+      const results = await mapLimit(
+        groups,
+        3,
+        (g) => fetchWithRetry(ctx, g, ['unknown-address']),
+        ctx.signal,
+      )
       const anyDays = results.some((r) => r.kind === 'days')
       if (anyDays)
         for (const [i, r] of results.entries())
@@ -212,7 +218,8 @@ export function buildSchedule(byGroup: Record<GroupId, GroupGraph>, now: Date): 
     (r): r is Extract<GroupGraph, { kind: 'days' }> => r.kind === 'days',
   )
   const fetchedAt = toKyivIso(now)
-  if (!withDays.length) return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt }
+  // nothing published for any group: not "no outages", just nothing known yet
+  if (!withDays.length) return unpublished(region, Object.keys(byGroup), now)
 
   const dates = [...new Set(withDays.flatMap((r) => r.days.map((d) => d.date)))].sort()
   const groups = STANDARD_GROUPS.filter((g) => g in byGroup)
@@ -259,17 +266,4 @@ function base64Utf8(s: string): string {
   let bin = ''
   for (const b of new TextEncoder().encode(s)) bin += String.fromCharCode(b)
   return btoa(bin)
-}
-
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length)
-  let next = 0
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++
-      out[i] = await fn(items[i]!)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return out
 }

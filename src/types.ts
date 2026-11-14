@@ -114,9 +114,14 @@ export interface GroupSchedule {
   fetchedAt: string
 }
 
+/**
+ * Silence is never "no outages": only `no-outages` days, or `scheduled` days without intervals,
+ * mean that. When the operator publishes nothing, its groups are listed with `unknown` days, or,
+ * when the SDK can't tell which groups it has, `groups` is empty. Both mean "not published".
+ */
 export interface RegionSchedule {
   region: RegionId
-  /** Every group the operator publishes, sorted */
+  /** Every group the operator publishes, sorted. Empty: nothing published and groups unknown, not "no outages" */
   groups: GroupId[]
   /** group → days */
   schedules: Record<GroupId, DaySchedule[]>
