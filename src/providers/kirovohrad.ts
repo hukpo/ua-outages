@@ -14,7 +14,7 @@ import type {
   Street,
 } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
-import { abortable, cookieHeader, mapLimit } from '../util.js'
+import { SharedTask, cookieHeader, mapLimit } from '../util.js'
 
 /**
  * Kirovohradoblenergo (kiroe.com.ua). The /electricity-blackout page hands out a PHP session
@@ -71,7 +71,7 @@ export interface ApiHouse {
 
 export function kirovohradProvider(): Provider {
   const region = INFO.id
-  let current: Promise<Session> | null = null
+  let current: SharedTask<Session> | null = null
   let currentAt = 0
   let cities: Promise<City[]> | null = null
   // house id → its number and groups, filled by searchHouses so groupOf needs no extra request
@@ -95,16 +95,19 @@ export function kirovohradProvider(): Provider {
   }
 
   const session = (ctx: ProviderContext, renew = false): Promise<Session> => {
-    if (renew || !current || Date.now() - currentAt > SESSION_TTL_MS) {
+    if (renew || !current || current.aborted || Date.now() - currentAt > SESSION_TTL_MS) {
       currentAt = Date.now()
-      // shared by concurrent calls: one caller cancelling must not fail the others
-      const p = bootstrap({ ...ctx, http: ctx.http.withSignal(undefined), signal: undefined })
-      current = p
-      p.catch(() => {
-        if (current === p) current = null
+      // shared by concurrent calls: one caller cancelling doesn't fail the others, and it is
+      // cancelled only when every caller waiting for it has given up
+      const task = new SharedTask((signal) =>
+        bootstrap({ ...ctx, http: ctx.http.withSignal(signal), signal }),
+      )
+      current = task
+      task.promise.catch(() => {
+        if (current === task) current = null
       })
     }
-    return abortable(current, ctx.signal)
+    return current.join(ctx.signal)
   }
 
   const post = async (ctx: ProviderContext, s: Session, path: string): Promise<unknown> => {
