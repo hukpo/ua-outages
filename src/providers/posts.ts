@@ -64,6 +64,8 @@ export function postsToSchedule(
     schedules[g] = dates.map((d) => {
       const slots = byDate.get(d)!.groups[g]
       if (slots) return makeDay(d, slots)
+      // named in the post without times or a "power on" statement: not known
+      if (slots === null) return { date: d, status: 'unknown' as const, intervals: [] }
       // a group missing from that day's post: no outages if the operator lists only the
       // groups that have them, otherwise we just don't know
       return opts.omitted === 'none' ? makeDay(d, []) : { date: d, status: 'unknown' as const, intervals: [] }

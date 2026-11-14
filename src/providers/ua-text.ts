@@ -79,13 +79,22 @@ export function findTimeRanges(text: string): [number, number][] {
   return out
 }
 
+/** A group line without times that says the power stays on ("Група 2.1. Електроенергія є.") */
+const POWER_ON =
+  /електроенергі[яї]\s+є|світло\s+є|без\s+відключень|відключен\S*\s+не\s+(?:передбачен|планує|застосов)/i
+
 /**
  * Lines like "1.1 00:00-03:00; 08:00-13:30", "1.1: 12:00 – 17:00", "Група 1.1. … з 08:00 до 12:00"
- * → group → off slots. A group mentioned with no times (e.g. "Електроенергія є") gets `[]`.
- * Lines that name several groups ("Групи 1.1, 1.2: …") apply the times to each.
+ * → group → off slots. A group mentioned with no times gets `[]` only when the line says the
+ * power stays on ("Електроенергія є"); otherwise ("1.1: графік уточнюється") it gets `null`:
+ * named, but its schedule is not known. Lines that name several groups ("Групи 1.1, 1.2: …")
+ * apply the times to each.
  */
-export function parseGroupLines(text: string, kind: 'off' | 'maybe' = 'off'): Record<string, MinuteSlot[]> {
-  const out: Record<string, MinuteSlot[]> = {}
+export function parseGroupLines(
+  text: string,
+  kind: 'off' | 'maybe' = 'off',
+): Record<string, MinuteSlot[] | null> {
+  const out: Record<string, MinuteSlot[] | null> = {}
   for (const rawLine of text.split(/\n|<br\s*\/?>|<\/p>|<\/li>|<\/div>/i)) {
     const line = rawLine
       .replace(/<[^>]+>/g, ' ')
@@ -101,7 +110,12 @@ export function parseGroupLines(text: string, kind: 'off' | 'maybe' = 'off'): Re
       .filter((g): g is string => !!g)
     if (!groups.length) continue
     const ranges = firstTime === -1 ? [] : findTimeRanges(line.slice(firstTime))
+    const known = ranges.length > 0 || POWER_ON.test(line)
     for (const g of groups) {
+      if (!known) {
+        if (!(g in out)) out[g] = null
+        continue
+      }
       const list = (out[g] ??= [])
       for (const [start, end] of ranges) list.push({ start, end, kind })
     }
