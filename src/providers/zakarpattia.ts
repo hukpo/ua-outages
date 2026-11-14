@@ -1,15 +1,21 @@
 import { OutageError } from '../errors.js'
-import { toKyivIso } from '../time.js'
 import type { GroupId, RegionInfo } from '../types.js'
-import { hydraList, parseCherg, powerOnAddressSearch, type PowerOnBuilding } from './poweron.js'
+import { unpublished } from '../schedule.js'
+import {
+  STANDARD_GROUPS,
+  hydraList,
+  parseCherg,
+  powerOnAddressSearch,
+  type PowerOnBuilding,
+} from './poweron.js'
 import type { Provider } from './provider.js'
 
 /**
  * Zakarpattiaoblenergo (outage.zakarpat.energy), a PowerOn platform backend.
  *
  * The schedule itself is published only as a picture (`/options?option_key=pw_gpv_image_today`
- * points to a PNG). While no picture is published, `getSchedules` returns no groups: nothing
- * is known (the group list comes only with a schedule), which is not "no outages". Once one is, it throws `unsupported` with its address, since no sample of
+ * points to a PNG). While no picture is published, `getSchedules` lists the twelve groups with
+ * today `unknown`: nothing published, which is not "no outages". Once one is, it throws `unsupported` with its address, since no sample of
  * that picture exists yet to build a reader from. The address lookup works: `pw_address_queues`
  * returns, per street and group, a comma-separated list of houses.
  */
@@ -57,7 +63,8 @@ export function zakarpattiaProvider(): Provider {
           `Zakarpattia: the schedule is published only as an image (${new URL(published, IMAGE_HOST).href}); use findGroup for the group of an address`,
           { region },
         )
-      return { region, groups: [], schedules: {}, updatedAt: null, fetchedAt: toKyivIso(ctx.now()) }
+      // nothing published: its twelve groups (1.1–6.2, one PDF each on the site) are unknown
+      return unpublished(region, STANDARD_GROUPS, ctx.now())
     },
 
     ...powerOnAddressSearch({

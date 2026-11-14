@@ -1,13 +1,17 @@
 import { getEventListeners } from 'node:events'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { OutageClient } from '../src/client.js'
 import { OutageError } from '../src/errors.js'
 import { Http, type FetchLike } from '../src/http.js'
+import { parseGpvDays } from '../src/providers/gpv.js'
 import { scheduleFromImages } from '../src/providers/image-schedule.js'
 import { ivanoFrankivskProvider } from '../src/providers/ivano-frankivsk.js'
 import { kirovohradProvider } from '../src/providers/kirovohrad.js'
 import type { Provider } from '../src/providers/provider.js'
+import { postsToSchedule } from '../src/providers/posts.js'
 import { ternopilProvider } from '../src/providers/ternopil.js'
+import { parseGroupLines } from '../src/providers/ua-text.js'
+import { kyivDate } from '../src/time.js'
 import { unpublished } from '../src/schedule.js'
 import type { RegionSchedule } from '../src/types.js'
 import { mapLimit } from '../src/util.js'
@@ -431,6 +435,139 @@ describe('cancellation edge cases', () => {
       expect(getEventListeners(ctrl.signal, 'abort')).toHaveLength(0)
     } finally {
       AbortSignal.any = any
+    }
+  })
+})
+
+// Regressions for the second independent (GPT) review: decisions, not just bugs
+describe('silence is never "no outages"', () => {
+  const NOW = new Date('2026-11-15T10:00:00+02:00')
+  const midnight = String(Date.parse('2026-11-15T00:00:00+02:00') / 1000)
+
+  it('GPV: a group without cells is unknown, not power on all day', () => {
+    const s = parseGpvDays('dnipro', { [midnight]: { 'GPV1.1': {} } })
+    expect(s['1.1']).toEqual([{ date: '2026-11-15', status: 'unknown', intervals: [] }])
+  })
+
+  it('GPV: a cell value nobody has seen is a parse error, not "on"', () => {
+    expect(() => parseGpvDays('dnipro', { [midnight]: { 'GPV1.1': { '1': 'yes', '2': 'later' } } })).toThrow(
+      expect.objectContaining({ code: 'parse' }),
+    )
+  })
+
+  it('text: a group named without times is unknown unless the line says the power stays on', () => {
+    const g = parseGroupLines(
+      '<p>1.1: графік уточнюється</p><p>2.1. Електроенергія є.</p><p>3.1 08:00-12:00</p>',
+    )
+    expect(g['1.1']).toBeNull()
+    expect(g['2.1']).toEqual([])
+    expect(g['3.1']).toHaveLength(1)
+  })
+
+  it('posts: a named group without times stays unknown even where unlisted groups mean "no outages"', () => {
+    const s = postsToSchedule(
+      'zaporizhzhia',
+      [
+        {
+          title: 'ГПВ на 15 листопада',
+          body: '<p>1.1: графік уточнюється</p><p>3.1: 08:00 – 12:00</p>',
+          publishedAt: NOW.toISOString(),
+        },
+      ],
+      NOW,
+      { omitted: 'none', groups: ['1.1', '1.2', '3.1'] },
+    )
+    expect(s.schedules['1.1']![0]).toMatchObject({ status: 'unknown', intervals: [] })
+    // the operator lists only groups with outages: an unlisted one has none
+    expect(s.schedules['1.2']![0]).toMatchObject({ status: 'scheduled', intervals: [] })
+    expect(s.schedules['3.1']![0]!.intervals).toHaveLength(1)
+  })
+
+  it('health: a published day without outages counts as published, not "empty"', async () => {
+    const provider: Provider = {
+      info: {
+        id: 'sumy',
+        name: 'test',
+        operator: 'test',
+        website: 'https://example.ua/',
+        capabilities: { schedule: true, addressSearch: false },
+      },
+      getSchedules: async (ctx) => ({
+        ...unpublished('sumy', ['1.1'], ctx.now()),
+        schedules: { '1.1': [{ date: kyivDate(ctx.now()), status: 'scheduled', intervals: [] }] },
+      }),
+    }
+    const h = await new OutageClient({ providers: [provider] }).healthCheck()
+    expect(h.regions[0]!.status).toBe('ok')
+  })
+})
+
+describe('cancellation while waiting on shared work', () => {
+  const sharedProvider = (shared: Promise<RegionSchedule>): Provider => ({
+    info: {
+      id: 'sumy',
+      name: 'test',
+      operator: 'test',
+      website: 'https://example.ua/',
+      capabilities: { schedule: true, addressSearch: true },
+    },
+    sampleAddress: { street: 'Соборна', house: '1' },
+    // e.g. a directory another call is loading
+    getSchedules: () => shared,
+    lookupAddress: async () => {
+      await shared
+      throw new Error('unreachable')
+    },
+  })
+
+  it('getSchedules leaves at once even when the provider waits on something shared', async () => {
+    const client = new OutageClient({ cacheTtlMs: 0, providers: [sharedProvider(new Promise(() => {}))] })
+    const ctrl = new AbortController()
+    const pending = client.getSchedules('sumy', { signal: ctrl.signal })
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('a health check leaves its address lookup at once', async () => {
+    const shared = new Promise<RegionSchedule>(() => {})
+    const p = sharedProvider(shared)
+    const client = new OutageClient({
+      cacheTtlMs: 0,
+      providers: [{ ...p, getSchedules: async (ctx) => unpublished('sumy', ['1.1'], ctx.now()) }],
+    })
+    const ctrl = new AbortController()
+    const pending = client.healthCheck({ address: true, signal: ctrl.signal })
+    await tick()
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('an older fetch never overwrites a newer one, even within the same millisecond', async () => {
+    const spy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    try {
+      const resolvers: ((s: RegionSchedule) => void)[] = []
+      const provider: Provider = {
+        info: {
+          id: 'sumy',
+          name: 'test',
+          operator: 'test',
+          website: 'https://example.ua/',
+          capabilities: { schedule: true, addressSearch: false },
+        },
+        getSchedules: () => new Promise((r) => resolvers.push(r)),
+      }
+      const client = new OutageClient({ providers: [provider] })
+      const schedule = (updatedAt: string) => ({ ...unpublished('sumy', ['1.1'], new Date()), updatedAt })
+      const older = client.getSchedules('sumy', { fresh: true, signal: new AbortController().signal })
+      const newer = client.getSchedules('sumy', { fresh: true, signal: new AbortController().signal })
+      resolvers[1]!(schedule('NEW'))
+      await newer
+      resolvers[0]!(schedule('OLD'))
+      await older
+      await Promise.resolve()
+      expect((await client.getSchedules('sumy')).updatedAt).toBe('NEW')
+    } finally {
+      spy.mockRestore()
     }
   })
 })

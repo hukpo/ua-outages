@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { splitHouses, zakarpattiaProvider } from '../../src/providers/zakarpattia.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { expectUnpublished, fixture, mockFetch } from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:30:00+02:00')
 const API = 'https://api-outage-zakarpat-energy.inneti.net/api'
@@ -33,7 +33,7 @@ function client(
 }
 
 describe('Zakarpattiaoblenergo', () => {
-  it('has no groups while no schedule picture is published', async () => {
+  it('lists its groups as unknown, not "no outages", while no schedule picture is published', async () => {
     const { client: c } = client()
     expect(c.region('zakarpattia').capabilities).toMatchObject({
       schedule: true,
@@ -41,7 +41,7 @@ describe('Zakarpattiaoblenergo', () => {
       streetSearch: true,
     })
     const s = await c.getSchedules('zakarpattia')
-    expect(s.groups).toEqual([])
+    expectUnpublished(s, 12)
     const h = await c.healthCheck()
     expect(h.regions[0]!.status).toBe('empty')
   })

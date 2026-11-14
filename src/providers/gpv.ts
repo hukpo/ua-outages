@@ -63,6 +63,16 @@ export function parseGpvDays(
     for (const [rawGroup, cells] of Object.entries(groups)) {
       const group = normalizeGroup(rawGroup)
       if (!group || !cells || typeof cells !== 'object') continue
+      // a group without cells says nothing about its day: unknown, not "power on all day"
+      const hours = Object.keys(cells).filter((k) => /^\d+$/.test(k))
+      if (!hours.length) {
+        ;(out[group] ??= []).push({ date, status: 'unknown', intervals: [] })
+        continue
+      }
+      // a cell value nobody has seen is reported, not read as "on"
+      const odd = hours.map((k) => String(cells[k]).toLowerCase()).find((v) => v !== 'yes' && !HALF[v])
+      if (odd !== undefined)
+        throw new OutageError('parse', `GPV: unknown cell value "${odd}" in ${rawGroup}`, { region })
       ;(out[group] ??= []).push(makeDay(date, gpvCellsToSlots(cells)))
     }
   }

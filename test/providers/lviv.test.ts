@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { lvivProvider, parseLvivMenu } from '../../src/providers/lviv.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { expectUnpublished, fixture, mockFetch } from '../helpers.js'
 
 const NOW = new Date('2026-10-17T19:30:00+03:00')
 const MENUS = 'https://api.loe.lviv.ua/api/menus?page=1&type=photo-grafic'
@@ -87,9 +87,9 @@ describe('Lvivoblenergo', () => {
     expect(s.schedules['1.1']![0]!.intervals[0]!.from).toBe('2026-07-01T17:00:00+03:00')
   })
 
-  it('treats empty Today/Tomorrow as no schedule (array-shaped response)', async () => {
+  it('treats empty Today/Tomorrow as nothing published, not "no outages" (array-shaped response)', async () => {
     const s = await client('lviv/menus.empty.array.json').client.getSchedules('lviv')
-    expect(s.groups).toEqual([])
+    expectUnpublished(s, 12)
     expect(s.updatedAt).toBeNull()
   })
 

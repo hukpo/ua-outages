@@ -62,7 +62,9 @@ export class OutageClient {
   private readonly ctx: ProviderContext
   private readonly providers: ReadonlyMap<RegionId, Provider>
   private readonly cacheTtlMs: number
-  private readonly cache = new Map<RegionId, { at: number; value: Promise<RegionSchedule> }>()
+  private readonly cache = new Map<RegionId, { at: number; seq: number; value: Promise<RegionSchedule> }>()
+  /** Fetches started, so a slower older one never replaces a newer one in the cache */
+  private seq = 0
   private readonly searchCache = new Map<string, { at: number; value: Promise<unknown[]> }>()
 
   constructor(opts: OutageClientOptions = {}) {
@@ -106,24 +108,27 @@ export class OutageClient {
     const now = Date.now()
     if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return abortable(hit.value, signal)
     const value = p.getSchedules(this.context(signal))
+    const entry = { at: now, seq: ++this.seq, value }
     if (this.cacheTtlMs > 0) {
       if (signal) {
         // a cancellable call isn't shared while it runs, so another caller never inherits its
-        // cancellation; what it fetched is cached once it arrives
+        // cancellation; what it fetched is cached once it arrives, unless a fetch started later
+        // already is
         value.then(
           () => {
-            // unless a request started later has already been cached
-            const current = this.cache.get(region)
-            if (!current || current.at <= now) this.cache.set(region, { at: now, value })
+            if ((this.cache.get(region)?.seq ?? 0) < entry.seq) this.cache.set(region, entry)
           },
           () => {},
         )
       } else {
-        this.cache.set(region, { at: now, value })
-        value.catch(() => this.cache.delete(region))
+        this.cache.set(region, entry)
+        value.catch(() => {
+          if (this.cache.get(region) === entry) this.cache.delete(region)
+        })
       }
     }
-    return value
+    // a provider may wait on work it shares with other calls: the caller still leaves at once
+    return abortable(value, signal)
   }
 
   /** One group. Accepts loose spellings: "3.1", "GPV3.1", "черга 3.1". */
@@ -369,7 +374,7 @@ export class OutageClient {
         if (!opts.address || !p.sampleAddress || !p.info.capabilities.addressSearch) return health
         signal?.throwIfAborted()
         try {
-          const m = await this.findGroupIn(this.context(signal), id, p.sampleAddress)
+          const m = await abortable(this.findGroupIn(this.context(signal), id, p.sampleAddress), signal)
           return { ...health, address: { ok: true, group: m.group } }
         } catch (e) {
           if (signal?.aborted) throw signal.reason
@@ -403,7 +408,8 @@ export class OutageClient {
       const latencyMs = Math.round(performance.now() - started)
       const base = { region, latencyMs, groups: s.groups.length, updatedAt: s.updatedAt }
       const hasData = Object.values(s.schedules).some((days) =>
-        days.some((d) => d.intervals.length > 0 || d.status === 'no-outages'),
+        // anything the operator published counts, a day without outages included
+        days.some((d) => d.status !== 'unknown'),
       )
       if (!s.groups.length || !hasData)
         return { ...base, status: 'empty', message: 'No schedule published right now' }

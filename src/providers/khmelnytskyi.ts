@@ -198,8 +198,8 @@ export function textSchedules(
   html: string,
   now: Date,
   from: string,
-): Map<string, Record<string, MinuteSlot[]>> {
-  const out = new Map<string, Record<string, MinuteSlot[]>>()
+): Map<string, Record<string, MinuteSlot[] | null>> {
+  const out = new Map<string, Record<string, MinuteSlot[] | null>>()
   const start = html.indexOf('class="post"')
   if (start === -1) return out
   const end = html.indexOf('Перевірити чергу', start)
@@ -220,11 +220,20 @@ export function textSchedules(
   return out
 }
 
-function mergeText(images: RegionSchedule, text: Map<string, Record<string, MinuteSlot[]>>): RegionSchedule {
+function mergeText(
+  images: RegionSchedule,
+  text: Map<string, Record<string, MinuteSlot[] | null>>,
+): RegionSchedule {
   if (!text.size) return images
   const schedules: Record<string, DaySchedule[]> = { ...images.schedules }
   for (const [date, groups] of text)
-    for (const g of STANDARD_GROUPS) schedules[g] = [...(schedules[g] ?? []), makeDay(date, groups[g] ?? [])]
+    for (const g of STANDARD_GROUPS) {
+      const slots = groups[g]
+      // named without times or a "power on" statement: not known (an unlisted group has none)
+      const day: DaySchedule =
+        slots === null ? { date, status: 'unknown', intervals: [] } : makeDay(date, slots ?? [])
+      schedules[g] = [...(schedules[g] ?? []), day]
+    }
   for (const g of Object.keys(schedules)) schedules[g]!.sort((a, b) => a.date.localeCompare(b.date))
   return { ...images, groups: Object.keys(schedules).sort(compareGroups), schedules }
 }

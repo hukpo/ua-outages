@@ -1,5 +1,5 @@
 import { OutageError } from '../errors.js'
-import { compareGroups, makeDay, normalizeGroup } from '../schedule.js'
+import { compareGroups, makeDay, normalizeGroup, unpublished } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionInfo, RegionSchedule } from '../types.js'
 import { parseUaDateTime } from './gpv.js'
@@ -125,7 +125,7 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
       const groups: Record<GroupId, DaySchedule> = {}
       for (const [raw, slots] of Object.entries(parsed)) {
         const g = normalizeGroup(raw)
-        if (g) groups[g] = makeDay(day, slots)
+        if (g) groups[g] = slots ? makeDay(day, slots) : { date: day, status: 'unknown', intervals: [] }
       }
       if (!Object.keys(groups).length)
         throw new OutageError('parse', `Lviv ${item.name}: schedule text without groups (format changed?)`, {
@@ -150,6 +150,8 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
   }
 
   const dates = [...days.keys()].sort()
+  // every slot empty: nothing published; the twelve groups stay listed as unknown
+  if (!dates.length) return unpublished(region, STANDARD_GROUPS, now)
   const groups = [...new Set(dates.flatMap((d) => Object.keys(days.get(d)!.groups)))].sort(compareGroups)
   const schedules: Record<GroupId, DaySchedule[]> = {}
   for (const g of groups)
