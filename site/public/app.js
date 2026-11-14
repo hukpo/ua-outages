@@ -121,23 +121,17 @@ const ANY = '*'
 const queueLabel = (g) => (g === ANY ? 'без черги' : `черга ${g}`)
 
 /**
- * Oblenergos that keep their table up with "Очікується" in every queue instead of taking it down
- * when no schedule is in force. A day like that means no outages, like the rest of the west.
- */
-const AWAITED_MEANS_NONE = new Set(['rivne'])
-
-/**
- * The source works and has no schedule in force that day: no outages planned. Silence is not
- * that: a source with no queues at all, or with every queue unknown, has published nothing, and
- * the page says so instead of promising light (the SDK's contract since 0.1.2).
+ * The operator says no outages for any queue that day (e.g. it cancelled the schedule). Silence
+ * is not that: no queues at all, or every queue unknown (Rivne's "Очікується" included), means
+ * nothing is published, and the page says so instead of promising light (the SDK's contract
+ * since 0.1.2).
  */
 function noSchedule(region, date = kyivNow().date) {
   const r = REGIONS.get(region)
   if (!r?.ok || !r.groups.length) return false
-  const day = r.days?.[date]
-  return AWAITED_MEANS_NONE.has(region) && !!day && r.groups.every((g) => !day[g] || day[g].s === 'u')
+  const day = r.days?.[date] ?? HISTORY.days[date]?.[region]
+  return !!day && r.groups.every((g) => day[g]?.s === 'n')
 }
-const NO_OUTAGES = { s: 'n', i: [] }
 
 /** The source has something for at least one queue on some day; queues listed with every day unknown don't count */
 const published = (r) =>
@@ -145,9 +139,7 @@ const published = (r) =>
 
 /** A group's day: {s, i: [[start, end, kind]]} or undefined */
 function dayOf(region, group, date) {
-  const d = REGIONS.get(region)?.days?.[date]?.[group] ?? HISTORY.days[date]?.[region]?.[group]
-  if ((!d || d.s === 'u') && noSchedule(region, date)) return NO_OUTAGES
-  return d
+  return REGIONS.get(region)?.days?.[date]?.[group] ?? HISTORY.days[date]?.[region]?.[group]
 }
 
 /** 'on' | 'off' | 'maybe' | 'unknown' */

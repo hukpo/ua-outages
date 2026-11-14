@@ -1,10 +1,15 @@
+import { getEventListeners } from 'node:events'
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../src/client.js'
 import { OutageError } from '../src/errors.js'
 import { Http, type FetchLike } from '../src/http.js'
+import { scheduleFromImages } from '../src/providers/image-schedule.js'
 import { ivanoFrankivskProvider } from '../src/providers/ivano-frankivsk.js'
 import { kirovohradProvider } from '../src/providers/kirovohrad.js'
+import type { Provider } from '../src/providers/provider.js'
 import { ternopilProvider } from '../src/providers/ternopil.js'
+import { unpublished } from '../src/schedule.js'
+import type { RegionSchedule } from '../src/types.js'
 import { mapLimit } from '../src/util.js'
 import { fixture, mockFetch } from './helpers.js'
 
@@ -286,5 +291,146 @@ describe('bot checks on error statuses', () => {
       ++n === 1 ? new Response('oops', { status: 500 }) : new Response('{"ok":true}')
     await expect(new Http({ fetch }).json('https://example.ua/')).resolves.toEqual({ ok: true })
     expect(n).toBe(2)
+  })
+})
+
+// Regressions for what the independent (GPT) review of this change found
+describe('cancellation edge cases', () => {
+  it('leaves no unhandled rejection when the abort lands while the fetch is failing', async () => {
+    const seen: unknown[] = []
+    const onUnhandled = (e: unknown) => seen.push(e)
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      const ctrl = new AbortController()
+      const fetch: FetchLike = () => {
+        ctrl.abort()
+        return Promise.reject(new Error('connection reset'))
+      }
+      const http = new Http({ fetch }).withSignal(ctrl.signal)
+      await expect(http.text('https://example.ua/')).rejects.toMatchObject({ name: 'AbortError' })
+      await tick()
+      expect(seen).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  it('cancels a shared session load (and its retry) when its only caller gives up', async () => {
+    let release: (() => void) | null = null
+    const gate = new Promise<void>((r) => (release = r))
+    const calls: string[] = []
+    const fetch: FetchLike = async (url, init) => {
+      calls.push(url)
+      await gate
+      init?.signal?.throwIfAborted()
+      return new Response('upstream down', { status: 503 })
+    }
+    const client = new OutageClient({ fetch, cacheTtlMs: 0, providers: [kirovohradProvider()] })
+    const ctrl = new AbortController()
+    const pending = client.getSchedules('kirovohrad', { signal: ctrl.signal })
+    await tick()
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    release!()
+    await tick()
+    // the 503 would normally be retried once; nobody waits for it, so it isn't
+    expect(calls).toHaveLength(1)
+  })
+
+  it('cancels the address lookup of a health check too', async () => {
+    const { fetch, calls } = hangingFetch()
+    const provider: Provider = {
+      info: {
+        id: 'sumy',
+        name: 'test',
+        operator: 'test',
+        website: 'https://example.ua/',
+        capabilities: { schedule: true, addressSearch: true },
+      },
+      sampleAddress: { street: 'Соборна', house: '1' },
+      getSchedules: async (ctx) => unpublished('sumy', ['1.1'], ctx.now()),
+      lookupAddress: async (ctx) => {
+        await ctx.http.text('https://example.ua/lookup')
+        throw new Error('unreachable')
+      },
+    }
+    const client = new OutageClient({ fetch, cacheTtlMs: 0, providers: [provider] })
+    const ctrl = new AbortController()
+    const pending = client.healthCheck({ address: true, signal: ctrl.signal })
+    await tick()
+    expect(calls).toHaveLength(1)
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(calls[0]!.init?.signal?.aborted).toBe(true)
+  })
+
+  it('reports a cancelled image read as cancelled, not as an unreadable image', async () => {
+    const { fetch, calls } = hangingFetch()
+    const ctrl = new AbortController()
+    const ctx = {
+      http: new Http({ fetch }).withSignal(ctrl.signal),
+      now: () => new Date(),
+      signal: ctrl.signal,
+    }
+    const at = new Date()
+    const pending = scheduleFromImages(
+      ctx,
+      'volyn',
+      [
+        {
+          date: '2026-11-15',
+          images: [
+            { path: '/a.png', at },
+            { path: '/b.png', at },
+          ],
+        },
+      ],
+      (p) => `https://example.ua${p}`,
+      { columns: 24, rows: 12, tables: 1, halves: false, palette: { on: [255, 255, 255], off: [0, 0, 0] } },
+    )
+    await tick()
+    ctrl.abort()
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('never lets an older cancellable fetch overwrite a newer cached schedule', async () => {
+    const resolvers: ((s: RegionSchedule) => void)[] = []
+    const provider: Provider = {
+      info: {
+        id: 'sumy',
+        name: 'test',
+        operator: 'test',
+        website: 'https://example.ua/',
+        capabilities: { schedule: true, addressSearch: false },
+      },
+      getSchedules: () => new Promise((r) => resolvers.push(r)),
+    }
+    const client = new OutageClient({ providers: [provider] })
+    const schedule = (updatedAt: string) => ({ ...unpublished('sumy', ['1.1'], new Date()), updatedAt })
+    const older = client.getSchedules('sumy', { signal: new AbortController().signal })
+    await new Promise((r) => setTimeout(r, 2))
+    const newer = client.getSchedules('sumy', { fresh: true })
+    resolvers[1]!(schedule('NEW'))
+    await newer
+    resolvers[0]!(schedule('OLD'))
+    await older
+    await tick()
+    expect((await client.getSchedules('sumy')).updatedAt).toBe('NEW')
+  })
+
+  it('on Node 20.0–20.2 (no AbortSignal.any) leaves no listeners on the caller signal once requests are over', async () => {
+    const any = AbortSignal.any
+    // @ts-expect-error simulate an older Node 20
+    delete AbortSignal.any
+    try {
+      const ctrl = new AbortController()
+      const http = new Http({ fetch: async () => new Response('ok'), timeoutMs: 20 }).withSignal(ctrl.signal)
+      for (let i = 0; i < 12; i++) await http.text('https://example.ua/')
+      await new Promise((r) => setTimeout(r, 60))
+      expect(getEventListeners(ctrl.signal, 'abort')).toHaveLength(0)
+    } finally {
+      AbortSignal.any = any
+    }
   })
 })

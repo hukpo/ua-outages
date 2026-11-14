@@ -31,10 +31,13 @@ export async function scheduleFromImages(
     let lastError = ''
     let read = false
     for (const img of images) {
+      ctx.signal?.throwIfAborted()
       let cells
       try {
         cells = readScheduleTable(decodePng(await ctx.http.bytes(url(img.path), { region })), layout)
       } catch (e) {
+        // a cancelled call is not an unreadable image
+        ctx.signal?.throwIfAborted()
         if (e instanceof OutageError) throw e
         lastError = `${img.path}: ${(e as Error).message}`
         continue

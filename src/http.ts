@@ -29,8 +29,6 @@ export interface RequestOptions {
    * the built-in fetch only; a custom `fetch` handles TLS itself.
    */
   ca?: string[]
-  /** Cancels this request, on top of the signal the `Http` instance may be bound to */
-  signal?: AbortSignal
 }
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
@@ -86,7 +84,7 @@ export class Http {
     opts: RequestOptions = {},
   ): Promise<{ body: string; headers: Headers; status: number }> {
     const res = await this.request(url, opts)
-    const signal = this.signalFor(opts)
+    const signal = this.signal
     const body = opts.encoding
       ? new TextDecoder(opts.encoding).decode(await abortable(res.arrayBuffer(), signal))
       : await abortable(res.text(), signal)
@@ -107,7 +105,7 @@ export class Http {
   /** Binary body with the response headers (e.g. Last-Modified of an image) */
   async file(url: string, opts: RequestOptions = {}): Promise<{ bytes: Uint8Array; headers: Headers }> {
     const res = await this.request(url, opts)
-    const bytes = await abortable(res.arrayBuffer(), this.signalFor(opts))
+    const bytes = await abortable(res.arrayBuffer(), this.signal)
     return { bytes: new Uint8Array(bytes), headers: res.headers }
   }
 
@@ -131,14 +129,8 @@ export class Http {
     return f
   }
 
-  private signalFor(opts: RequestOptions): AbortSignal | undefined {
-    if (!opts.signal) return this.signal
-    if (!this.signal) return opts.signal
-    return anySignal([this.signal, opts.signal])
-  }
-
   private async request(url: string, opts: RequestOptions): Promise<Response> {
-    const signal = this.signalFor(opts)
+    const signal = this.signal
     const headers: Record<string, string> = {
       'User-Agent': this.userAgent,
       Accept: 'application/json, text/html;q=0.9, */*;q=0.8',
@@ -164,7 +156,7 @@ export class Http {
             method: opts.method ?? (body ? 'POST' : 'GET'),
             headers,
             body,
-            signal: signal ? anySignal([timeout, signal]) : timeout,
+            signal: signal ? withTimeout(signal, timeout) : timeout,
             redirect: 'follow',
           }),
           signal,
@@ -201,16 +193,26 @@ export class Http {
   }
 }
 
-/** `AbortSignal.any`, which Node 20 has only from 20.3 */
-function anySignal(signals: AbortSignal[]): AbortSignal {
-  if (typeof AbortSignal.any === 'function') return AbortSignal.any(signals)
+/**
+ * Aborts on the caller's signal or the per-request timeout: `AbortSignal.any`, which Node 20 has
+ * only from 20.3. The fallback's listeners go away when either fires, and the timeout always
+ * fires, so a caller's signal shared by many requests doesn't collect them.
+ */
+function withTimeout(caller: AbortSignal, timeout: AbortSignal): AbortSignal {
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([timeout, caller])
   const ctrl = new AbortController()
-  for (const s of signals) {
-    if (s.aborted) {
-      ctrl.abort(s.reason)
-      break
+  if (caller.aborted) ctrl.abort(caller.reason)
+  else if (timeout.aborted) ctrl.abort(timeout.reason)
+  else {
+    const onCaller = () => ctrl.abort(caller.reason)
+    const onTimeout = () => ctrl.abort(timeout.reason)
+    const cleanup = () => {
+      caller.removeEventListener('abort', onCaller)
+      timeout.removeEventListener('abort', onTimeout)
     }
-    s.addEventListener('abort', () => ctrl.abort(s.reason), { once: true })
+    caller.addEventListener('abort', onCaller, { once: true })
+    timeout.addEventListener('abort', onTimeout, { once: true })
+    ctrl.signal.addEventListener('abort', cleanup, { once: true })
   }
   return ctrl.signal
 }

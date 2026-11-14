@@ -40,7 +40,11 @@ export function cookieHeader(headers: Headers): string {
 /** Settles like `promise`, or rejects with the signal's reason as soon as it aborts. */
 export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise
-  if (signal.aborted) return Promise.reject(signal.reason)
+  if (signal.aborted) {
+    // nobody waits for it any more; a later rejection must not surface as unhandled
+    promise.catch(() => {})
+    return Promise.reject(signal.reason)
+  }
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(signal.reason)
     signal.addEventListener('abort', onAbort, { once: true })
@@ -55,4 +59,44 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
       },
     )
   })
+}
+
+/**
+ * Work several calls wait on (a session, a directory). It runs on its own signal, which aborts
+ * only when every caller that joined with a signal has given up; a caller without a signal keeps
+ * it running. One caller cancelling never fails the others.
+ */
+export class SharedTask<T> {
+  private readonly ctrl = new AbortController()
+  private waiters = 0
+  private pinned = false
+  private settled = false
+  readonly promise: Promise<T>
+
+  constructor(run: (signal: AbortSignal) => Promise<T>) {
+    this.promise = run(this.ctrl.signal)
+    this.promise.then(
+      () => (this.settled = true),
+      () => (this.settled = true),
+    )
+  }
+
+  /** Abandoned by all its callers: start a new one instead of joining */
+  get aborted(): boolean {
+    return this.ctrl.signal.aborted
+  }
+
+  join(signal?: AbortSignal): Promise<T> {
+    if (!signal) {
+      this.pinned = true
+      return this.promise
+    }
+    this.waiters++
+    // before the task settles a caller can only leave by aborting; after, aborting is moot
+    return abortable(this.promise, signal).catch((e) => {
+      if (signal.aborted && --this.waiters === 0 && !this.pinned && !this.settled)
+        this.ctrl.abort(signal.reason)
+      throw e
+    })
+  }
 }

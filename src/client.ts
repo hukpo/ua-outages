@@ -111,7 +111,11 @@ export class OutageClient {
         // a cancellable call isn't shared while it runs, so another caller never inherits its
         // cancellation; what it fetched is cached once it arrives
         value.then(
-          () => this.cache.set(region, { at: now, value }),
+          () => {
+            // unless a request started later has already been cached
+            const current = this.cache.get(region)
+            if (!current || current.at <= now) this.cache.set(region, { at: now, value })
+          },
           () => {},
         )
       } else {
@@ -147,15 +151,25 @@ export class OutageClient {
     query: string,
     opts: SearchOptions & { district?: string } = {},
   ): Promise<City[]> {
+    return this.searchCitiesIn(this.ctx, region, query, opts)
+  }
+
+  private async searchCitiesIn(
+    ctx: ProviderContext,
+    region: RegionId,
+    query: string,
+    opts: SearchOptions & { district?: string },
+  ): Promise<City[]> {
     const p = this.provider(region)
     if (!p.searchCities) return []
     const found = await this.rankedSearch(
+      ctx,
       region,
       'settlement',
       query,
       'cities',
       !!p.remoteSearch?.cities,
-      (q) => p.searchCities!(this.ctx, q),
+      (q) => p.searchCities!(ctx, q),
       opts.district ? MAX_CANDIDATES : (opts.limit ?? DEFAULT_LIMIT),
     )
     if (!opts.district) return found
@@ -175,16 +189,26 @@ export class OutageClient {
     query: string,
     opts: SearchOptions & { city?: City } = {},
   ): Promise<Street[]> {
+    return this.searchStreetsIn(this.ctx, region, query, opts)
+  }
+
+  private async searchStreetsIn(
+    ctx: ProviderContext,
+    region: RegionId,
+    query: string,
+    opts: SearchOptions & { city?: City },
+  ): Promise<Street[]> {
     const p = this.addressProvider(region)
     if (p.searchCities && !opts.city)
       throw new OutageError('not-found', `${p.info.name}: pick a city first`, { region })
     return this.rankedSearch(
+      ctx,
       region,
       'street',
       query,
       `streets:${opts.city?.id ?? ''}`,
       !!p.remoteSearch?.streets,
-      (q) => p.searchStreets!(this.ctx, q, opts.city),
+      (q) => p.searchStreets!(ctx, q, opts.city),
       opts.limit ?? DEFAULT_LIMIT,
     )
   }
@@ -205,9 +229,9 @@ export class OutageClient {
   async prefetch(region: RegionId, opts: { city?: City } = {}): Promise<void> {
     const p = this.provider(region)
     if (p.searchCities && !p.remoteSearch?.cities)
-      await this.candidates(region, 'cities', '', false, (q) => p.searchCities!(this.ctx, q))
+      await this.candidates(this.ctx, region, 'cities', '', false, (q) => p.searchCities!(this.ctx, q))
     if (opts.city && p.searchStreets && !p.remoteSearch?.streets)
-      await this.candidates(region, `streets:${opts.city.id}`, '', false, (q) =>
+      await this.candidates(this.ctx, region, `streets:${opts.city.id}`, '', false, (q) =>
         p.searchStreets!(this.ctx, q, opts.city),
       )
   }
@@ -217,24 +241,35 @@ export class OutageClient {
    * or settlement can't be picked with confidence, throws `not-found` listing the suggestions.
    */
   async findGroup(region: RegionId, address: AddressQuery): Promise<GroupMatch> {
+    return this.findGroupIn(this.ctx, region, address)
+  }
+
+  private async findGroupIn(
+    ctx: ProviderContext,
+    region: RegionId,
+    address: AddressQuery,
+  ): Promise<GroupMatch> {
     const direct = this.provider(region)
-    if (direct.lookupAddress) return direct.lookupAddress(this.ctx, address)
+    if (direct.lookupAddress) return direct.lookupAddress(ctx, address)
     const p = this.addressProvider(region)
 
     let city: City | undefined
     if (p.searchCities) {
       if (!address.city)
         throw new OutageError('not-found', `${p.info.name}: specify a city or village`, { region })
-      const cities = await this.searchCities(region, address.city, { limit: 10, district: address.district })
+      const cities = await this.searchCitiesIn(ctx, region, address.city, {
+        limit: 10,
+        district: address.district,
+      })
       city = choose(address.city, cities, 'city', region, (c) =>
         c.district ? `${c.name} (${c.district})` : c.name,
       )
     }
 
-    const streets = await this.searchStreets(region, address.street, { city, limit: 10 })
+    const streets = await this.searchStreetsIn(ctx, region, address.street, { city, limit: 10 })
     const street = choose(address.street, streets, 'street', region, (s) => s.name)
 
-    const houses = await p.searchHouses!(this.ctx, street, address.house)
+    const houses = await p.searchHouses!(ctx, street, address.house)
     const want = normalizeHouse(address.house)
     const house = houses.find((h) => normalizeHouse(h.number) === want)
     if (!house)
@@ -248,7 +283,7 @@ export class OutageClient {
         }`,
         { region },
       )
-    return p.groupOf!(this.ctx, house, street, city)
+    return p.groupOf!(ctx, house, street, city)
   }
 
   /**
@@ -257,6 +292,7 @@ export class OutageClient {
    * query alone finds little, so a typo in one part of the name still lands.
    */
   private async rankedSearch<T extends { id: string; name: string }>(
+    ctx: ProviderContext,
     region: RegionId,
     kind: NameKind,
     query: string,
@@ -266,13 +302,17 @@ export class OutageClient {
     limit: number,
   ): Promise<(T & { score: number })[]> {
     if (!query.trim()) return []
-    let pool = await this.candidates(region, scope, query, remote, fetch)
+    let pool = await this.candidates(ctx, region, scope, query, remote, fetch)
     let ranked = rankByName(query, pool, (t) => t.name, kind)
     // a typo defeats the operator's substring search: retry with fragments of the word
     if (remote && (ranked[0]?.score ?? 0) < 0.9) {
       const extra = await Promise.all(
         searchFragments(query, kind).map((f) =>
-          this.candidates(region, scope, f, true, fetch).catch(() => []),
+          this.candidates(ctx, region, scope, f, true, fetch).catch(() => {
+            // a cancelled lookup stops here; any other failure of a fragment is just no extra hits
+            ctx.signal?.throwIfAborted()
+            return []
+          }),
         ),
       )
       const seen = new Map(pool.map((t) => [t.id, t]))
@@ -285,6 +325,7 @@ export class OutageClient {
 
   /** Candidate lists, cached briefly: whole directories per scope, server results per term. */
   private candidates<T>(
+    ctx: ProviderContext,
     region: RegionId,
     scope: string,
     query: string,
@@ -293,11 +334,19 @@ export class OutageClient {
   ): Promise<T[]> {
     const key = `${region}|${scope}|${remote ? query.trim().toLowerCase() : ''}`
     const hit = this.searchCache.get(key)
-    if (hit && Date.now() - hit.at < Math.max(this.cacheTtlMs, 60_000)) return hit.value as Promise<T[]>
+    if (hit && Date.now() - hit.at < Math.max(this.cacheTtlMs, 60_000))
+      return abortable(hit.value as Promise<T[]>, ctx.signal)
     const value = fetch(query)
-    if (this.searchCache.size > 500) this.searchCache.clear()
-    this.searchCache.set(key, { at: Date.now(), value })
-    value.catch(() => this.searchCache.delete(key))
+    const store = () => {
+      if (this.searchCache.size > 500) this.searchCache.clear()
+      this.searchCache.set(key, { at: Date.now(), value })
+    }
+    // a cancellable lookup isn't shared while it runs, so no other caller inherits its cancellation
+    if (ctx.signal) value.then(store, () => {})
+    else {
+      store()
+      value.catch(() => this.searchCache.delete(key))
+    }
     return value
   }
 
@@ -320,9 +369,10 @@ export class OutageClient {
         if (!opts.address || !p.sampleAddress || !p.info.capabilities.addressSearch) return health
         signal?.throwIfAborted()
         try {
-          const m = await this.findGroup(id, p.sampleAddress)
+          const m = await this.findGroupIn(this.context(signal), id, p.sampleAddress)
           return { ...health, address: { ok: true, group: m.group } }
         } catch (e) {
+          if (signal?.aborted) throw signal.reason
           return { ...health, address: { ok: false, message: (e as Error).message } }
         }
       },
