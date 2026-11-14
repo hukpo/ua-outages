@@ -10,6 +10,10 @@ TypeScript SDK for Ukrainian power outage schedules (графіки погоди
 
 **See it running: [hukpo.github.io/ua-outages](https://hukpo.github.io/ua-outages/).** A live map of Ukraine where every light is a house in one of the groups and goes dark when its group is scheduled off, plus a countdown for your group, calendar feeds, shared "power everywhere" windows for several addresses, and an archive. It is a static page rebuilt by GitHub Actions every 15 minutes from this SDK (`site/`, `.github/workflows/site.yml`).
 
+```sh
+npm install ua-outages
+```
+
 ```ts
 import { OutageClient, stateAt, nextOutage } from 'ua-outages'
 
@@ -210,6 +214,15 @@ npm run health -- --address
 ```
 
 Adding a region: implement `Provider` (`src/providers/provider.ts`) with `getSchedules` and, if the operator has a lookup, the address methods. Save real responses as fixtures, write tests next to the others, and register the provider in `src/providers/index.ts`.
+
+## Releasing
+
+Bump the version and push the tag; the Release workflow (`.github/workflows/release.yml`) tests, builds and publishes it to npm with provenance:
+
+```sh
+npm version patch   # or minor / major
+git push --follow-tags
+```
 
 ## License
 
