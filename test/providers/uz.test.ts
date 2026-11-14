@@ -8,6 +8,7 @@ const KYIV = fixture('uz/kyiv.2026-11-08.html')
 const VINNYTSIA = fixture('uz/vinnytsia.2026-11-08.html')
 const DNIPRO = fixture('uz/dnipro.2026-11-08.html')
 const VOLYN = fixture('uz/volyn.2026-11-08.html')
+const KHARKIV = fixture('uz/kharkiv.2026-11-14.html')
 
 const hhmm = (s: ReturnType<typeof parseUzPage>, g: string) =>
   s.schedules[g]![0]!.intervals.map((i) => `${i.from.slice(11, 16)}–${i.to.slice(11, 16)}`)
@@ -47,6 +48,15 @@ describe('Укрзалізниця', () => {
     const s = parseUzPage(DNIPRO, NOW, 'uz-dnipro')
     expect(hhmm(s, '1.1')).toEqual(['03:30–07:00', '10:30–17:30'])
     expect(hhmm(s, '6.2')).toEqual(['00:00–03:30', '10:30–14:00', '17:30–00:00'])
+  })
+
+  it('reads a span with a typo from its neighbours', () => {
+    // the Kharkiv table heads its second column "11500 14.30" (for 11.00–14.30)
+    const s = parseUzPage(KHARKIV, new Date('2026-11-14T22:00:00+02:00'), 'uz-kharkiv')
+    expect(s.schedules['5.1']![0]!.date).toBe('2026-11-15')
+    expect(hhmm(s, '5.1')).toEqual(['11:00–14:30', '21:30–22:00'])
+    expect(hhmm(s, '3.1')).toEqual(['08:00–11:00', '18:00–21:30'])
+    expect(hhmm(s, '6.2')).toEqual(['11:00–14:30', '21:30–00:00'])
   })
 
   it('has no groups when no schedule is published', () => {

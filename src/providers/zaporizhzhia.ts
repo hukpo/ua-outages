@@ -1,4 +1,5 @@
 import { OutageError } from '../errors.js'
+import { STANDARD_GROUPS } from '../image/table.js'
 import type { RegionInfo } from '../types.js'
 import { postsToSchedule, type SchedulePost } from './posts.js'
 import type { Provider } from './provider.js'
@@ -6,7 +7,8 @@ import type { Provider } from './provider.js'
 /**
  * Zaporizhzhiaoblenergo posts schedules on a WordPress archive page, newest first; corrections
  * are new posts ("ОНОВЛЕНО ГПВ НА 5 ЛИСТОПАДА … (оновлено 21:25)"). The posts carry no machine
- * timestamps, so page order decides which version is current. No address lookup is available.
+ * timestamps, so page order decides which version is current. A post lists only the groups that
+ * have outages that day; the rest have none. No address lookup is available.
  */
 const INFO: RegionInfo = {
   id: 'zaporizhzhia',
@@ -37,7 +39,7 @@ export function parseZoe(html: string, now: Date) {
     // first on the page = newest
     publishedAt: new Date(now.getTime() - i * 1000).toISOString(),
   }))
-  const s = postsToSchedule(INFO.id, posts, now)
+  const s = postsToSchedule(INFO.id, posts, now, { omitted: 'none', groups: STANDARD_GROUPS })
   // the page gives no edit times; don't pretend the fetch time is one
   return { ...s, updatedAt: null }
 }

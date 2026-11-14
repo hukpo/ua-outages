@@ -139,6 +139,27 @@ function span(cell: string): [number, number] | null {
   return a < 1440 && b <= 1440 ? [a, b] : null
 }
 
+/**
+ * The span columns run back to back, so a cell with a typo ("11500 14.30" for "11.00 14.30")
+ * is read from its neighbours: it starts where the previous span ends, and its one legible time
+ * must be where the next span starts (or the end of the day, for the last column).
+ */
+function mendSpans(cells: string[]): ([number, number] | null)[] {
+  const spans = cells.map(span)
+  spans.forEach((s, i) => {
+    if (s || i === 0) return
+    const prev = spans[i - 1]
+    const times = [...cells[i]!.matchAll(/(\d{1,2})\s*[-.:]\s*(\d{2})/g)].map(
+      (m) => Number(m[1]) * 60 + Number(m[2]),
+    )
+    if (!prev || times.length !== 1) return
+    const end = times[0] === 0 ? 1440 : times[0]!
+    const next = spans[i + 1] ?? (i === cells.length - 1 ? ([1440, 1440] as [number, number]) : null)
+    if (next && end > prev[1] && end === next[0]) spans[i] = [prev[1], end]
+  })
+  return spans
+}
+
 /** "1(1,2) 2(1) 3" → ["1.1", "1.2", "2.1", "3.1", "3.2"] */
 function groupsIn(cell: string): string[] {
   const out: string[] = []
@@ -161,7 +182,7 @@ function parseTable(rows: string[][]): Record<string, MinuteSlot[]> | null {
   // time spans as columns
   const spansAt = rows.findIndex((r) => /годин/i.test(r[0] ?? ''))
   if (spansAt !== -1) {
-    const spans = rows[spansAt]!.slice(1).map(span)
+    const spans = mendSpans(rows[spansAt]!.slice(1))
     const groupsRow = rows.slice(spansAt + 1).find((r) => /черг/i.test(r[0] ?? ''))
     if (!groupsRow || spans.some((s) => !s)) return null
     groupsRow.slice(1).forEach((cell, i) => {

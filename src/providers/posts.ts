@@ -15,11 +15,26 @@ export interface SchedulePost {
   publishedAt: string
 }
 
+export interface PostsOptions {
+  /**
+   * What a group missing from a day's post means. 'unknown' (default): the post didn't say.
+   * 'none': the operator lists only the groups that have outages, so it has none that day.
+   */
+  omitted?: 'unknown' | 'none'
+  /** Groups the region always has; with `omitted: 'none'` they all get a day, listed or not */
+  groups?: readonly string[]
+}
+
 /**
  * Newest post per date wins. Posts without group lines (announcements, emergency notices)
  * are ignored. Only yesterday and later is kept.
  */
-export function postsToSchedule(region: RegionId, posts: readonly SchedulePost[], now: Date): RegionSchedule {
+export function postsToSchedule(
+  region: RegionId,
+  posts: readonly SchedulePost[],
+  now: Date,
+  opts: PostsOptions = {},
+): RegionSchedule {
   const byDate = new Map<string, { at: number; groups: ReturnType<typeof parseGroupLines> }>()
   const from = addDays(kyivDate(now), -1)
 
@@ -38,7 +53,7 @@ export function postsToSchedule(region: RegionId, posts: readonly SchedulePost[]
   }
 
   const dates = [...byDate.keys()].sort()
-  const groupSet = new Set<string>()
+  const groupSet = new Set<string>(dates.length ? (opts.groups ?? []) : [])
   for (const d of byDate.values()) for (const g of Object.keys(d.groups)) groupSet.add(g)
   const groups = [...groupSet].sort(compareGroups)
 
@@ -46,8 +61,10 @@ export function postsToSchedule(region: RegionId, posts: readonly SchedulePost[]
   for (const g of groups)
     schedules[g] = dates.map((d) => {
       const slots = byDate.get(d)!.groups[g]
-      // a group missing from that day's post: we don't know, rather than "no outages"
-      return slots ? makeDay(d, slots) : { date: d, status: 'unknown' as const, intervals: [] }
+      if (slots) return makeDay(d, slots)
+      // a group missing from that day's post: no outages if the operator lists only the
+      // groups that have them, otherwise we just don't know
+      return opts.omitted === 'none' ? makeDay(d, []) : { date: d, status: 'unknown' as const, intervals: [] }
     })
 
   const newest = Math.max(0, ...[...byDate.values()].map((d) => d.at).filter(Number.isFinite))

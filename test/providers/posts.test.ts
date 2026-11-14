@@ -84,4 +84,24 @@ describe('Zaporizhzhiaoblenergo', () => {
   it('rejects a page without posts', () => {
     expect(() => parseZoe('<html></html>', NOW)).toThrow(/no posts/)
   })
+
+  it('reads a group left out of a post as no outages, not unknown', () => {
+    // the 18:21 correction for Nov 14 lists only six groups; 1.1 had 23:30–24:00 before it
+    const s = parseZoe(
+      fixture('zaporizhzhia/outage-page-2026-11-14.html'),
+      new Date('2026-11-14T23:30:00+02:00'),
+    )
+    expect(s.groups).toHaveLength(12)
+    const nov14 = (g: string) => s.schedules[g]!.find((d) => d.date === '2026-11-14')!
+    expect(nov14('1.1')).toMatchObject({ status: 'scheduled', intervals: [] })
+    expect(hhmm(nov14('3.1'))).toEqual(['00:00-01:00', '15:30-19:00'])
+    // and on Nov 15, where 2.2 isn't listed
+    const nov15 = s.schedules['2.2']!.find((d) => d.date === '2026-11-15')!
+    expect(nov15).toMatchObject({ status: 'scheduled', intervals: [] })
+    expect(
+      Object.values(s.schedules)
+        .flat()
+        .some((d) => d.status === 'unknown'),
+    ).toBe(false)
+  })
 })
