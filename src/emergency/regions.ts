@@ -20,7 +20,10 @@ export interface EmergencyConfig {
   channels?: ChannelConfig[]
   yasno?: { regionId: number; dsoId: number }
   mykolaivFeed?: boolean
-  /** Oblast adjective stem in Ukrenergo posts ("Волинськ"), for the national fallback */
+  /**
+   * The oblast's names in Ukrenergo posts, as pattern stems ("Волинськ|Волин": "Волинській
+   * області", "на Волині"), for the national fallback. Case-sensitive: "Рівн" alone is "рівня"
+   */
   ukrenergo?: string
   /** An apply without a later word ends after this long, default 12 h */
   ttlHours?: number
@@ -171,10 +174,13 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
   sumy: { channels: [oblenergo('SumyEnergo', /Сум/u)], ttlHours: 6 },
   poltava: { channels: [oblenergo('poltavaOE', /Полтав/u)] },
   mykolaiv: { mykolaivFeed: true, channels: [oblenergo('mk_energy_ua', /Миколаїв/u)] },
-  chernivtsi: { channels: [oblenergo('oe_cv_ua', /Чернівець|Чернівц|Буковин/u)], ukrenergo: 'Чернівецьк' },
-  zakarpattia: { ukrenergo: 'Закарпатськ' },
-  volyn: { ukrenergo: 'Волинськ' },
-  rivne: { ukrenergo: 'Рівненськ' },
+  chernivtsi: {
+    channels: [oblenergo('oe_cv_ua', /Чернівець|Чернівц|Буковин/u)],
+    ukrenergo: 'Чернівецьк|Чернівеччин|Буковин',
+  },
+  zakarpattia: { ukrenergo: 'Закарпат' },
+  volyn: { ukrenergo: 'Волинськ|Волин(?:і|ь|щин)' },
+  rivne: { ukrenergo: 'Рівненськ|Рівненщин' },
 }
 
 /**
