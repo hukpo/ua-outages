@@ -106,3 +106,7 @@ Conversion: for each entry, group = `cherga_n`. For each interval, start = today
 - Kerber0ss/esvitlo-web (no license): TS client for this same next-api, including decryption.
 - OlegVapnik/svitlo `docs/osr-direct-sources.md` (no license): lists Sumy as `url-only`.
 - yaroslav2901/OE_OUTAGE_DATA has no Sumy file.
+
+## Emergency schedules (ГАВ)
+
+`queues-by-street` rows hold `[ГАВ, АЧР, СГАВ, ГПВ, САВН, ГОП, ГОЕ]`; indexes 0–2 are returned in `emergency`. Live ГАВ status: @SumyEnergo (ranges, swaps; never a cancel, 6 h TTL). See [emergency.md](emergency.md).

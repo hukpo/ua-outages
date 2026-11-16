@@ -72,3 +72,7 @@ Body is `application/x-www-form-urlencoded` (the SPA builds `URLSearchParams`). 
 - strange-v/power-outage-schedule-card (MIT) — Home Assistant config using `/schedule-by-search`
 - odykyi-dev/shutdown-notification-bot (MIT), BogdanGrushetsky/telegram-outage-bot (no license)
 - OlegVapnik/svitlo `docs/osr-direct-sources.md` (no license) — survey of official sources for all regions
+
+## Emergency schedules (ГАВ)
+
+`schedule-by-search` also returns `current.gav.queue` / `current.sgav.queue`, returned in `emergency`. Live ГАВ status: @prykarpattyaoblenergo_official, which names queue numbers and changes ("Зміни в ГАВ станом на 21:00"). See [emergency.md](emergency.md).

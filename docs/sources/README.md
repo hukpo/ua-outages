@@ -5,3 +5,5 @@ failure modes, as found while writing the providers (November 2026). Read the re
 fixing a broken provider. Notes marked UNVERIFIED were not confirmed against a live response.
 
 The real responses used as test fixtures are in `test/fixtures/<region>/`.
+
+Emergency schedules (ГАВ / СГАВ / АЧР) for all regions: [emergency.md](emergency.md).

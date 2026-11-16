@@ -60,3 +60,7 @@ curl --compressed -X POST https://energy.volyn.ua/spozhyvacham/perervy-u-elektro
 ## References
 
 - OlegVapnik/svitlo docs (no license) — lists inneti API only.
+
+## Emergency schedules (ГАВ)
+
+The `cherga` table has a 6th column "Черга у ГАВ", returned in `emergency`. No operator channel announces ГАВ; live status falls back to @Ukrenergo. See [emergency.md](emergency.md).

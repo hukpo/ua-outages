@@ -55,3 +55,7 @@ Current: `value: ""` everywhere; `pw_gpv_image_today.date = 2026-06-30T20:08:40+
 ## References
 
 - OlegVapnik/svitlo `docs/osr-direct-sources.md` (no license).
+
+## Emergency schedules (ГАВ)
+
+`pw_address_queues` rows also carry `chergGav` / `chergSgav` / `chergAchr`, returned in `emergency`. The operator doesn't announce ГАВ; live status falls back to @Ukrenergo. See [emergency.md](emergency.md).

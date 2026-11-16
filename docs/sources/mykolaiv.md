@@ -70,3 +70,7 @@ No explicit "updated at" for the schedule as a whole; use max `series[].updated_
 
 - https://github.com/serjace/svitlo-widget — Android widget; `Api.java`, `Schedule.java`, `AddAddressActivity.java`, `Works.java`, `Updater.java`. **No license file** (all rights reserved — read for reference only, don't copy code).
 - https://github.com/OlegVapnik/svitlo `docs/osr-direct-sources.md` — lists the same endpoints as `verified`. No license.
+
+## Emergency schedules (ГАВ)
+
+`outage-queue` also lists `outageType` 1 (ГАВ) and 2 (СГАВ), returned in `emergency`. Live ГАВ status: the outage feed `POST /outage/api/v1/outage` (`reason` "Графік аварійних відключень | ГАВ черга N"). See [emergency.md](emergency.md).

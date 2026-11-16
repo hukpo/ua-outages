@@ -83,3 +83,7 @@ Base `https://power-api.loe.lviv.ua/api`, all GET, no auth. Some endpoints retur
 ## References
 
 - https://github.com/BlackPencil-69/loe-outage-monitor (MIT) — Python parser of the same rawHtml, with tests.
+
+## Emergency schedules (ГАВ)
+
+`pw_accounts` rows also carry `chergGav`, `chergSgav`, `chergAchr` ("Не входить", "6", "20", "10 (48.2Гц)"): `findGroup` returns their distinct values in `emergency`. Live ГАВ status: @lvivoblenergo, whose cancels are edits of the apply post ("UPD. … скасовані"). See [emergency.md](emergency.md).

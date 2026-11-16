@@ -107,7 +107,7 @@ The same option works for proxies, caching, logging and tests. When an operator 
 ### Schedules
 
 ```ts
-outages.regions() // RegionInfo[]: id, name, operator, capabilities
+outages.regions() // RegionInfo[]: id, name, operator, capabilities (schedule, addressSearch, streetSearch, emergency)
 await outages.getSchedules('lviv') // every group: { groups, schedules: { '1.1': DaySchedule[] }, updatedAt }
 await outages.getSchedule('lviv', '3.1') // one group; accepts "GPV3.1", "черга 3.1", …
 ```
@@ -183,6 +183,15 @@ People rarely know a street's official name, so matching is forgiving:
 
 `findGroup` picks a name on its own only when one match is clearly the best. Otherwise it throws `not-found` with suggestions, for example when "Соборна" is both a вулиця and a площа, or two villages share a name (pass `district` then). Some buildings belong to more than one group; you get those in `otherGroups`.
 
+Where the operator's lookup also says which emergency queues an address is in, the match carries them in `emergency` (omitted when the operator says nothing):
+
+```ts
+await outages.findGroup('sumy', { city: 'Конотоп', street: 'провулок 2-Й Миру', house: '3' })
+// { region: 'sumy', group: '2.2', …, emergency: { gav: ['6'], sgav: ['2'], achr: ['3'] } }
+```
+
+`gav` (ГАВ, the emergency schedule), `sgav` (СГАВ, the special one) and `achr` (АЧР, automatic load shedding by frequency) are numbered separately from ГПВ groups: "1" … "10", Lviv also "20", Mykolaiv also reserve queues "1(Р)". Values are distinct and sorted; a building with several accounts or connections can be in several. Regions that return them: Lviv, Ternopil, Zakarpattia (`chergGav`, `chergSgav`, `chergAchr`), Ivano-Frankivsk (ГАВ, СГАВ), Volyn ("Черга у ГАВ"), Khmelnytskyi (ГАВ, often empty), Sumy (ГАВ, АЧР, СГАВ), Poltava (ГАВ; "черга 0" counts as none) and Mykolaiv (ГАВ, СГАВ). The others publish no address → ГАВ mapping (Kharkiv says it can't by law), or hide it behind a captcha (Chernihiv) or a personal account number (Cherkasy).
+
 #### Autocomplete
 
 ```ts
@@ -196,6 +205,47 @@ const match = await outages.groupOf('lviv', houses[0], streets[0], city)
 ```
 
 Results come back ranked, best first, each with a `score` from 0 to 1. Most operators publish a whole directory: the SDK downloads it once and searches it locally, so later keystrokes cost nothing. For operators whose server does the searching (YASNO streets, Sumy, Khmelnytskyi), a misspelled query is also sent as word fragments, so a typo still finds the street. `capabilities.streetSearch` tells you whether a region supports autocomplete. Ivano-Frankivsk and Volyn only check a complete address, so there `findGroup` works but autocomplete doesn't.
+
+### Emergency schedules (ГАВ / СГАВ)
+
+Besides the hourly schedule (ГПВ), Ukrenergo can order emergency schedules: ГАВ, СГАВ, or "екстрені відключення" as DTEK calls them. They switch whole queues off within minutes, the published schedule usually stops applying, and they are announced only as posts. `getEmergency` reads those posts (and machine sources where there are some) and tells whether one is in force now:
+
+```ts
+if (outages.region('poltava').capabilities.emergency) {
+  const s = await outages.getEmergency('poltava')
+  // { state: 'active', kind: 'gav', since: '2026-11-09T09:44:00+02:00', queues: ['1','2','3','4','5'],
+  //   queueCount: 5, scheduleApplies: null, area: null, inferred: false,
+  //   message: { text: 'В області застосовано ГАВ! …', url: 'https://t.me/poltavaOE/4504', at: … }, source: 'telegram', … }
+}
+```
+
+- `state`: `active` (in force now), `inactive` (cancelled, or nothing announced in the last 48 h; then `kind` and `message` are null), `unknown` (the newest post names an emergency schedule, but what it says can't be read). Nothing posted is never an error.
+- `kind`: `gav`, `sgav`, or `emergency` when the operator doesn't say which (DTEK, "аварійні відключення").
+- `since`: the time in the text ("з 10:35", "О 9:44", "з 08 год. 24 хв.", "станом на 22:02"), else the post time. `endedAt`: the cancellation, or the inferred end.
+- `queues` / `queueCount`: the ГАВ queues off now, when the operator names them ("1-5 черга", "черги 3 та 4", "в повному обсязі" = all ten, "заміна черг: знеструмлюються 6-10, вмикаються 1-5"), or just how many ("10 черг"). Compare `queues` with `GroupMatch.emergency.gav` to tell a user whether their queue is off.
+- `scheduleApplies`: ГПВ continues alongside ("Також продовжують діяти ГПВ") or is suspended ("графіки не діють"); null when not said.
+- `area`: when only part of the region is affected ("м. Дніпро", "частині Голосієвського та Соломянського районів", "Ніжинському і Прилуцькому районах", "промислові споживачі").
+- `inferred`: many operators never post a cancellation. An announcement nobody followed up on for 12 h (Sumy: 6 h) counts as ended at that point.
+- `source`: `telegram` (the operator's channel), `yasno`, `api` (Mykolaiv's outage feed) or `ukrenergo` (the national channel, a low-confidence fallback).
+
+| region                          | source                                                                                                      | names queues           | posts cancellations                   |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------- |
+| Kyiv, Dnipro (DTEK)             | YASNO `EmergencyShutdowns` + @dtek_ua                                                                       | no                     | Kyiv yes; Dnipro only via YASNO       |
+| Kyiv region, Odesa, Donetsk     | @dtek_ua (posts by prefix: "Київщина:", "Одещина:" …)                                                       | no                     | mostly                                |
+| Dnipro (ЦЕК)                    | @cek_info + YASNO                                                                                           | no (ГАВ vs СГАВ only)  | yes                                   |
+| Poltava                         | @poltavaOE                                                                                                  | ranges, counts         | yes, with times                       |
+| Sumy                            | @SumyEnergo                                                                                                 | ranges, swaps          | never (6 h TTL)                       |
+| Ivano-Frankivsk                 | @prykarpattyaoblenergo_official                                                                             | queue numbers, changes | yes                                   |
+| Kirovohrad                      | @SvitloKropyvnytskyiMisto (the city's channel; the 21 district ones match)                                  | sometimes (СГАВ 1, 2)  | yes, with times                       |
+| Mykolaiv                        | outage feed (`reason: "… ГАВ черга N"`) + @mk_energy_ua                                                     | yes, from the feed     | rows end when power returns           |
+| Chernihiv, Lviv, Ternopil       | @chernigivoblenergo, @lvivoblenergo (edits "UPD … скасовані"), @ternopiloblenerho                           | counts                 | sometimes                             |
+| Zhytomyr, Kharkiv, Zaporizhzhia | @ztoe_ua (edits "UPD"), @kharkivenergy, @Zaporizhzhyaoblenergo_news                                         | no                     | Zhytomyr yes; Kharkiv rarely          |
+| Cherkasy, Khmelnytskyi          | @pat_cherkasyoblenergo, @khmelnytskoblenergo                                                                | no                     | never (TTL)                           |
+| Chernivtsi                      | @oe_cv_ua, then @Ukrenergo                                                                                  | no                     | unverified (history deleted)          |
+| Zakarpattia, Volyn, Rivne       | @Ukrenergo only, when it names the oblast                                                                   | no                     | rarely ("лише у Харківській області") |
+| Укрзалізниця (`uz-*`)           | none (Kherson isn't covered at all): `capabilities.emergency` is false, `getEmergency` throws `unsupported` |                        |                                       |
+
+Limits worth knowing: the posts are free text, read with patterns built from the operators' real wording; a new phrasing may read as nothing (`inactive`) or `unknown` until the patterns learn it. DTEK says "екстрені відключення" for ГАВ and "аварійні" for local damage after attacks; the latter is not reported. Telegram doesn't show when a post was edited, so an "UPD … скасовано" cancellation has `endedAt: null`. Ukrenergo names oblasts only sometimes, so for Zakarpattia, Volyn and Rivne a quiet `inactive` means little. Results are cached like schedules (`fresh: true` skips the cache), and a channel shared by several regions is fetched once.
 
 ### Helpers
 
