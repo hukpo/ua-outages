@@ -161,7 +161,9 @@ export class OutageClient {
    * Nothing posted is not an error: it is `inactive` with `kind: null`. Many operators never
    * post a cancellation; an announcement nobody followed up on for 12 h counts as ended
    * (`inferred: true`). Cached like schedules; `fresh` skips the cache. Pass `previous` (the last
-   * status you stored) after a restart so an emergency seen only through YASNO can still end.
+   * status you stored): after a restart an emergency seen only through YASNO can still end, an
+   * "UPD … скасовано" edit gets the time it was first seen, and while one source is down an
+   * ongoing episode keeps its details.
    */
   async getEmergency(region: RegionId, opts: EmergencyOptions = {}): Promise<EmergencyStatus> {
     const p = this.provider(region)
@@ -556,7 +558,11 @@ export interface EmergencyOptions extends ScheduleOptions {
   /**
    * The status this call returned last time, if the app kept it (e.g. across a restart). The
    * client remembers on its own which emergencies YASNO showed, so that it can tell when YASNO
-   * stops showing one; a new process doesn't, and without this would never see that end.
+   * stops showing one; a new process doesn't, and without this would never see that end (an
+   * `unknown` status with YASNO's end counts too). It also dates an apply post later edited into
+   * "UPD … скасовано" (the edit came after the reading that still saw it in force), and keeps an
+   * ongoing episode's kind, queues, area, start and message while one of the region's sources
+   * is down and the rest only say it is on.
    */
   previous?: EmergencyStatus
 }

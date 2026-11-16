@@ -36,17 +36,31 @@ Chernivtsi, Zaporizhzhia, Укрзалізниця.
 Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGIONS`).
 
 - **Telegram previews** (`src/emergency/telegram.ts`): `https://t.me/s/<channel>` lists the newest
-  ~20 posts; `?before=<id>` pages back. The reader goes back 48 h (at most 5 pages). An edited
-  post shows its latest text and "edited", without the edit time.
+  ~20 posts; `?before=<id>` pages back. The reader goes back 48 h (at most 5 pages) and says how
+  far it got: when the pages run out before the region's TTL is covered, an apply on an older
+  page may be missed, so "nothing in force" from such a read is `unknown`. An edited post shows
+  its latest text and "edited", without the edit time: when `previous` was that post in force,
+  the "UPD … скасовано" end is the first reading that sees the edit, else the post time.
 - **Classifier** (`src/emergency/classify.ts`): per sentence, an emergency term plus an apply or
   cancel verb; the first such sentence decides. Explainers ("Чому…?", "Нагадаємо…"), future or
   negated cancels ("будуть скасовані після стабілізації", "не вдається скасувати") and reposted
   national summaries (other oblasts named) don't count. DTEK's dialect drops "аварійні" (local
-  damage).
+  damage). National wording ("в окремих регіонах України", "у більшості регіонів", "у регіонах,
+  де…", "по всій країні") counts only when the sentence also names an oblast; "в усіх регіонах
+  (крім …)" includes the operator's. "Було застосовано" counts only with a time of the last day;
+  a purpose clause ("Щоб уникнути аварій, …") is set aside, not the whole sentence. Times of the
+  previous day ("О 23:55 скасовано" read at noon) are shifted by the Kyiv calendar day (DST).
 - **Folding** (`src/emergency/status.ts`): ГАВ, СГАВ and unnamed emergency shutdowns are followed
   separately, one episode per area (null = whole region); a cancel for an area ends that area, a
-  whole-region cancel ends all. More queues while one runs add up; a partial cancel ends it only
-  when nothing is known to remain. TTL: 12 h after the last word, applied between posts too, so a new post after the gap starts a new
+  whole-region cancel ends all, and an area cancel with only a whole-region episode on (ЦЕК 09.11:
+  untagged "Діють" 18:42, "м. ДНІПРО … скасування" 20:49) ends that one. More queues while one
+  runs add up; switched-on queues ("(1-5 ввімкнені)", "замість 1 та 2 черг … 7 та 8") come off
+  the set, and "знову введені ГАВ (для 6-10 черг)" while 6-10 are off replaces it (Sumy never
+  posts the lift in between). A partial cancel ends it only when nothing is known to remain; an
+  area or partial cancel whose apply left the window is `unknown` within the TTL, history after.
+  Several areas on: listed by start, queues only when they agree. Inactive shows the episode that
+  ended last (Kirovohrad 22.01: СГАВ cancelled 12:58, ГАВ ended by the TTL at 20:25). TTL: 12 h
+  after the last word, applied between posts too, so a new post after the gap starts a new
   episode (Sumy 6 h: it never cancels, and the same commands last minutes to ~4 h in Poltava;
   Kharkiv stays 12 h: its own episodes ran from ~1 h to ~16 h, 10.10.2025 07:56 → "станом на
   23:54", and Ukrenergo still listed it on 04.11.2026 after the 02.11 apply). Posts that take
@@ -54,16 +68,22 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
 - **YASNO** `planned-outages` (Kyiv 25/902, Dnipro 3/301): any group with `today.status =
 EmergencyShutdowns` is active. YASNO not showing it ends nothing by itself (`updatedOn` moves
   with every schedule publish, and YASNO doesn't flag partial-area emergencies); only an episode
-  this client saw as EmergencyShutdowns and that YASNO stopped showing is ended. ЦЕК (3/303)
+  this client saw as EmergencyShutdowns and that YASNO stopped showing is ended (also after a
+  restart, from `previous`, even an `unknown` one carrying YASNO's end). Groups without a known
+  `today.status` (ScheduleApplies, WaitingForSchedule, NoOutages) are a parse error, not an end.
+  While t.me is down and YASNO still shows it, `previous` keeps the episode's details. ЦЕК (3/303)
   isn't used: it stayed `WaitingForSchedule` through ЦЕК's own emergency of 15.11 13:39–15:27.
 - **Mykolaiv outage feed** `POST https://www.energy.mk.ua/outage/api/v1/outage` (whole region,
   12 h window; oldest first, so past 8 pages the newest are read; `AVARIYA` rows skipped; an
-  active @mk_energy_ua post wins over finished rows): rows whose `reason` starts "Графік аварійних відключень", minus mislabelled
+  active @mk_energy_ua post wins over finished rows, a channel cancel only when posted after the
+  feed episode started; while the feed is down `previous` keeps its queues): rows whose `reason`
+  starts "Графік аварійних відключень", minus mislabelled
   "ГПВ ч 5,2" and a neighbour's "ГАО Кіровоград Обленерго". Running rows = active; their queue
   from "ГАВ черга 3" / "ГАВ 3 черга".
-- **@Ukrenergo**: only for Zakarpattia, Volyn, Rivne and Chernivtsi (after its own channel), by
-  oblast name in the same sentence; "аварійні відключення продовжують діяти лише у Харківській
-  області" ends it for the others.
+- **@Ukrenergo**: only for Zakarpattia, Volyn, Rivne and Chernivtsi (merged with its own channel
+  by time), by oblast name in the same sentence, in any form ("Волинській області", "на Волині",
+  "на Закарпатті", "Рівненщині"); "аварійні відключення продовжують діяти лише у Харківській
+  області" ends it for the others; "можуть бути застосовані" is nothing.
 
 Not used: Poltava's `dynamic-unloading-info.php` (start times only, end is a 23:59 placeholder,
 misses re-applications: the channel is better), Mykolaiv `outage-queue/by-type/1` `enabled`
