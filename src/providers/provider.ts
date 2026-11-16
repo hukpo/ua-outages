@@ -1,5 +1,14 @@
 import type { Http } from '../http.js'
-import type { AddressQuery, City, GroupMatch, House, RegionInfo, RegionSchedule, Street } from '../types.js'
+import type {
+  AddressQuery,
+  City,
+  EmergencyStatus,
+  GroupMatch,
+  House,
+  ProviderInfo,
+  RegionSchedule,
+  Street,
+} from '../types.js'
 
 export interface ProviderContext {
   /** Already bound to `signal`: every request through it stops when the call is cancelled */
@@ -12,6 +21,8 @@ export interface ProviderContext {
    * caller giving up doesn't fail the others.
    */
   signal?: AbortSignal
+  /** The caller asked for fresh data: skip caches shared between regions (e.g. channel pages) */
+  fresh?: boolean
 }
 
 /**
@@ -26,7 +37,7 @@ export interface ProviderContext {
  * typo-tolerant matcher, so providers should not filter by name themselves.
  */
 export interface Provider {
-  readonly info: RegionInfo
+  readonly info: ProviderInfo
   /**
    * Set when the operator's server does the name search (substring match) instead of the
    * provider holding a directory. The client then also queries word fragments, so a typo in
@@ -47,4 +58,10 @@ export interface Provider {
    * `findGroup` uses it instead of the search chain when present.
    */
   lookupAddress?(ctx: ProviderContext, address: AddressQuery): Promise<GroupMatch>
+
+  /**
+   * ГАВ / СГАВ status of the region now (`OutageClient.getEmergency`). Present only when the
+   * region has a source for it; nothing announced is `inactive`, never an error.
+   */
+  getEmergency?(ctx: ProviderContext, opts?: { previous?: EmergencyStatus }): Promise<EmergencyStatus>
 }

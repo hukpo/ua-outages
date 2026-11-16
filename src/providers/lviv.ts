@@ -1,7 +1,8 @@
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, unpublished } from '../schedule.js'
 import { toKyivIso } from '../time.js'
-import type { DaySchedule, GroupId, RegionInfo, RegionSchedule } from '../types.js'
+import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
+import { emergencyQueues } from '../emergency/queues.js'
 import { parseUaDateTime } from './gpv.js'
 import {
   STANDARD_GROUPS,
@@ -25,7 +26,7 @@ import { findUaDate, parseGroupLines } from './ua-text.js'
 const SCHEDULE_URL = 'https://api.loe.lviv.ua/api/menus?page=1&type=photo-grafic'
 const API = 'https://power-api.loe.lviv.ua/api'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'lviv',
   name: 'Львівська область',
   operator: 'Львівобленерго',
@@ -43,6 +44,11 @@ interface MenuItem {
 interface Account {
   buildingName?: string | null
   chergGpv?: string | null
+  /** ГАВ queue, "6", "20" or "Не входить" */
+  chergGav?: string | null
+  chergSgav?: string | null
+  /** АЧР queue with its trigger frequency, "10 (48.2Гц)" */
+  chergAchr?: string | null
 }
 
 export function lvivProvider(): Provider {
@@ -75,17 +81,27 @@ export function lvivProvider(): Provider {
   }
 }
 
-/** Rows per customer account → one entry per building, its groups most common first. Exported for tests. */
+/**
+ * Rows per customer account → one entry per building, its groups most common first and the
+ * distinct ГАВ / СГАВ / АЧР queues of all its accounts. Exported for tests.
+ */
 export function accountsToBuildings(rows: readonly Account[]): PowerOnBuilding[] {
-  const byNumber = new Map<string, (string | null | undefined)[]>()
+  const byNumber = new Map<string, Account[]>()
   for (const r of rows) {
     const number = r.buildingName?.trim()
     if (!number) continue
     const list = byNumber.get(number) ?? []
-    list.push(r.chergGpv)
+    list.push(r)
     byNumber.set(number, list)
   }
-  return [...byNumber.entries()].map(([number, cherg]) => ({ number, groups: rankGroups(cherg) }))
+  return [...byNumber.entries()].map(([number, list]) => {
+    const emergency = emergencyQueues({
+      gav: list.map((r) => r.chergGav),
+      sgav: list.map((r) => r.chergSgav),
+      achr: list.map((r) => r.chergAchr),
+    })
+    return { number, groups: rankGroups(list.map((r) => r.chergGpv)), ...(emergency ? { emergency } : {}) }
+  })
 }
 
 /**

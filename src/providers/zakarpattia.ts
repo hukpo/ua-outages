@@ -1,5 +1,6 @@
 import { OutageError } from '../errors.js'
-import type { GroupId, RegionInfo } from '../types.js'
+import { emergencyQueues, mergeEmergency } from '../emergency/queues.js'
+import type { EmergencyQueues, GroupId, ProviderInfo } from '../types.js'
 import { unpublished } from '../schedule.js'
 import {
   STANDARD_GROUPS,
@@ -21,7 +22,7 @@ import type { Provider } from './provider.js'
  */
 const API = 'https://api-outage-zakarpat-energy.inneti.net/api'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'zakarpattia',
   name: 'Закарпатська область',
   operator: 'Закарпаттяобленерго',
@@ -38,6 +39,10 @@ interface Option {
 interface AddressQueue {
   buildingNames?: string | null
   chergGpv?: string | null
+  /** ГАВ queue of these houses, "10" or "Не входить" */
+  chergGav?: string | null
+  chergSgav?: string | null
+  chergAchr?: string | null
 }
 
 export function zakarpattiaProvider(): Provider {
@@ -91,16 +96,22 @@ export function zakarpattiaProvider(): Provider {
  * can be listed under several groups). Exported for tests.
  */
 export function queuesToBuildings(rows: readonly AddressQueue[]): PowerOnBuilding[] {
-  const byNumber = new Map<string, GroupId[]>()
+  const byNumber = new Map<string, { groups: GroupId[]; emergency?: EmergencyQueues }>()
   for (const row of rows) {
     const group = parseCherg(row.chergGpv)
+    const emergency = emergencyQueues({ gav: [row.chergGav], sgav: [row.chergSgav], achr: [row.chergAchr] })
     for (const number of splitHouses(row.buildingNames ?? '')) {
-      const groups = byNumber.get(number) ?? []
-      if (group && !groups.includes(group)) groups.push(group)
-      byNumber.set(number, groups)
+      const entry = byNumber.get(number) ?? { groups: [] }
+      if (group && !entry.groups.includes(group)) entry.groups.push(group)
+      entry.emergency = mergeEmergency(entry.emergency, emergency)
+      byNumber.set(number, entry)
     }
   }
-  return [...byNumber.entries()].map(([number, groups]) => ({ number, groups }))
+  return [...byNumber.entries()].map(([number, { groups, emergency }]) => ({
+    number,
+    groups,
+    ...(emergency ? { emergency } : {}),
+  }))
 }
 
 /**

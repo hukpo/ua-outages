@@ -72,3 +72,7 @@ Bulk alternative: the per-REM XLSX files on the GPV page map addresses to queues
 - realtomchuk-source/svitlo-starkon (no license): uses the GPV page and the news page.
 - dmmat/hoe-bot (no license, 2024).
 - OlegVapnik/svitlo `docs/osr-direct-sources.md` (no license): lists HOE `shutdown/new` as `url-only`.
+
+## Emergency schedules (ГАВ)
+
+`/shutdown-queues` has a second alert "(ГАВ) … черги: <strong>3</strong>" (often empty), returned in `emergency`. Live ГАВ status: @khmelnytskoblenergo, apply posts only (TTL). See [emergency.md](emergency.md).

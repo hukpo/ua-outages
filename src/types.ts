@@ -72,7 +72,18 @@ export interface RegionInfo {
     addressSearch: boolean
     /** Has street/settlement directories for autocomplete (`searchStreets`); filled in by the client */
     streetSearch?: boolean
+    /** `getEmergency` has a source for this region (ГАВ / СГАВ announcements); filled in by the client */
+    emergency: boolean
   }
+}
+
+/**
+ * What a provider declares about itself: `RegionInfo` without the capabilities the client
+ * works out (`streetSearch`, `emergency`).
+ */
+export type ProviderInfo = Omit<RegionInfo, 'capabilities'> & {
+  capabilities: Omit<RegionInfo['capabilities'], 'emergency' | 'streetSearch'> &
+    Partial<Pick<RegionInfo['capabilities'], 'emergency' | 'streetSearch'>>
 }
 
 /**
@@ -171,6 +182,79 @@ export interface GroupMatch {
   address: { city?: string; street: string; house: string }
   /** Some addresses belong to several groups (e.g. a building with two inputs) */
   otherGroups?: GroupId[]
+  /** Emergency queues of the address (ГАВ, СГАВ, АЧР); omitted when the operator says nothing */
+  emergency?: EmergencyQueues
+}
+
+/**
+ * Emergency schedules besides ГПВ: ГАВ, СГАВ (special ГАВ), АЧР (automatic frequency load
+ * shedding). Their queues are numbered separately from ГПВ groups ("3", "10"; Mykolaiv also
+ * has reserve queues "1(Р)").
+ */
+export interface EmergencyQueues {
+  /** ГАВ queues, distinct, sorted numerically, as the operator writes them ("3", "10", "1(Р)") */
+  gav?: string[]
+  sgav?: string[]
+  achr?: string[]
+}
+
+// --- emergency status ---
+
+export type EmergencyState = 'active' | 'inactive' | 'unknown'
+
+/**
+ * What `getEmergency` knows about ГАВ / СГАВ / emergency shutdowns in a region right now.
+ *
+ * How to tell the cases apart:
+ * - in force: `state: 'active'`, `since` and `message` (the newest announcement) set;
+ * - cancelled: `state: 'inactive'` with `message` (the cancellation post, or the source's own
+ *   signal) and `endedAt` both set;
+ * - ended by the TTL: `state: 'inactive'`, `inferred: true`, `endedAt` set, `message` = the last
+ *   announcement;
+ * - nothing announced in the lookback window (48 h): `state: 'inactive'`, `kind`, `message` and
+ *   `endedAt` all null;
+ * - can't be told: `state: 'unknown'` (the newest post can't be read; a partial or area-only
+ *   cancel with nothing known before it, e.g. "скасовано ГАВ для 6-10 черг"; or a source failed
+ *   while the others said nothing is in force).
+ *
+ * A post that takes effect later ("О 19:00 - заміна черг" posted 18:52, "з 18:00 будуть
+ * застосовуватися") counts only from that time.
+ */
+export interface EmergencyStatus {
+  region: RegionId
+  /**
+   * active: ГАВ / СГАВ / emergency shutdowns are in force now.
+   * inactive: the last word was a cancellation, or nothing announced recently.
+   * unknown: the source answered but can't be read with confidence (never thrown for "nothing posted").
+   */
+  state: EmergencyState
+  /** What is (or was last) in force; null when nothing was announced in the lookback window */
+  kind: 'gav' | 'sgav' | 'emergency' | null
+  /** ГПВ still applies alongside ("Також продовжують діяти ГПВ") true; suspended false; not said null */
+  scheduleApplies: boolean | null
+  /** Start: the time named in the text ("з 10:35", "О 9:44"), else the post time. ISO with the Kyiv offset */
+  since: string | null
+  /**
+   * For inactive: when it was cancelled (time in the text, else the post time; for an "UPD …
+   * скасовано" edit the post's own time, Telegram doesn't show when it was edited), or the
+   * inferred end. Null only when nothing was announced.
+   */
+  endedAt: string | null
+  /** ГАВ/СГАВ queues that are off now when the operator names them; null when not said */
+  queues: string[] | null
+  /** "застосовано 10 черг" without saying which: the count; null when not said */
+  queueCount: number | null
+  /**
+   * When limited to a part of the region ("м. Дніпро", "частині Голосіївського та Соломʼянського
+   * районів"); several areas on at once are joined with "; ". null = whole region / not said
+   */
+  area: string | null
+  /** True when the end (or state) is inferred, not announced: no cancel post within the TTL */
+  inferred: boolean
+  /** The newest announcement this status is based on */
+  message: { text: string; url: string | null; at: string } | null
+  source: 'telegram' | 'api' | 'yasno' | 'ukrenergo'
+  fetchedAt: string
 }
 
 // --- health ---

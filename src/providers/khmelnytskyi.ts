@@ -1,10 +1,19 @@
 import { OutageError } from '../errors.js'
+import { emergencyQueues } from '../emergency/queues.js'
 import type { TableLayout } from '../image/table.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { compareGroups, makeDay, normalizeGroup, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant } from '../time.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
-import type { City, DaySchedule, GroupId, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
+import type {
+  City,
+  DaySchedule,
+  EmergencyQueues,
+  GroupId,
+  GroupMatch,
+  ProviderInfo,
+  RegionSchedule,
+} from '../types.js'
 import { scheduleFromImages, type DatedImages } from './image-schedule.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { findUaDate, parseGroupLines } from './ua-text.js'
@@ -19,7 +28,7 @@ import { findUaDate, parseGroupLines } from './ua-text.js'
  */
 const SITE = 'https://hoe.com.ua'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'khmelnytskyi',
   name: 'Хмельницька область',
   operator: 'Хмельницькобленерго',
@@ -97,6 +106,7 @@ export function khmelnytskyiProvider(): Provider {
         headers: { ...XHR, 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
       })
       const groups = parseQueues(html)
+      const emergency = parseEmergencyQueues(html)
       if (!groups.length)
         throw new OutageError(
           'not-found',
@@ -108,6 +118,7 @@ export function khmelnytskyiProvider(): Provider {
         group: groups[0]!,
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
         address: { city: city?.name, street: street.name, house: house.number },
+        ...(emergency ? { emergency } : {}),
       }
     },
   }
@@ -141,6 +152,15 @@ export function parseQueues(html: string): GroupId[] {
     .map((g) => normalizeGroup(g))
     .filter((g): g is GroupId => !!g)
   return [...new Set(groups)].sort(compareGroups)
+}
+
+/**
+ * The ГАВ alert of the `/shutdown-queues` snippet: "… (ГАВ) ваша адреса відноситься до черги:
+ * <strong>8, 8, 3</strong>". Often empty (`<strong></strong>`): no ГАВ queue known. Exported for tests.
+ */
+export function parseEmergencyQueues(html: string): EmergencyQueues | undefined {
+  const gav = /\(ГАВ\)[^<]*<strong>([^<]*)<\/strong>/.exec(html)
+  return gav ? emergencyQueues({ gav: [gav[1]] }) : undefined
 }
 
 /**

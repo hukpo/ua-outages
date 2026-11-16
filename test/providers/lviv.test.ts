@@ -119,6 +119,8 @@ describe('Lvivoblenergo', () => {
       region: 'lviv',
       group: '5.1',
       address: { city: 'Львів', street: 'Городоцька', house: '171' },
+      // chergGav "Не входить", chergSgav "3"
+      emergency: { sgav: ['3'] },
     })
     // the 2 MB whole-street list isn't needed
     expect(calls.some((x) => x.url.endsWith('street.id=12564'))).toBe(false)
@@ -133,6 +135,8 @@ describe('Lvivoblenergo', () => {
   it('returns every group of a building, the most common first', async () => {
     const m = await client().client.findGroup('lviv', { city: 'Львів', street: 'Городоцька', house: '115' })
     expect(m.group).toBe('2.1')
+    // accounts of one building in ГАВ 6 and 20; АЧР without its frequency ("10 (48.2Гц)")
+    expect(m.emergency).toEqual({ gav: ['6', '20'], sgav: ['3'], achr: ['10'] })
     expect(m.otherGroups).toEqual(['5.1'])
   })
 

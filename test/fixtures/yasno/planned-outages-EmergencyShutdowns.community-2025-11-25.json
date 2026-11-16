@@ -1,0 +1,29 @@
+{
+ "_note": "community capture of Kyiv 25/902 during emergency shutdowns, 2025-11-25 (github.com/aisaiev/shutdown-calendar agents.md); not fetched by us",
+ "1.1": {
+  "today": {
+   "slots": [],
+   "date": "2025-11-25T00:00:00+02:00",
+   "status": "EmergencyShutdowns"
+  },
+  "tomorrow": {
+   "slots": [],
+   "date": "2025-11-26T00:00:00+02:00",
+   "status": "EmergencyShutdowns"
+  },
+  "updatedOn": "2025-11-25T07:11:46+00:00"
+ },
+ "1.2": {
+  "today": {
+   "slots": [],
+   "date": "2025-11-25T00:00:00+02:00",
+   "status": "EmergencyShutdowns"
+  },
+  "tomorrow": {
+   "slots": [],
+   "date": "2025-11-26T00:00:00+02:00",
+   "status": "EmergencyShutdowns"
+  },
+  "updatedOn": "2025-11-25T07:11:46+00:00"
+ }
+}

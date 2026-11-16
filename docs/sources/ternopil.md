@@ -60,3 +60,7 @@ Base `https://api-poweron.toe.com.ua/api`:
 ## References
 
 - OlegVapnik/svitlo `docs/osr-direct-sources.md` (no license) — notes the endpoint but misreads `time`/`X-debug-key` as group code; our verification above supersedes it.
+
+## Emergency schedules (ГАВ)
+
+`building-names` also carries `chergGav` / `chergSgav` / `chergAchr` ("9", "Не входить"), returned in `emergency`. Live ГАВ status: @ternopiloblenerho (times in the text, "з 18.00"). See [emergency.md](emergency.md).

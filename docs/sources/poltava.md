@@ -56,3 +56,7 @@ No explicit updated-at in the fragment (only "Зараз HH:MM" render time). No
 
 - None official/community found for the direct endpoints (OlegVapnik/svitlo lists Poltava as `url-only`; no license).
 - Aggregator cross-check: `aggregator-OE_OUTAGE_DATA-Poltavaoblenergo-2026-11-05.json` (yaroslav2901/OE_OUTAGE_DATA, no license; derived).
+
+## Emergency schedules (ГАВ)
+
+`gav_message` names the ГАВ queue ("залучено до ГАВ (черга 10)"), returned in `emergency`; "черга 0" counts as none. Live ГАВ status: @poltavaOE ("О 9:44 … ввести ГАВ (1-5 черга)", "ГАВ скасовано!"). See [emergency.md](emergency.md).

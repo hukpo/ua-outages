@@ -1,8 +1,9 @@
+import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, type MinuteSlot } from '../schedule.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
 import { kyivDate, parseClock, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
+import type { City, DaySchedule, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
 import { parseUaDateTime } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
 
@@ -13,7 +14,7 @@ import type { Provider, ProviderContext } from './provider.js'
  * Always use `www.`: the bare domain sits behind a Cloudflare challenge. The API answers 403
  * without a `Referer` (any value) or with a runtime-default User-Agent; the SDK's own UA passes.
  */
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'sumy',
   name: 'Сумська область',
   operator: 'Сумиобленерго',
@@ -41,8 +42,12 @@ const HEADERS = {
 const PAYLOAD_KEY = 'qasdw-enjenf-twfeft!!d451qwqw!-2'
 const IV_BYTES = 12
 
-/** Index of the hourly schedule (ГПВ) queue in `queues-by-street` rows: ГАВ, АЧР, СГАВ, ГПВ, … */
+/** Index of the hourly schedule (ГПВ) queue in `queues-by-street` rows: ГАВ, АЧР, СГАВ, ГПВ, САВН, ГОП, ГОЕ */
 const GPV_QUEUE_INDEX = 3
+/** …and of the emergency ones (the order of the site's own type map) */
+const GAV_INDEX = 0
+const ACHR_INDEX = 1
+const SGAV_INDEX = 2
 
 interface ScheduleEntry {
   cherga_n?: string
@@ -138,11 +143,14 @@ export function sumyProvider(): Provider {
           `${house.number}, ${street.name}: the operator has no hourly schedule group for this house`,
           { region },
         )
+      const q = row?.[3] ?? []
+      const emergency = emergencyQueues({ gav: [q[GAV_INDEX]], sgav: [q[SGAV_INDEX]], achr: [q[ACHR_INDEX]] })
       return {
         region,
         group: groups[0]!,
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
         address: { city: city?.name, street: street.name, house: house.number },
+        ...(emergency ? { emergency } : {}),
       }
     },
   }

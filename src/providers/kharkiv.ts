@@ -1,5 +1,5 @@
 import { OutageError } from '../errors.js'
-import type { RegionInfo } from '../types.js'
+import type { ProviderInfo } from '../types.js'
 import { postsToSchedule, type SchedulePost } from './posts.js'
 import type { Provider } from './provider.js'
 
@@ -8,7 +8,7 @@ import type { Provider } from './provider.js'
  * is open, so posts are read as JSON instead of scraping pages. The address lookup on the
  * site needs a captcha, so there is no address search here.
  */
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'kharkiv',
   name: 'Харківська область',
   operator: 'Харківобленерго',

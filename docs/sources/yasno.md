@@ -120,3 +120,7 @@ Street names contain prefixes (`вул.`, `просп.`, `пров.`, `ріг ..
 
 `regions.json`, `cities-dnipro-301.json`, `streets-*.json`, `houses-*.json`, `group-*.json`, `planned-outages-{25-902,3-301,3-303}.json`,
 `probable-outages-25-902.json`, `error-404-bad-path.json`, `error-404-street-not-found.json`. All raw, untrimmed.
+
+## Emergency schedules (ГАВ)
+
+`planned-outages` `today.status = "EmergencyShutdowns"` is read by `getEmergency` for kyiv and dnipro, together with @dtek_ua posts (not for ЦЕК: 3/303 never showed it). See [emergency.md](emergency.md).

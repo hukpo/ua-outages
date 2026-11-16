@@ -1,9 +1,10 @@
 import { OutageError } from '../errors.js'
+import { emergencyQueues, queueNames } from '../emergency/queues.js'
 import type { TableLayout } from '../image/table.js'
 import { compareGroups, normalizeGroup } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant } from '../time.js'
 import { normalizeHouse, normalizeSettlement, normalizeStreet } from '../text.js'
-import type { AddressQuery, GroupId, GroupMatch, RegionInfo } from '../types.js'
+import type { AddressQuery, GroupId, GroupMatch, ProviderInfo } from '../types.js'
 import { scheduleFromImages, type DatedImages } from './image-schedule.js'
 import type { Provider } from './provider.js'
 
@@ -16,7 +17,7 @@ import type { Provider } from './provider.js'
 const SITE = 'https://energy.volyn.ua'
 const QUEUE_FORM = `${SITE}/spozhyvacham/perervy-u-elektropostachanni/cherga/`
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'volyn',
   name: 'Волинська область',
   operator: 'Волиньобленерго',
@@ -33,6 +34,8 @@ export interface VolynRecord {
   houses: string[]
   /** null = "Не залучено" (not part of the hourly schedule) */
   group: GroupId | null
+  /** "Черга у ГАВ" (the 6th column); null = "Не залучено" or no such column */
+  gav: string | null
 }
 
 export function volynProvider(): Provider {
@@ -94,6 +97,7 @@ export function parseQueueTable(html: string): VolynRecord[] {
         .map((h) => h.trim())
         .filter((h) => /\d/.test(h)),
       group: /^\d+\.\d+$/.test(cells[4]!) ? normalizeGroup(cells[4]!) : null,
+      gav: header[5] === 'Черга у ГАВ' ? queueNames(cells[5]).join(', ') || null : null,
     }))
 }
 
@@ -155,11 +159,13 @@ export function matchRecords(records: readonly VolynRecord[], address: AddressQu
       { region },
     )
   const first = hits.find((r) => r.group)!
+  const emergency = emergencyQueues({ gav: hits.map((r) => r.gav) })
   return {
     region,
     group: groups[0]!,
     ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
     address: { city: first.city, street: first.street, house: address.house.trim() },
+    ...(emergency ? { emergency } : {}),
   }
 }
 

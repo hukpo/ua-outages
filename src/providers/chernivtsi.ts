@@ -9,7 +9,7 @@ import type {
   GroupMatch,
   House,
   IntervalKind,
-  RegionInfo,
+  ProviderInfo,
   RegionSchedule,
   Street,
 } from '../types.js'
@@ -28,7 +28,7 @@ import { mapLimit } from '../util.js'
  */
 const SITE = 'https://oblenergo.cv.ua'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'chernivtsi',
   name: 'Чернівецька область',
   operator: 'Чернівціобленерго',

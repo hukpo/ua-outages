@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
-import type { RegionInfo } from '../types.js'
+import type { ProviderInfo } from '../types.js'
 import { postsToSchedule, type SchedulePost } from './posts.js'
 import type { Provider } from './provider.js'
 
@@ -10,7 +10,7 @@ import type { Provider } from './provider.js'
  * timestamps, so page order decides which version is current. A post lists only the groups that
  * have outages that day; the rest have none. No address lookup is available.
  */
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'zaporizhzhia',
   name: 'Запорізька область',
   operator: 'Запоріжжяобленерго',

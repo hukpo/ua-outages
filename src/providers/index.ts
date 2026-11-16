@@ -1,3 +1,4 @@
+import { EMERGENCY_REGIONS, EmergencyHub, getEmergency } from '../emergency/regions.js'
 import { cherkasyProvider } from './cherkasy.js'
 import { chernihivProvider } from './chernihiv.js'
 import { chernivtsiProvider } from './chernivtsi.js'
@@ -22,7 +23,9 @@ import { yasnoProvider } from './yasno.js'
 
 /** Built-in providers for every supported region. */
 export function createProviders(): Provider[] {
-  return [
+  // channel pages are shared between the regions of one client (@dtek_ua serves five)
+  const hub = new EmergencyHub()
+  return withEmergency(hub, [
     yasnoProvider({
       info: {
         id: 'kyiv',
@@ -104,5 +107,19 @@ export function createProviders(): Provider[] {
     khmelnytskyiProvider(),
     chernihivProvider(),
     ...UZ_PAGES.map(([id, oblast, page, branch]) => uzProvider({ id, oblast, page, branch })),
-  ]
+  ])
+}
+
+/** Adds `getEmergency` to the regions that have an emergency source (`EMERGENCY_REGIONS`). */
+function withEmergency(hub: EmergencyHub, providers: Provider[]): Provider[] {
+  return providers.map((p) => {
+    const cfg = EMERGENCY_REGIONS[p.info.id]
+    if (!cfg) return p
+    const region = p.info.id
+    return {
+      ...p,
+      getEmergency: (ctx, opts) =>
+        getEmergency(hub, cfg, { ctx, region, fresh: !!ctx.fresh, previous: opts?.previous }),
+    }
+  })
 }

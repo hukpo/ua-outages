@@ -9,7 +9,7 @@ import type {
   GroupMatch,
   House,
   IntervalKind,
-  RegionInfo,
+  ProviderInfo,
   RegionSchedule,
   Street,
 } from '../types.js'
@@ -26,7 +26,7 @@ import { mapLimit } from '../util.js'
 const PAGE = 'https://www.ztoe.com.ua/unhooking-search.php'
 const ENCODING = 'windows-1251'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'zhytomyr',
   name: 'Житомирська область',
   operator: 'Житомиробленерго',
