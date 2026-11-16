@@ -434,3 +434,26 @@ describe('sentences', () => {
     expect(sentences('з 21год. 16 хв. скасовано')).toHaveLength(1)
   })
 })
+
+describe('classifyPost: time and spelling', () => {
+  const KIRO = OBLENERGO(/Кіровоград|Кропивни/u)
+
+  it('Kirovohrad: "у 19:00 скасовано СГАВ" ends at 19:00, not at the post time', () => {
+    const a = classifyPost(
+      '16.11.26 у 19:00 скасовано СГАВ (спеціальний графік аварійних відключень).',
+      new Date('2026-11-16T17:02:22Z'),
+      KIRO,
+    )
+    expect(a).toMatchObject({ action: 'cancel', kind: 'sgav', at: '2026-11-16T19:00:00+02:00', timed: true })
+  })
+
+  it('Latin lookalikes inside a Cyrillic word still read as ГАВ ("гaв", "CГАВ")', () => {
+    const at = new Date('2026-11-16T08:00:00Z')
+    expect(classifyPost('О 09:50 застосовано гaв для 1-3 черг', at, KIRO)).toMatchObject({
+      action: 'apply',
+      kind: 'gav',
+      queues: ['1', '2', '3'],
+    })
+    expect(classifyPost('О 09:50 скасовано CГАВ', at, KIRO)).toMatchObject({ action: 'cancel', kind: 'sgav' })
+  })
+})

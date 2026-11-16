@@ -420,9 +420,42 @@ export function extractQueues(text: string, fullVolume: number | null = null): Q
 // --- sentences ---
 
 /** Sentence ends; abbreviations ("м.", "год.", "вул.") don't end one. Exported for tests. */
+/** Latin letters that look Cyrillic, typed into Cyrillic words ("гaв" with a Latin a) */
+const LOOKALIKE: Record<string, string> = {
+  a: 'а',
+  c: 'с',
+  e: 'е',
+  i: 'і',
+  o: 'о',
+  p: 'р',
+  x: 'х',
+  y: 'у',
+  A: 'А',
+  B: 'В',
+  C: 'С',
+  E: 'Е',
+  H: 'Н',
+  I: 'І',
+  K: 'К',
+  M: 'М',
+  O: 'О',
+  P: 'Р',
+  T: 'Т',
+  X: 'Х',
+}
+
+/** "гaв", "CГАВ" (Latin a, C) → "гав", "СГАВ"; words without a Cyrillic letter stay as they are */
+export function foldLookalikes(text: string): string {
+  return text.replace(/[\p{Script=Cyrillic}A-Za-z]+/gu, (w) =>
+    /\p{Script=Cyrillic}/u.test(w) && /[A-Za-z]/.test(w)
+      ? w.replace(/[A-Za-z]/g, (c) => LOOKALIKE[c] ?? c)
+      : w,
+  )
+}
+
 export function sentences(text: string): string[] {
   return (
-    text
+    foldLookalikes(text)
       .replace(/[’ʼ`]/g, "'")
       // a line break inside a sentence ("введено Спеціальні\nграфіки …") isn't an end
       .replace(/\n(?=\p{Ll})/gu, ' ')
@@ -531,8 +564,8 @@ const TIME_RES: RegExp[] = [
   // "22.01.2026 з 08 год. 24 хв."
   /(?<date>\d{2}\.\d{2}\.\d{4})\s+з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/giu,
   /(?:^|[\s(])з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/giu,
-  // "з 10:35", "О 9:44", "об 11:12", "В 06:10", "станом на 22:02", "з 18.00"
-  /(?:^|[\s(])(?:з|о|об|в|станом\s+на|на)\s+(?<h>\d{1,2})(?<sep>[:.])(?<m>\d{2})(?![\d.]\d)/giu,
+  // "з 10:35", "О 9:44", "об 11:12", "В 06:10", "у 19:00", "станом на 22:02", "з 18.00"
+  /(?:^|[\s(])(?:з|о|об|в|у|станом\s+на|на)\s+(?<h>\d{1,2})(?<sep>[:.])(?<m>\d{2})(?![\d.]\d)/giu,
 ]
 
 /** Words of the future: "будуть застосовуватися", "буде введено", "діятимуть" */

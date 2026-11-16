@@ -62,7 +62,7 @@ Each `aData` row is a time segment whose `queue` field is a key into `aState` (l
 
 ## Reference repos
 
-- OlegVapnik/svitlo (no license) — documents the Turnstile gating and the `info_schedule` stub; uses Cloudflare Browser Rendering. Also `/power_outages` + `/api/list_acc` for emergency lists (not ГПВ).
+- OlegVapnik/svitlo (no license) — documents the Turnstile gating and the `info_schedule` stub; uses Cloudflare Browser Rendering. Also `/power_outages` + `/api/list_acc`. Checked 2026-11-16: `list_acc` with `t=6` needs no token and returns today's ГПВ windows per street, as rows of town, street, houses, from, to, date and type ("Графік погодинних відключень (ГПВ)"). The rows name no group. Groups often share a window, so the group can't be worked out from them reliably.
 - zenki-deve/Chernihiv-Svitlo-Bot (no license) — calls the endpoints with `token: None`. That **no longer works**.
 - mrkaktuz/outages-data (license NOASSERTION) — AGENTS.md notes the Turnstile gating.
 
