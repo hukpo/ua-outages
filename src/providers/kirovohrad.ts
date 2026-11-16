@@ -9,7 +9,7 @@ import type {
   GroupMatch,
   House,
   IntervalKind,
-  RegionInfo,
+  ProviderInfo,
   RegionSchedule,
   Street,
 } from '../types.js'
@@ -34,7 +34,7 @@ const CANARY = '/city/86'
 /** The token lifetime isn't documented; renew well before PHP's usual 24 min session timeout. */
 const SESSION_TTL_MS = 10 * 60_000
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'kirovohrad',
   name: 'Кіровоградська область',
   operator: 'Кіровоградобленерго',

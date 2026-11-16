@@ -1,7 +1,7 @@
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup } from '../schedule.js'
 import { toKyivIso } from '../time.js'
-import type { DaySchedule, GroupId, RegionInfo, RegionSchedule } from '../types.js'
+import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
 import type { Provider } from './provider.js'
 import { parseUaDateTime } from './gpv.js'
 import { findTimeRanges } from './ua-text.js'
@@ -15,7 +15,7 @@ import { findTimeRanges } from './ua-text.js'
  */
 const SITE = 'https://www.roe.vsei.ua'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'rivne',
   name: 'Рівненська область',
   operator: 'Рівнеобленерго',

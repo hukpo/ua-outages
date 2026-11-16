@@ -1,7 +1,8 @@
+import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
+import type { City, DaySchedule, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 
 /**
@@ -9,6 +10,9 @@ import type { Provider, ProviderContext } from './provider.js'
  * address chain district → settlement → street → house → queue.
  */
 const BASE = 'https://off.energy.mk.ua/api'
+/** `outageType.id`: 1 ГАВ, 2 СГАВ, 3 ГПВ */
+const GAV_TYPE = 1
+const SGAV_TYPE = 2
 const GPV_TYPE = 3
 
 interface Slot {
@@ -30,7 +34,7 @@ const KIND: Record<string, 'off' | 'maybe' | undefined> = {
   PROBABLY_OFF: 'maybe',
 }
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'mykolaiv',
   name: 'Миколаївська область',
   operator: 'Миколаївобленерго',
@@ -102,7 +106,11 @@ export function mykolaivProvider(): Provider {
         ctx,
         `/addr/dom/${house.id}/outage-queue`,
       )
-      const gpv = rows.filter((r) => r.outage?.type_id === GPV_TYPE).map((r) => r.outage!.name.trim())
+      const of = (type: number) =>
+        rows.filter((r) => r.outage?.type_id === type).map((r) => r.outage!.name.trim())
+      const gpv = of(GPV_TYPE)
+      // ГАВ names are "1".."10" and the reserve "1(Р)".."10(Р)"
+      const emergency = emergencyQueues({ gav: of(GAV_TYPE), sgav: of(SGAV_TYPE) })
       if (!gpv.length)
         throw new OutageError(
           'not-found',
@@ -116,6 +124,7 @@ export function mykolaivProvider(): Provider {
         group: gpv[0]!,
         ...(gpv.length > 1 ? { otherGroups: gpv.slice(1) } : {}),
         address: { city: city?.name, street: street.name, house: house.number },
+        ...(emergency ? { emergency } : {}),
       }
     },
   }

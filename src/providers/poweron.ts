@@ -2,7 +2,7 @@ import { OutageError } from '../errors.js'
 import { normalizeGroup } from '../schedule.js'
 import { normalizeHouse } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
-import type { City, GroupId, GroupMatch, House, RegionInfo, Street } from '../types.js'
+import type { City, EmergencyQueues, GroupId, GroupMatch, House, ProviderInfo, Street } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 
 /**
@@ -24,7 +24,7 @@ export const STANDARD_GROUPS: readonly GroupId[] = [1, 2, 3, 4, 5, 6].flatMap((q
  * `Accept` header the same resource comes as JSON-LD (`{"hydra:member": [...]}`, or `member`
  * in newer versions) or as a plain array; an empty JSON-LD result can carry `null`.
  */
-export function hydraList<T>(data: unknown, what: string, region: RegionInfo['id']): T[] {
+export function hydraList<T>(data: unknown, what: string, region: ProviderInfo['id']): T[] {
   if (data === null || data === undefined) return []
   if (Array.isArray(data)) return data as T[]
   if (typeof data === 'object') {
@@ -70,10 +70,12 @@ export function parsePowerOnTime(text: string | null | undefined, trustOffset = 
 export interface PowerOnBuilding {
   number: string
   groups: GroupId[]
+  /** ГАВ / СГАВ / АЧР queues, when the backend lists them (`chergGav`, `chergSgav`, `chergAchr`) */
+  emergency?: EmergencyQueues
 }
 
 export interface PowerOnAddressOptions {
-  info: RegionInfo
+  info: ProviderInfo
   /** Short name for error messages, e.g. "Lviv" */
   label: string
   /** API root, e.g. "https://power-api.loe.lviv.ua/api" */
@@ -188,13 +190,15 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
 
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
       let groups: GroupId[] | undefined
+      const find = (e: { byNumber: Map<string, PowerOnBuilding> } | undefined) =>
+        e?.byNumber.get(house.number) ??
+        [...(e?.byNumber.values() ?? [])].find(
+          (b) => normalizeHouse(b.number) === normalizeHouse(house.number),
+        )
+      // the emergency queues come with the building lists; no extra request just for them
+      let emergency = find(buildings.get(street.id))?.emergency
       if (opts.buildingGroups) groups = await opts.buildingGroups(ctx, street, house)
       if (!groups?.length) {
-        const find = (e: { byNumber: Map<string, PowerOnBuilding> } | undefined) =>
-          e?.byNumber.get(house.number) ??
-          [...(e?.byNumber.values() ?? [])].find(
-            (b) => normalizeHouse(b.number) === normalizeHouse(house.number),
-          )
         let b = find(buildings.get(street.id))
         if (!b && opts.findBuilding) b = (await opts.findBuilding(ctx, street, house.number))[0]
         if (!b) b = find(await loadStreet(ctx, street))
@@ -205,6 +209,7 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
             { region },
           )
         groups = b.groups
+        emergency = b.emergency
       }
       if (!groups.length)
         throw new OutageError(
@@ -217,6 +222,7 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
         group: groups[0]!,
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
         address: { city: city?.name, street: street.name, house: house.number },
+        ...(emergency ? { emergency } : {}),
       }
     },
   }

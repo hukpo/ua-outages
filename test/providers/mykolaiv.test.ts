@@ -74,6 +74,8 @@ describe('Mykolaivoblenergo', () => {
       region: 'mykolaiv',
       group: '2.2',
       address: { city: 'м. Миколаїв', street: 'вул. Соборна', house: '1' },
+      // outageType 2 = СГАВ; this house has no ГАВ queue
+      emergency: { sgav: ['2'] },
     })
   })
 

@@ -1,7 +1,16 @@
+import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
 import { toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupMatch, IntervalKind, RegionInfo, RegionSchedule } from '../types.js'
+import type {
+  City,
+  DaySchedule,
+  EmergencyQueues,
+  GroupMatch,
+  IntervalKind,
+  ProviderInfo,
+  RegionSchedule,
+} from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { findUaDate } from './ua-text.js'
 
@@ -12,7 +21,7 @@ import { findUaDate } from './ua-text.js'
 const SITE = 'https://www.poe.pl.ua'
 const CUSTOMS = `${SITE}/customs`
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'poltava',
   name: 'Полтавська область',
   operator: 'Полтаваобленерго',
@@ -126,7 +135,9 @@ export function poltavaProvider(): Provider {
         gp_qnum_1?: string | null
         gp_qnum_2?: string | null
         fn_accident_message?: string
+        gav_message?: string | null
       }>(body, region)
+      const emergency = parseGavMessage(row?.gav_message)
       if (!row?.gp_qnum_1)
         throw new OutageError(
           'not-found',
@@ -137,6 +148,7 @@ export function poltavaProvider(): Provider {
         region,
         group: row.gp_qnum_2 ? `${row.gp_qnum_1}.${row.gp_qnum_2}` : row.gp_qnum_1,
         address: { city: city?.name, street: street.name, house: house.number },
+        ...(emergency ? { emergency } : {}),
       }
     },
   }
@@ -178,6 +190,19 @@ export function parseGpvFragment(html: string, now: Date): RegionSchedule {
   }
 }
 
+/**
+ * `gav_message` lists every emergency schedule the house is in: "Заживлено від … та залучено до
+ * ГАВ (черга 10), ГПВ (черга 3-1)." Only ГАВ carries a number; СГАВ, АЧР and САВН are bare
+ * memberships, which the queue block can't express, so they are left out. "ГАВ (черга 0)" is
+ * outside the 1–10 rotation and counts as no queue. Exported for tests.
+ */
+export function parseGavMessage(message: string | null | undefined): EmergencyQueues | undefined {
+  const gav = [...(message ?? '').matchAll(/(?<![А-ЯІЇЄҐа-яіїєґ])ГАВ\s*\(черга\s*([^)]*)\)/g)].map(
+    (m) => m[1]!,
+  )
+  return emergencyQueues({ gav })
+}
+
 /** `<select id="input-filial-main">` options on the home page. Exported for tests. */
 export function parseFilials(html: string): { id: string; name: string }[] {
   const select = /<select[^>]*id="input-filial-main"[^>]*>([\s\S]*?)<\/select>/.exec(html)?.[1] ?? ''
@@ -186,7 +211,7 @@ export function parseFilials(html: string): { id: string; name: string }[] {
     .map((m) => ({ id: m[1]!, name: m[2]!.trim() }))
 }
 
-function parseJsonList<T>(body: string, region: RegionInfo['id']): T[] {
+function parseJsonList<T>(body: string, region: ProviderInfo['id']): T[] {
   let data: unknown
   try {
     data = JSON.parse(body.trim() || '[]')

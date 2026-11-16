@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
-import type { RegionInfo, RegionSchedule } from '../types.js'
+import type { ProviderInfo, RegionSchedule } from '../types.js'
 import { postsToSchedule, type SchedulePost } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { findUaDate, parseGroupLines } from './ua-text.js'
@@ -16,7 +16,7 @@ import { findUaDate, parseGroupLines } from './ua-text.js'
  * it. Working around that needs a custom CA via an undici dispatcher, which this
  * dependency-free SDK doesn't do.
  */
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'cherkasy',
   name: 'Черкаська область',
   operator: 'Черкасиобленерго',

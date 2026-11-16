@@ -10,7 +10,7 @@ import type {
   GroupMatch,
   House,
   RegionId,
-  RegionInfo,
+  ProviderInfo,
   RegionSchedule,
   Street,
 } from '../types.js'
@@ -38,7 +38,7 @@ const STATUS: Record<string, DayStatus> = {
 }
 
 export interface YasnoOptions {
-  info: Omit<RegionInfo, 'capabilities'>
+  info: Omit<ProviderInfo, 'capabilities'>
   regionId: number
   dsoId: number
   /** The region spans many settlements, so lookups need a city first */

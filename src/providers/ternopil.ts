@@ -1,8 +1,15 @@
 import { OutageError } from '../errors.js'
 import { cellsToIntervals, unpublished } from '../schedule.js'
 import { addDays, kyivDate, toKyivIso } from '../time.js'
-import type { DaySchedule, GroupId, IntervalKind, RegionInfo, RegionSchedule } from '../types.js'
-import { STANDARD_GROUPS, parseCherg, parsePowerOnTime, powerOnAddressSearch } from './poweron.js'
+import type { DaySchedule, GroupId, IntervalKind, ProviderInfo, RegionSchedule } from '../types.js'
+import { emergencyQueues } from '../emergency/queues.js'
+import {
+  STANDARD_GROUPS,
+  parseCherg,
+  parsePowerOnTime,
+  powerOnAddressSearch,
+  type PowerOnBuilding,
+} from './poweron.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mapLimit } from '../util.js'
 
@@ -23,7 +30,7 @@ import { mapLimit } from '../util.js'
  */
 const API = 'https://api-poweron.toe.com.ua/api'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'ternopil',
   name: 'Тернопільська область',
   operator: 'Тернопільобленерго',
@@ -137,12 +144,7 @@ export function ternopilProvider(): Provider {
         )
         if (!Array.isArray(data?.buildingNames))
           throw new OutageError('parse', 'Ternopil building-names: expected a list', { region })
-        return (data.buildingNames as { buildingName?: string; chergGpv?: string }[])
-          .filter((b) => b.buildingName?.trim())
-          .map((b) => {
-            const g = parseCherg(b.chergGpv)
-            return { number: b.buildingName!.trim(), groups: g ? [g] : [] }
-          })
+        return buildingNamesToBuildings(data.buildingNames as BuildingName[])
       },
       // a building with two supplies is in two groups; only this endpoint lists both
       async buildingGroups(ctx, street, house) {
@@ -160,6 +162,26 @@ export function ternopilProvider(): Provider {
       },
     }),
   }
+}
+
+interface BuildingName {
+  buildingName?: string
+  chergGpv?: string
+  /** ГАВ queue, "9" or "Не входить" */
+  chergGav?: string
+  chergSgav?: string
+  chergAchr?: string
+}
+
+/** `building-names` rows → buildings with their group and emergency queues. Exported for tests. */
+export function buildingNamesToBuildings(rows: readonly BuildingName[]): PowerOnBuilding[] {
+  return rows
+    .filter((b) => b.buildingName?.trim())
+    .map((b) => {
+      const g = parseCherg(b.chergGpv)
+      const emergency = emergencyQueues({ gav: [b.chergGav], sgav: [b.chergSgav], achr: [b.chergAchr] })
+      return { number: b.buildingName!.trim(), groups: g ? [g] : [], ...(emergency ? { emergency } : {}) }
+    })
 }
 
 /** One `a_gpv_g` response for the representative of `group`. Exported for tests. */

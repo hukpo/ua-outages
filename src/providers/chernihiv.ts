@@ -6,7 +6,7 @@ import { decodePng } from '../image/png.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { makeDay } from '../schedule.js'
 import { addDays, kyivDate, toKyivIso } from '../time.js'
-import type { DaySchedule, RegionInfo, RegionSchedule } from '../types.js'
+import type { DaySchedule, ProviderInfo, RegionSchedule } from '../types.js'
 import type { Provider } from './provider.js'
 
 /**
@@ -18,7 +18,7 @@ import type { Provider } from './provider.js'
  */
 const IMAGE = 'https://chernihivoblenergo.com.ua/files/other/schedule_groups.jpg'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'chernihiv',
   name: 'Чернігівська область',
   operator: 'Чернігівобленерго',

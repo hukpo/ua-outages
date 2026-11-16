@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { normalizeGroup } from '../schedule.js'
-import type { AddressQuery, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
+import type { AddressQuery, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { cookieHeader } from '../util.js'
@@ -30,7 +30,7 @@ interface HomeNum {
 const SESSION_TTL = 10 * 60_000
 
 export interface DtekOptions {
-  info: Omit<RegionInfo, 'capabilities'>
+  info: Omit<ProviderInfo, 'capabilities'>
   /** Site code: kem, krem, dnem, dem, oem */
   code: string
   sampleAddress?: AddressQuery

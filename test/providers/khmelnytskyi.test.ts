@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
-import { khmelnytskyiProvider, parseQueues } from '../../src/providers/khmelnytskyi.js'
+import { khmelnytskyiProvider, parseEmergencyQueues, parseQueues } from '../../src/providers/khmelnytskyi.js'
 import { fixture, mockFetch } from '../helpers.js'
 
 const SITE = 'https://hoe.com.ua'
@@ -36,6 +36,8 @@ describe('Khmelnytskoblenergo', () => {
       region: 'khmelnytskyi',
       group: '6.1',
       address: { city: 'м. Хмельницький', street: 'вул. Проскурівська', house: '2' },
+      // the second alert: "(ГАВ) ваша адреса відноситься до черги: <strong>3</strong>"
+      emergency: { gav: ['3'] },
     })
     expect(
       calls.every(
@@ -54,6 +56,14 @@ describe('Khmelnytskoblenergo', () => {
       house: '1',
     })
     expect(m).toMatchObject({ group: '1.1', otherGroups: ['3.1', '4.1', '6.1', '6.2'] })
+    // "8, 8, 3": one per connection, de-duplicated and sorted
+    expect(m.emergency).toEqual({ gav: ['3', '8'] })
+  })
+
+  it('leaves the ГАВ queue out when the operator gives none', () => {
+    const html = fixture('khmelnytskyi/shutdown-queues-empty-gav.html')
+    expect(parseQueues(html)).toEqual(['6.2'])
+    expect(parseEmergencyQueues(html)).toBeUndefined()
   })
 
   it('splits the settlement name from its community', async () => {

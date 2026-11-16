@@ -76,6 +76,15 @@ export interface RegionInfo {
 }
 
 /**
+ * What a provider declares about itself: `RegionInfo` without the capabilities the client
+ * works out (`streetSearch`).
+ */
+export type ProviderInfo = Omit<RegionInfo, 'capabilities'> & {
+  capabilities: Omit<RegionInfo['capabilities'], 'streetSearch'> &
+    Partial<Pick<RegionInfo['capabilities'], 'streetSearch'>>
+}
+
+/**
  * - `off`: power is scheduled to be off
  * - `maybe`: possible outage ("можливе відключення"), depends on the grid situation
  */
@@ -171,6 +180,20 @@ export interface GroupMatch {
   address: { city?: string; street: string; house: string }
   /** Some addresses belong to several groups (e.g. a building with two inputs) */
   otherGroups?: GroupId[]
+  /** Emergency queues of the address (ГАВ, СГАВ, АЧР); omitted when the operator says nothing */
+  emergency?: EmergencyQueues
+}
+
+/**
+ * Emergency schedules besides ГПВ: ГАВ, СГАВ (special ГАВ), АЧР (automatic frequency load
+ * shedding). Their queues are numbered separately from ГПВ groups ("3", "10"; Mykolaiv also
+ * has reserve queues "1(Р)").
+ */
+export interface EmergencyQueues {
+  /** ГАВ queues, distinct, sorted numerically, as the operator writes them ("3", "10", "1(Р)") */
+  gav?: string[]
+  sgav?: string[]
+  achr?: string[]
 }
 
 // --- health ---

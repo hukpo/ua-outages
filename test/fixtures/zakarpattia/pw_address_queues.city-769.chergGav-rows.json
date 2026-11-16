@@ -1,0 +1,101 @@
+{
+ "_source": "GET https://api-outage-zakarpat-energy.inneti.net/api/pw_address_queues?page=1..5&city.id=769 (fetched 2026-11-16; 3 of 150 rows, the ones with chergGav set)",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_address_queues/3595576",
+   "@type": "PwAddressQueue",
+   "id": 3595576,
+   "otg": {
+    "@id": "/api/pw_otgs/1",
+    "@type": "PwOtg",
+    "id": 1,
+    "code": "1",
+    "name": "Ужгородська"
+   },
+   "city": {
+    "@id": "/api/pw_cities/769",
+    "@type": "PwCity",
+    "id": 769,
+    "name": "Ужгород",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/9336",
+    "@type": "PwStreet",
+    "id": 9336,
+    "name": "Гагаріна"
+   },
+   "buildingNames": ", 101, 103, 115, 115А, 121, 121 б, 121А, 123, 125, 127, 129, 131, 133, 135, 137, 32, 36, 36 А, 36 Б, 36/Б, 38, 38А, 40, 95, 99, б/н",
+   "chergGpv": "2.1",
+   "chergGav": "8",
+   "chergAchr": "Не входить",
+   "chergGvsp": "Не входить",
+   "chergSgav": "",
+   "hash": "d7de0104bfb05f4d7f5774669016086f"
+  },
+  {
+   "@id": "/api/pw_address_queues/3595639",
+   "@type": "PwAddressQueue",
+   "id": 3595639,
+   "otg": {
+    "@id": "/api/pw_otgs/1",
+    "@type": "PwOtg",
+    "id": 1,
+    "code": "1",
+    "name": "Ужгородська"
+   },
+   "city": {
+    "@id": "/api/pw_cities/769",
+    "@type": "PwCity",
+    "id": 769,
+    "name": "Ужгород",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/9336",
+    "@type": "PwStreet",
+    "id": 9336,
+    "name": "Гагаріна"
+   },
+   "buildingNames": "108",
+   "chergGpv": "5.2",
+   "chergGav": "10",
+   "chergAchr": "Не входить",
+   "chergGvsp": "Не входить",
+   "chergSgav": "",
+   "hash": "3b34407032c3f5f2a3d9b7a66d3e0930"
+  },
+  {
+   "@id": "/api/pw_address_queues/3595649",
+   "@type": "PwAddressQueue",
+   "id": 3595649,
+   "otg": {
+    "@id": "/api/pw_otgs/1",
+    "@type": "PwOtg",
+    "id": 1,
+    "code": "1",
+    "name": "Ужгородська"
+   },
+   "city": {
+    "@id": "/api/pw_cities/769",
+    "@type": "PwCity",
+    "id": 769,
+    "name": "Ужгород",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/9337",
+    "@type": "PwStreet",
+    "id": 9337,
+    "name": "Черешнева"
+   },
+   "buildingNames": ", 1, 11, 12, 15, 17, 18, 19, 2, 20, 21, 26, 27, 29, 3, 30, 31, 33, 34, 35, 36, 37, 38, 39, 4, 40, 41, 42, 43, 44, 45, 46, 47, 49, 49А, 5, 51, 54, 56, 58, 6, 60, 62, 68, 8, 9",
+   "chergGpv": "1.1",
+   "chergGav": "10",
+   "chergAchr": "Не входить",
+   "chergGvsp": "Не входить",
+   "chergSgav": "",
+   "hash": "297f718df5b2d8dcc7e5dcf279d8b496"
+  }
+ ]
+}

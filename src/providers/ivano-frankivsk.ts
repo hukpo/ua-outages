@@ -1,7 +1,16 @@
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, unpublished, type MinuteSlot } from '../schedule.js'
 import { parseClock, toKyivIso } from '../time.js'
-import type { AddressQuery, DaySchedule, GroupId, GroupMatch, RegionInfo, RegionSchedule } from '../types.js'
+import { emergencyQueues } from '../emergency/queues.js'
+import type {
+  AddressQuery,
+  DaySchedule,
+  EmergencyQueues,
+  GroupId,
+  GroupMatch,
+  ProviderInfo,
+  RegionSchedule,
+} from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { parseUaDateTime } from './gpv.js'
 import { mapLimit } from '../util.js'
@@ -14,7 +23,7 @@ import { mapLimit } from '../util.js'
  */
 const API = 'https://be-svitlo.oe.if.ua'
 
-const INFO: RegionInfo = {
+const INFO: ProviderInfo = {
   id: 'ivano-frankivsk',
   name: 'Івано-Франківська область',
   operator: 'Прикарпаттяобленерго',
@@ -64,6 +73,9 @@ interface SearchAnswer {
     hasQueue?: string
     possibleQueues?: string[]
     note?: string
+    /** `{message: "Ваша черга аварійних відключень (ГАВ):", queue: "9" | null}` */
+    gav?: { queue?: string | number | null } | null
+    sgav?: { queue?: string | number | null } | null
   }
 }
 
@@ -119,8 +131,8 @@ export function ivanoFrankivskProvider(): Provider {
         region,
         status: 204,
       })
-    const match = parseSearchAnswer(res.body, res.status)
-    return { region, ...match, address: { city, street, house } }
+    const { emergency, ...match } = parseSearchAnswer(res.body, res.status)
+    return { region, ...match, address: { city, street, house }, ...(emergency ? { emergency } : {}) }
   }
 }
 
@@ -170,7 +182,10 @@ export function parseQueueSchedules(responses: readonly unknown[], now: Date): R
 }
 
 /** `/schedule-by-search` body → group(s). Exported for tests. */
-export function parseSearchAnswer(body: string, status: number): { group: GroupId; otherGroups?: GroupId[] } {
+export function parseSearchAnswer(
+  body: string,
+  status: number,
+): { group: GroupId; otherGroups?: GroupId[]; emergency?: EmergencyQueues } {
   const region = INFO.id
   let data: SearchAnswer
   try {
@@ -180,6 +195,8 @@ export function parseSearchAnswer(body: string, status: number): { group: GroupI
   }
   const cur = data?.current
   if (!cur) throw new OutageError('parse', 'Ivano-Frankivsk address search: no "current" block', { region })
+  const emergency = emergencyQueues({ gav: [cur.gav?.queue], sgav: [cur.sgav?.queue] })
+  const extra = emergency ? { emergency } : {}
 
   // 300 = "the consumer may belong to several groups" (several connections at one address)
   if (status === 300 || cur.hasQueue === 'many') {
@@ -191,7 +208,9 @@ export function parseSearchAnswer(body: string, status: number): { group: GroupI
         region,
       })
     all.sort(compareGroups)
-    return all.length > 1 ? { group: all[0]!, otherGroups: all.slice(1) } : { group: all[0]! }
+    return all.length > 1
+      ? { group: all[0]!, otherGroups: all.slice(1), ...extra }
+      : { group: all[0]!, ...extra }
   }
   const group = cur.queue && cur.subQueue ? normalizeGroup(`${cur.queue}.${cur.subQueue}`) : null
   if (!group)
@@ -200,7 +219,7 @@ export function parseSearchAnswer(body: string, status: number): { group: GroupI
       cur.note?.trim() || 'Ivano-Frankivsk: the operator returned no group',
       { region },
     )
-  return { group }
+  return { group, ...extra }
 }
 
 function toDay(date: string, intervals: readonly IfInterval[]): DaySchedule {

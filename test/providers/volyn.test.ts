@@ -69,6 +69,8 @@ describe('Volynoblenergo', () => {
       street: 'Винниченка',
       houses: ['1', '2', '62'],
       group: '1.2',
+      // "Черга у ГАВ": "Не залучено"
+      gav: null,
     })
     expect(rows[0]!.group).toBeNull()
   })

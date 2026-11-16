@@ -2,7 +2,7 @@ import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { toKyivIso } from '../time.js'
-import type { DaySchedule, RegionId, RegionInfo, RegionSchedule } from '../types.js'
+import type { DaySchedule, RegionId, ProviderInfo, RegionSchedule } from '../types.js'
 import type { Provider } from './provider.js'
 import { findTimeRanges, findUaDate } from './ua-text.js'
 
@@ -36,7 +36,7 @@ export interface UzOptions {
 
 export function uzProvider(opts: UzOptions): Provider {
   const url = `${BASE}/${opts.page}/`
-  const info: RegionInfo = {
+  const info: ProviderInfo = {
     id: opts.id,
     name: `${opts.oblast} (Укрзалізниця${opts.branch ? `, ${opts.branch} залізниця` : ''})`,
     operator: opts.branch ? `Укрзалізниця, ${opts.branch} залізниця` : 'Укрзалізниця',
