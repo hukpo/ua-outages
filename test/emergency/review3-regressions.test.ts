@@ -146,6 +146,116 @@ describe('5. queue rotations replace, not add up', () => {
   })
 })
 
+describe('6. the end shown is of the schedule that ended last', () => {
+  const ids = [
+    'SvitloKropyvnytskyiMisto/1325',
+    'SvitloKropyvnytskyiMisto/1327',
+    'SvitloKropyvnytskyiMisto/1328',
+  ]
+
+  it('Kirovohrad 22.01: СГАВ cancelled 12:58, ГАВ never: from 20:24 the ГАВ end (inferred)', () => {
+    expect(fold('kirovohrad', ids, '2026-01-22T20:00:00+02:00')).toMatchObject({
+      state: 'active',
+      kind: 'gav',
+    })
+    expect(fold('kirovohrad', ids, '2026-01-22T20:26:00+02:00')).toMatchObject({
+      state: 'inactive',
+      kind: 'gav',
+      inferred: true,
+      endedAt: '2026-01-22T20:25:06+02:00',
+      message: { url: 'https://t.me/SvitloKropyvnytskyiMisto/1325' },
+    })
+  })
+})
+
+describe('7. an orphan area or partial cancel older than the TTL is history', () => {
+  const routes = [{ match: 't.me/s/cek_info', body: page('cek_info', [4406, 4407]) }]
+
+  it('ЦЕК 15.11 4406/4407 "м. ДНІПРО": inactive on 17.11 after the apply left the window', async () => {
+    const during = await client('2026-11-15T16:00:00+02:00', routes).getEmergency('dnipro-cek')
+    expect(during).toMatchObject({
+      state: 'inactive',
+      endedAt: '2026-11-15T15:27:32+02:00',
+    })
+    const later = await client('2026-11-17T13:40:00+02:00', routes).getEmergency('dnipro-cek')
+    expect(later).toMatchObject({
+      state: 'inactive',
+      endedAt: '2026-11-15T15:27:32+02:00',
+      message: { url: 'https://t.me/cek_info/4407' },
+    })
+  })
+
+  it('Poltava 4526 "скасовано 5 черг ГАВ (6-10 черги)" alone: unknown within the TTL, then inferred', () => {
+    expect(fold('poltava', ['poltavaOE/4526'], '2026-11-10T22:00:00+02:00').state).toBe('unknown')
+    expect(fold('poltava', ['poltavaOE/4526'], '2026-11-12T18:00:00+02:00')).toMatchObject({
+      state: 'inactive',
+      kind: 'gav',
+      inferred: true,
+      endedAt: '2026-11-11T09:06:33+02:00',
+    })
+  })
+})
+
+describe('8. a city-tagged cancel ends the one untagged apply', () => {
+  it('ЦЕК 09.11: 4348 "Шановні споживачі‼️ Діють…" 18:42, 4349 "…м. ДНІПРО‼️ …скасування" 20:49', () => {
+    const s = fold('dnipro-cek', ['cek_info/4348', 'cek_info/4349'], '2026-11-09T21:00:00+02:00')
+    expect(s).toMatchObject({
+      state: 'inactive',
+      endedAt: '2026-11-09T20:49:17+02:00',
+      inferred: false,
+    })
+  })
+
+  it('with areas followed separately it ends only its own', () => {
+    const s = fold(
+      'dnipro-cek',
+      [
+        'cek_info/4348',
+        ['📢 Шановні споживачі м. ПАВЛОГРАД‼️ Діють ЕКСТРЕНІ ВІДКЛЮЧЕННЯ‼️', '2026-11-09T17:00:00Z'],
+        'cek_info/4349',
+      ],
+      '2026-11-09T21:00:00+02:00',
+    )
+    expect(s.state).toBe('active')
+  })
+})
+
+describe('10. several areas on at once', () => {
+  const items: [string, string][] = [
+    ['Застосовано ГАВ (1-5 черга) в Полтавському районі.', '2026-11-10T08:00:00Z'],
+    ['Застосовано ГАВ (6-10 черга) в Кременчуцькому районі.', '2026-11-10T08:30:00Z'],
+  ]
+
+  it('areas in the order they started; no one area’s queues for the region', () => {
+    const s = fold('poltava', items, '2026-11-10T11:00:00+02:00')
+    expect(s).toMatchObject({
+      state: 'active',
+      area: 'Полтавському районі; Кременчуцькому районі',
+      queues: null,
+      queueCount: null,
+    })
+    // a newer post about the first one doesn't reorder them
+    const touched = fold(
+      'poltava',
+      [...items, ['Тривають ГАВ (1-5 черга) в Полтавському районі.', '2026-11-10T08:50:00Z']],
+      '2026-11-10T11:00:00+02:00',
+    )
+    expect(touched.area).toBe('Полтавському районі; Кременчуцькому районі')
+  })
+
+  it('areas that agree keep the queues', () => {
+    const s = fold(
+      'poltava',
+      [items[0]!, ['Застосовано ГАВ (1-5 черга) в Кременчуцькому районі.', '2026-11-10T08:30:00Z']],
+      '2026-11-10T11:00:00+02:00',
+    )
+    expect(s).toMatchObject({
+      queues: ['1', '2', '3', '4', '5'],
+      queueCount: 5,
+    })
+  })
+})
+
 describe('13. national alerts are not the operator’s own', () => {
   for (const key of ['Ukrenergo/5603', 'Ukrenergo/5499'])
     for (const region of ['zhytomyr', 'khmelnytskyi', 'kharkiv'] as const)

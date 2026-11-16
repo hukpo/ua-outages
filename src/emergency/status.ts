@@ -18,6 +18,8 @@ export interface FoldOptions {
   /** An apply without a later cancel or update for this long has ended (inferred) */
   ttlHours: number
   source: EmergencyStatus['source']
+  /** The status the caller got last time: dates an "UPD: … скасовано" edit (see `end`) */
+  previous?: EmergencyStatus
 }
 
 /** What one schedule (ГАВ, СГАВ, unnamed emergency) is doing in one area (null = the whole region). */
@@ -69,10 +71,25 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   const timeOf = (e: EmergencyEvent) => Math.max(Date.parse(e.posted), Date.parse(e.announcement.at))
   const keyOf = (kind: EmergencyKind, area: string | null) => `${kind}|${areaKey(area)}`
 
+  const fetchedAt = toKyivIso(opts.now)
+  /**
+   * An "UPD: … скасовано" edit shows no edit time. When the caller's last status was this very
+   * post still in force, the edit came after that reading: it ended by this one. Otherwise the
+   * post's own time is the best known.
+   */
+  const editedEnd = (e: EmergencyEvent): string => {
+    const p = opts.previous
+    if (e.url && p?.message?.url === e.url) {
+      if (p.state === 'active') return fetchedAt
+      // …and stays so on the readings after it
+      if (!p.inferred && p.endedAt && Date.parse(p.endedAt) > Date.parse(e.posted)) return p.endedAt
+    }
+    return e.posted
+  }
+
   const end = (t: Track, e: EmergencyEvent) => {
     t.active = false
-    // an "UPD: … скасовано" edit shows no edit time: the post's own time is the best known
-    t.endedAt = e.announcement.edited && !e.announcement.timed ? e.posted : e.announcement.at
+    t.endedAt = e.announcement.edited && !e.announcement.timed ? editedEnd(e) : e.announcement.at
     t.inferred = false
     t.event = e
     t.lastAt = timeOf(e)
@@ -155,9 +172,12 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       const kinds: EmergencyKind[] =
         a.kind === 'emergency' ? [...KINDS] : a.kind === 'gav' ? ['gav', 'emergency'] : ['sgav']
       // whole region: every area; an area: only that one
-      const targets = [...tracks.values()].filter(
-        (t) => t.active && kinds.includes(t.kind) && (!a.area || areaKey(t.area) === areaKey(a.area)),
-      )
+      const on = [...tracks.values()].filter((t) => t.active && kinds.includes(t.kind))
+      let targets = on.filter((t) => !a.area || areaKey(t.area) === areaKey(a.area))
+      // "Шановні споживачі м. ДНІПРО: скасування" after an untagged "Шановні споживачі: діють":
+      // with no area followed separately, the one whole-region episode is what it ends
+      if (a.area && !targets.length && ![...tracks.values()].some((t) => t.active && t.area))
+        targets = on.filter((t) => !t.area)
       for (const t of targets) {
         if (!a.partial || lift(t, a)) end(t, e)
         else touch(t, e)
@@ -218,7 +238,6 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
 
   expire(now)
 
-  const fetchedAt = toKyivIso(opts.now)
   const message = (e: EmergencyEvent | null) =>
     e ? { text: e.text.slice(0, MESSAGE_MAX), url: e.url, at: e.posted } : null
   const status = (s: Omit<EmergencyStatus, 'region' | 'source' | 'fetchedAt'>): EmergencyStatus => ({
@@ -247,24 +266,34 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   const active = byNewest.filter((t) => t.active)
   if (active.length) {
     const primary = active[0]!
-    // the whole region, or every area that is on
-    const areas = active.some((t) => !t.area) ? null : [...new Set(active.map((t) => t.area!))].join('; ')
+    const queuesOf = (t: Track) => (t.queues?.size ? sortQueues(t.queues) : null)
+    // the whole region, or every area that is on, in the order they started (a post about one
+    // doesn't reorder them)
+    const byStart = [...active].sort(
+      (a, b) => Date.parse(a.since) - Date.parse(b.since) || areaKey(a.area).localeCompare(areaKey(b.area)),
+    )
+    const areas = active.some((t) => !t.area) ? null : [...new Set(byStart.map((t) => t.area!))]
+    // several areas: one area's queues aren't the region's, unless they all say the same
+    const same = (t: Track) => t.count === primary.count && queuesOf(t)?.join() === queuesOf(primary)?.join()
+    const shared = !areas || areas.length < 2 || active.every(same)
     return status({
       state: 'active',
       kind: primary.kind,
       scheduleApplies: primary.scheduleApplies,
-      since: active.map((t) => t.since).sort()[0]!,
+      since: byStart[0]!.since,
       endedAt: null,
-      queues: primary.queues?.size ? sortQueues(primary.queues) : null,
-      queueCount: primary.count,
-      area: areas,
+      queues: shared ? queuesOf(primary) : null,
+      queueCount: shared ? primary.count : null,
+      area: areas ? areas.join('; ') : null,
       inferred: false,
       message: message(primary.event),
     })
   }
 
-  const last = byNewest[0]
-  if (last && (!orphanCancel || timeOf(orphanCancel) <= last.lastAt))
+  // the episode that ended last: an inferred end of ГАВ at 20:24 is after a real СГАВ cancel at 12:58
+  const endOf = (t: Track) => Math.max(Date.parse(t.endedAt ?? '') || 0, t.lastAt)
+  const last = [...byNewest].sort((a, b) => endOf(b) - endOf(a))[0]
+  if (last && (!orphanCancel || timeOf(orphanCancel) <= endOf(last)))
     return status({
       state: 'inactive',
       kind: last.kind,
@@ -281,8 +310,9 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   if (orphanCancel) {
     const a = orphanCancel.announcement
     // "скасовано ГАВ для 6-10 черг", "м. Павлоград: скасовано" with nothing known before: the
-    // rest may still be on, so not a region-wide "cancelled"
-    if (a.partial || a.area)
+    // rest may still be on, so not a region-wide "cancelled"…
+    const recent = now - timeOf(orphanCancel) <= ttl
+    if ((a.partial || a.area) && recent)
       return status({
         state: 'unknown',
         kind: a.kind,
@@ -295,12 +325,26 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
         inferred: false,
         message: message(orphanCancel),
       })
+    // …until the TTL has passed since: whatever was left has ended by then (history, not unknown)
+    if (a.partial)
+      return status({
+        state: 'inactive',
+        kind: a.kind,
+        scheduleApplies: null,
+        since: null,
+        endedAt: toKyivIso(new Date(timeOf(orphanCancel) + ttl)),
+        queues: null,
+        queueCount: null,
+        area: null,
+        inferred: true,
+        message: message(orphanCancel),
+      })
     return status({
       state: 'inactive',
       kind: a.kind,
       scheduleApplies: a.scheduleApplies,
       since: null,
-      endedAt: a.edited && !a.timed ? orphanCancel.posted : a.at,
+      endedAt: a.edited && !a.timed ? editedEnd(orphanCancel) : a.at,
       queues: null,
       queueCount: null,
       area: null,
