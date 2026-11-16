@@ -4,7 +4,8 @@ import { classifyPost, classifyUkrenergo, type Dialect } from '../../src/emergen
 import { channelEvents, EMERGENCY_REGIONS } from '../../src/emergency/regions.js'
 import { parseYasnoEmergency } from '../../src/emergency/sources.js'
 import { foldEvents } from '../../src/emergency/status.js'
-import type { TelegramPost } from '../../src/emergency/telegram.js'
+import { readChannelWindow, type TelegramPost } from '../../src/emergency/telegram.js'
+import { Http } from '../../src/http.js'
 import { toKyivIso } from '../../src/time.js'
 import type { EmergencyStatus, RegionId } from '../../src/types.js'
 import { fixture, mockFetch, type Route } from '../helpers.js'
@@ -67,6 +68,193 @@ const client = (now: string, routes: Route[]) =>
 
 const feed = (rows: object[]) => JSON.stringify({ current_page: 1, last_page: 1, data: rows })
 const MK_FEED = 'energy.mk.ua/outage/api/v1/outage'
+
+describe('1. Mykolaiv: the feed’s own end wins over an older channel cancel', () => {
+  const rows = feed([
+    {
+      id: 1,
+      type: 'GAO',
+      start_at: '2026-11-03T00:30:00Z',
+      finish_at: '2026-11-03T02:50:00Z',
+      reason: 'Графік аварійних відключень | ГАВ черга 1',
+    },
+  ])
+  const cancel = (at: string): PreviewPost => ({
+    id: 9,
+    at,
+    text: 'О 19:09 скасовано графіки аварійних відключень.',
+  })
+
+  it("yesterday's 19:09 cancel is not today's end", async () => {
+    const s = await client('2026-11-03T08:00:00+02:00', [
+      { match: MK_FEED, method: 'POST', body: rows },
+      {
+        match: 't.me/s/mk_energy_ua',
+        body: previewPage('mk_energy_ua', [cancel('2026-11-02T17:10:00Z')]),
+      },
+    ]).getEmergency('mykolaiv')
+    expect(s).toMatchObject({
+      state: 'inactive',
+      source: 'api',
+      inferred: true,
+      endedAt: '2026-11-03T04:50:00+02:00',
+    })
+  })
+
+  it('a cancel posted after the feed episode started still wins', async () => {
+    const s = await client('2026-11-03T08:00:00+02:00', [
+      { match: MK_FEED, method: 'POST', body: rows },
+      {
+        match: 't.me/s/mk_energy_ua',
+        body: previewPage('mk_energy_ua', [
+          {
+            id: 9,
+            at: '2026-11-03T03:00:00Z',
+            text: 'Скасовано графіки аварійних відключень.',
+          },
+        ]),
+      },
+    ]).getEmergency('mykolaiv')
+    expect(s).toMatchObject({
+      state: 'inactive',
+      source: 'telegram',
+      inferred: false,
+    })
+  })
+})
+
+describe('2. an apply post edited into "UPD: … скасовано"', () => {
+  const routes = [
+    {
+      match: 't.me/s/ztoe_ua',
+      body: fixture('telegram/ztoe_ua-before-1875.trimmed.html'),
+    },
+  ]
+  const active: EmergencyStatus = {
+    region: 'zhytomyr',
+    state: 'active',
+    kind: 'gav',
+    scheduleApplies: null,
+    since: '2026-11-03T14:50:38+02:00',
+    endedAt: null,
+    queues: null,
+    queueCount: null,
+    area: null,
+    inferred: false,
+    message: {
+      text: 'На Житомирщині застосовано ГАВ',
+      url: 'https://t.me/ztoe_ua/1873',
+      at: '2026-11-03T14:50:38+02:00',
+    },
+    source: 'telegram',
+    fetchedAt: '2026-11-04T14:00:00+02:00',
+  }
+
+  it('previous was that post in force: it ended by this reading', async () => {
+    const s = await client('2026-11-04T15:00:00+02:00', routes).getEmergency('zhytomyr', { previous: active })
+    expect(s).toMatchObject({
+      state: 'inactive',
+      endedAt: '2026-11-04T15:00:00+02:00',
+      inferred: false,
+    })
+    // and stays so on the next reading
+    const next = await client('2026-11-04T16:00:00+02:00', routes).getEmergency('zhytomyr', { previous: s })
+    expect(next.endedAt).toBe('2026-11-04T15:00:00+02:00')
+  })
+
+  it('without such a previous: the post time, as before', async () => {
+    const s = await client('2026-11-04T15:00:00+02:00', routes).getEmergency('zhytomyr', {
+      previous: {
+        ...active,
+        message: { ...active.message!, url: 'https://t.me/ztoe_ua/1' },
+      },
+    })
+    expect(s.endedAt).toBe('2026-11-03T14:50:38+02:00')
+  })
+})
+
+describe('3. YASNO groups without a known status are not an end', () => {
+  const shutdowns = fixture('yasno/planned-outages-EmergencyShutdowns.community-2025-11-25.json')
+  const noStatus = JSON.stringify(
+    Object.fromEntries(
+      Object.entries(JSON.parse(shutdowns))
+        .filter(([k]) => /^\d/.test(k))
+        .map(([k]) => [k, { today: { slots: [] }, updatedOn: '2025-11-25T09:00:00+00:00' }]),
+    ),
+  )
+
+  it('parse fails', () => {
+    expect(() => parseYasnoEmergency(JSON.parse(noStatus), 'kyiv')).toThrow(/status/)
+    expect(() => parseYasnoEmergency({ '1.1': { today: { status: 'SomethingNew' } } }, 'kyiv')).toThrow()
+    expect(parseYasnoEmergency({ '1.1': { today: { status: 'WaitingForSchedule' } } }, 'kyiv').active).toBe(
+      false,
+    )
+  })
+
+  it('an episode YASNO showed is not ended by it', async () => {
+    let yasno = shutdowns
+    const { fetch } = mockFetch([
+      {
+        match: 't.me/s/dtek_ua',
+        body: previewPage('dtek_ua', [{ id: 1, at: '2025-11-24T07:00:00Z', text: 'Підписуйтесь на канал' }]),
+      },
+      { match: '/regions/25/dsos/902/planned-outages', body: () => yasno },
+    ])
+    const c = new OutageClient({
+      fetch,
+      now: () => new Date('2025-11-25T12:00:00+02:00'),
+      cacheTtlMs: 0,
+    })
+    expect((await c.getEmergency('kyiv')).state).toBe('active')
+    yasno = noStatus
+    const s = await c.getEmergency('kyiv')
+    expect(s.state).not.toBe('inactive')
+    expect(s.message?.text ?? '').not.toMatch(/→/)
+  })
+})
+
+describe('4. a channel read that runs out of pages before the TTL window', () => {
+  // 120 posts, 5 min apart: 5 pages of 20 cover 8 h; the apply is on page 6, 9 h ago
+  const now = Date.parse('2026-11-10T12:00:00+02:00')
+  const all: PreviewPost[] = Array.from({ length: 120 }, (_, i) => ({
+    id: 1000 + i,
+    at: new Date(now - (120 - i) * 5 * 60_000).toISOString(),
+    text:
+      i === 5
+        ? 'В області застосовано ГАВ!\n\nО 03:00 отримана команда НЕК “Укренерго” ввести ГАВ в обсязі 5 черг.'
+        : `Допис ${i}`,
+  }))
+  const routes: Route[] = []
+  for (let p = 1; p < 6; p++) {
+    const before = 1000 + 120 - p * 20
+    routes.push({
+      match: `t.me/s/poltavaOE?before=${before}`,
+      body: previewPage('poltavaOE', all.slice(before - 1000 - 20, before - 1000)),
+    })
+  }
+  routes.push({
+    match: 't.me/s/poltavaOE',
+    body: previewPage('poltavaOE', all.slice(100)),
+  })
+
+  it('says how far back it got', async () => {
+    const ctx = {
+      http: new Http({ fetch: mockFetch(routes).fetch }),
+      now: () => new Date(now),
+    }
+    const r = await readChannelWindow(ctx, 'poltavaOE', {
+      region: 'poltava',
+      since: new Date(now - 48 * 3600_000),
+    })
+    expect(r.posts).toHaveLength(100)
+    expect(Date.parse(r.from)).toBe(Date.parse(all[20]!.at))
+  })
+
+  it('"nothing found" from a short read is unknown, not inactive', async () => {
+    const s = await client('2026-11-10T12:00:00+02:00', routes).getEmergency('poltava')
+    expect(s.state).toBe('unknown')
+  })
+})
 
 describe('5. queue rotations replace, not add up', () => {
   it('Sumy 3847 "для 1-5 черг" then 3848 "для 6-10 черг (1-5 ввімкнені)": 6–10', () => {
@@ -220,6 +408,89 @@ describe('8. a city-tagged cancel ends the one untagged apply', () => {
   })
 })
 
+describe('9. a source down mid-episode keeps the episode’s details', () => {
+  const shutdowns = fixture('yasno/planned-outages-EmergencyShutdowns.community-2025-11-25.json')
+  const kyiv: EmergencyStatus = {
+    region: 'kyiv',
+    state: 'active',
+    kind: 'emergency',
+    scheduleApplies: false,
+    since: '2025-11-25T08:30:00+02:00',
+    endedAt: null,
+    queues: null,
+    queueCount: null,
+    area: 'частині Голосіївського району',
+    inferred: false,
+    message: {
+      text: '‼️Київ: застосовані екстрені відключення',
+      url: 'https://t.me/dtek_ua/1',
+      at: '2025-11-25T08:30:00+02:00',
+    },
+    source: 'yasno',
+    fetchedAt: '2025-11-25T09:55:00+02:00',
+  }
+  const down: Route[] = [
+    { match: 't.me/s/dtek_ua', body: 'down', status: 502 },
+    { match: '/regions/25/dsos/902/planned-outages', body: shutdowns },
+  ]
+
+  it('Kyiv: t.me down, YASNO still EmergencyShutdowns', async () => {
+    const s = await client('2025-11-25T10:00:00+02:00', down).getEmergency('kyiv', { previous: kyiv })
+    expect(s).toMatchObject({
+      state: 'active',
+      kind: 'emergency',
+      since: kyiv.since,
+      area: kyiv.area,
+      message: kyiv.message,
+      source: 'yasno',
+    })
+    // without previous: as before
+    const bare = await client('2025-11-25T10:00:00+02:00', down).getEmergency('kyiv')
+    expect(bare.message?.text).toBe('YASNO: EmergencyShutdowns')
+  })
+
+  it('Mykolaiv: the feed down while the channel’s older apply stands', async () => {
+    const previous: EmergencyStatus = {
+      region: 'mykolaiv',
+      state: 'active',
+      kind: 'gav',
+      scheduleApplies: null,
+      since: '2026-11-03T05:00:00+02:00',
+      endedAt: null,
+      queues: ['2', '3'],
+      queueCount: 2,
+      area: null,
+      inferred: false,
+      message: {
+        text: 'Графік аварійних відключень | ГАВ черга 3',
+        url: null,
+        at: '2026-11-03T06:00:00+02:00',
+      },
+      source: 'api',
+      fetchedAt: '2026-11-03T07:50:00+02:00',
+    }
+    const s = await client('2026-11-03T08:00:00+02:00', [
+      { match: MK_FEED, method: 'POST', body: 'down', status: 502 },
+      {
+        match: 't.me/s/mk_energy_ua',
+        body: previewPage('mk_energy_ua', [
+          {
+            id: 7,
+            at: '2026-11-03T01:00:00Z',
+            text: 'УВАГА! За командою НЕК "УКРЕНЕРГО" відключили 1,2,3 та 4 черги ГАВ.',
+          },
+        ]),
+      },
+    ]).getEmergency('mykolaiv', { previous })
+    expect(s).toMatchObject({
+      state: 'active',
+      queues: ['2', '3'],
+      queueCount: 2,
+      since: '2026-11-03T03:00:00+02:00',
+    })
+  })
+})
+
 describe('10. several areas on at once', () => {
   const items: [string, string][] = [
     ['Застосовано ГАВ (1-5 черга) в Полтавському районі.', '2026-11-10T08:00:00Z'],
@@ -252,6 +523,95 @@ describe('10. several areas on at once', () => {
     expect(s).toMatchObject({
       queues: ['1', '2', '3', '4', '5'],
       queueCount: 5,
+    })
+  })
+})
+
+describe('11. Chernivtsi: the channel and @Ukrenergo merged by time', () => {
+  it('a cancel 28 h ago doesn’t hide a newer Ukrenergo apply naming the oblast', async () => {
+    const s = await client('2026-11-08T13:00:00+02:00', [
+      {
+        match: 't.me/s/oe_cv_ua',
+        body: previewPage('oe_cv_ua', [
+          {
+            id: 5,
+            at: '2026-11-07T07:00:00Z',
+            text: 'На Буковині скасовано графіки аварійних відключень.',
+          },
+        ]),
+      },
+      {
+        match: 't.me/s/Ukrenergo',
+        body: previewPage('Ukrenergo', [
+          {
+            id: 5700,
+            at: '2026-11-08T10:00:00Z',
+            text: '❗️ УВАГА! На цю годину у Чернівецькій області вимушено запроваджені аварійні відключення електроенергії.',
+          },
+        ]),
+      },
+    ]).getEmergency('chernivtsi')
+    expect(s).toMatchObject({
+      state: 'active',
+      source: 'ukrenergo',
+      message: { url: 'https://t.me/Ukrenergo/5700' },
+    })
+  })
+})
+
+describe('12. an `unknown` previous keeps the YASNO end', () => {
+  it('after a restart, YASNO’s end made unknown by a failed source still stands', async () => {
+    const applies = JSON.stringify(
+      Object.fromEntries(
+        Object.entries(
+          JSON.parse(fixture('yasno/planned-outages-EmergencyShutdowns.community-2025-11-25.json')),
+        )
+          .filter(([k]) => /^\d/.test(k))
+          .map(([k]) => [
+            k,
+            {
+              today: { status: 'ScheduleApplies' },
+              updatedOn: '2025-11-25T09:00:00+00:00',
+            },
+          ]),
+      ),
+    )
+    const previous: EmergencyStatus = {
+      region: 'kyiv',
+      state: 'unknown',
+      kind: 'emergency',
+      scheduleApplies: true,
+      since: '2025-11-25T09:00:00+02:00',
+      endedAt: '2025-11-25T11:00:00+02:00',
+      queues: null,
+      queueCount: null,
+      area: null,
+      inferred: false,
+      message: {
+        text: 'YASNO: EmergencyShutdowns → ScheduleApplies',
+        url: null,
+        at: '2025-11-25T11:00:00+02:00',
+      },
+      source: 'yasno',
+      fetchedAt: '2025-11-25T11:30:00+02:00',
+    }
+    const s = await client('2025-11-25T12:00:00+02:00', [
+      {
+        match: 't.me/s/dtek_ua',
+        body: previewPage('dtek_ua', [
+          {
+            id: 1,
+            at: '2025-11-25T07:00:00Z',
+            text: '‼️Київ: за командою Укренерго застосовані екстрені відключення',
+          },
+        ]),
+      },
+      { match: '/regions/25/dsos/902/planned-outages', body: applies },
+    ]).getEmergency('kyiv', { previous })
+    expect(s).toMatchObject({
+      state: 'inactive',
+      source: 'yasno',
+      endedAt: '2025-11-25T11:00:00+02:00',
     })
   })
 })
