@@ -225,7 +225,9 @@ export interface EmergencyStatus {
   /**
    * active: ГАВ / СГАВ / emergency shutdowns are in force now.
    * inactive: the last word was a cancellation, or nothing announced recently.
-   * unknown: the source answered but can't be read with confidence (never thrown for "nothing posted").
+   * unknown: the source answered but can't be read with confidence, or one of the region's
+   * sources failed (or its channel couldn't be read back far enough) while the rest say nothing
+   * is in force (never thrown for "nothing posted").
    */
   state: EmergencyState
   /** What is (or was last) in force; null when nothing was announced in the lookback window */
@@ -235,9 +237,10 @@ export interface EmergencyStatus {
   /** Start: the time named in the text ("з 10:35", "О 9:44"), else the post time. ISO with the Kyiv offset */
   since: string | null
   /**
-   * For inactive: when it was cancelled (time in the text, else the post time; for an "UPD …
-   * скасовано" edit the post's own time, Telegram doesn't show when it was edited), or the
-   * inferred end. Null only when nothing was announced.
+   * For inactive: when it was cancelled (time in the text, else the post time), or the inferred
+   * end. Telegram doesn't show when a post was edited: for an "UPD … скасовано" edit it is the
+   * time of the first reading that saw the edit when `previous` was that post still in force,
+   * else the post's own time. Null only when nothing was announced.
    */
   endedAt: string | null
   /** ГАВ/СГАВ queues that are off now when the operator names them; null when not said */
@@ -246,7 +249,8 @@ export interface EmergencyStatus {
   queueCount: number | null
   /**
    * When limited to a part of the region ("м. Дніпро", "частині Голосіївського та Соломʼянського
-   * районів"); several areas on at once are joined with "; ". null = whole region / not said
+   * районів"); several areas on at once are joined with "; " in the order they started (`queues`
+   * and `queueCount` are then null unless all areas name the same). null = whole region / not said
    */
   area: string | null
   /** True when the end (or state) is inferred, not announced: no cancel post within the TTL */

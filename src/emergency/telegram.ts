@@ -119,6 +119,17 @@ export interface ReadChannelOptions {
   maxPages?: number
 }
 
+export interface ChannelRead {
+  /** From `since` on, oldest first */
+  posts: TelegramPost[]
+  /**
+   * How far back the posts are complete: `since` when the read got there, the channel's first
+   * post's time when it has nothing older, or the oldest post read when `maxPages` ran out first
+   * (a busy channel: something older than that may be missing). ISO
+   */
+  from: string
+}
+
 /**
  * Posts of a channel from `since` on, oldest first, paging back with `?before=` when one page
  * doesn't reach that far. A page without any post (renamed or private channel, changed markup)
@@ -129,9 +140,21 @@ export async function readChannel(
   channel: string,
   opts: ReadChannelOptions,
 ): Promise<TelegramPost[]> {
+  return (await readChannelWindow(ctx, channel, opts)).posts
+}
+
+/** `readChannel` that also says how far back it got: see `ChannelRead.from`. */
+export async function readChannelWindow(
+  ctx: ProviderContext,
+  channel: string,
+  opts: ReadChannelOptions,
+): Promise<ChannelRead> {
   const maxPages = opts.maxPages ?? 5
   const byId = new Map<number, TelegramPost>()
   let before: number | null = null
+  /** The read reached `since` or the channel's first post */
+  let complete = false
+  let oldestSeen = Infinity
   for (let page = 0; page < maxPages; page++) {
     ctx.signal?.throwIfAborted()
     const url = `${PREVIEW}${encodeURIComponent(channel)}${before ? `?before=${before}` : ''}`
@@ -140,7 +163,11 @@ export async function readChannel(
     // a page of photo-only posts has message blocks but no text: still a valid page
     const blocks = [...html.matchAll(/data-post="[^"/]+\/(\d+)"/g)].map((m) => Number(m[1]))
     if (!blocks.length) {
-      if (page > 0) break // paged past the first post of the channel
+      // paged past the first post of the channel
+      if (page > 0) {
+        complete = true
+        break
+      }
       throw new OutageError('parse', `Telegram @${channel}: the preview page has no posts`, {
         region: opts.region,
         url,
@@ -149,11 +176,28 @@ export async function readChannel(
     for (const p of posts) byId.set(p.id, p)
     const oldest = Math.min(...blocks)
     const oldestAt = posts.length ? Date.parse(posts[0]!.at) : NaN
-    if (oldest <= 1 || (before !== null && oldest >= before)) break
-    if (Number.isFinite(oldestAt) && oldestAt < opts.since.getTime()) break
+    if (Number.isFinite(oldestAt)) oldestSeen = Math.min(oldestSeen, oldestAt)
+    // the first post, back far enough, or a page that didn't go back (nothing older is served,
+    // as with a channel whose history was deleted)
+    if (
+      oldest <= 1 ||
+      (before !== null && oldest >= before) ||
+      (Number.isFinite(oldestAt) && oldestAt < opts.since.getTime())
+    ) {
+      complete = true
+      break
+    }
     before = oldest
   }
-  return [...byId.values()]
-    .filter((p) => Date.parse(p.at) >= opts.since.getTime())
-    .sort((a, b) => a.id - b.id)
+  const from = complete
+    ? opts.since.getTime()
+    : Number.isFinite(oldestSeen)
+      ? oldestSeen
+      : ctx.now().getTime()
+  return {
+    posts: [...byId.values()]
+      .filter((p) => Date.parse(p.at) >= opts.since.getTime())
+      .sort((a, b) => a.id - b.id),
+    from: toKyivIso(new Date(Math.max(from, opts.since.getTime()))),
+  }
 }

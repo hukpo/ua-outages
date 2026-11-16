@@ -17,10 +17,15 @@ export interface YasnoEmergency {
   status: string
 }
 
+/** Today's statuses that say "no emergency shutdowns" (see `providers/yasno.ts`) */
+const YASNO_NOT_EMERGENCY = new Set(['ScheduleApplies', 'WaitingForSchedule', 'NoOutages'])
+
 /**
  * YASNO marks emergency shutdowns per group: `today.status = "EmergencyShutdowns"` (and no
  * slots) while DTEK runs them, for every group of the operator at once in the known example.
- * `updatedOn` is when the status flipped. Exported for tests.
+ * `updatedOn` is when the status flipped. "Not active" is read only from groups that all carry a
+ * known status: a group without one (or with a new value) is a `parse` error, since an
+ * emergency YASNO showed would otherwise end on it. Exported for tests.
  */
 export function parseYasnoEmergency(data: unknown, region: RegionId): YasnoEmergency {
   if (!data || typeof data !== 'object' || Array.isArray(data))
@@ -29,20 +34,25 @@ export function parseYasnoEmergency(data: unknown, region: RegionId): YasnoEmerg
   let changed = 0
   let groups = 0
   let status = ''
+  let unreadable: string | null = null
   for (const [key, g] of Object.entries(data as Record<string, unknown>)) {
     if (!/^\d+(\.\d+)?$/.test(key) || !g || typeof g !== 'object') continue
     groups++
-    const group = g as { today?: { status?: string }; updatedOn?: string }
-    if (group.today?.status === 'EmergencyShutdowns') active = true
-    else status ||= group.today?.status ?? ''
+    const group = g as { today?: { status?: unknown }; updatedOn?: string }
+    const today = group.today?.status
+    if (today === 'EmergencyShutdowns') active = true
+    else if (typeof today === 'string' && YASNO_NOT_EMERGENCY.has(today)) status ||= today
+    else unreadable ??= `${key}: ${typeof today === 'string' ? today : 'no today.status'}`
     const u = group.updatedOn ? Date.parse(group.updatedOn) : NaN
     if (Number.isFinite(u) && u > changed) changed = u
   }
   if (!groups) throw new OutageError('parse', 'YASNO planned-outages: no groups', { region })
+  if (!active && unreadable)
+    throw new OutageError('parse', `YASNO planned-outages: unknown group status (${unreadable})`, { region })
   return {
     active,
     changedAt: changed ? toKyivIso(new Date(changed)) : null,
-    status: active ? 'EmergencyShutdowns' : status || 'unknown',
+    status: active ? 'EmergencyShutdowns' : status,
   }
 }
 

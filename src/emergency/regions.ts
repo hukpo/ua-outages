@@ -5,7 +5,7 @@ import { abortable } from '../util.js'
 import { classifyPost, classifyUkrenergo, districtArea, type Dialect } from './classify.js'
 import { mykolaivFeed, mykolaivFeedStatus, yasnoEmergency, type YasnoEmergency } from './sources.js'
 import { foldEvents, type EmergencyEvent } from './status.js'
-import { readChannel, type TelegramPost } from './telegram.js'
+import { readChannelWindow, type ChannelRead, type TelegramPost } from './telegram.js'
 
 /**
  * Where each region's emergency (ГАВ / СГАВ) announcements come from. Chosen per operator from
@@ -20,7 +20,10 @@ export interface EmergencyConfig {
   channels?: ChannelConfig[]
   yasno?: { regionId: number; dsoId: number }
   mykolaivFeed?: boolean
-  /** Oblast adjective stem in Ukrenergo posts ("Волинськ"), for the national fallback */
+  /**
+   * The oblast's names in Ukrenergo posts, as pattern stems ("Волинськ|Волин": "Волинській
+   * області", "на Волині"), for the national fallback. Case-sensitive: "Рівн" alone is "рівня"
+   */
   ukrenergo?: string
   /** An apply without a later word ends after this long, default 12 h */
   ttlHours?: number
@@ -171,10 +174,13 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
   sumy: { channels: [oblenergo('SumyEnergo', /Сум/u)], ttlHours: 6 },
   poltava: { channels: [oblenergo('poltavaOE', /Полтав/u)] },
   mykolaiv: { mykolaivFeed: true, channels: [oblenergo('mk_energy_ua', /Миколаїв/u)] },
-  chernivtsi: { channels: [oblenergo('oe_cv_ua', /Чернівець|Чернівц|Буковин/u)], ukrenergo: 'Чернівецьк' },
-  zakarpattia: { ukrenergo: 'Закарпатськ' },
-  volyn: { ukrenergo: 'Волинськ' },
-  rivne: { ukrenergo: 'Рівненськ' },
+  chernivtsi: {
+    channels: [oblenergo('oe_cv_ua', /Чернівець|Чернівц|Буковин/u)],
+    ukrenergo: 'Чернівецьк|Чернівеччин|Буковин',
+  },
+  zakarpattia: { ukrenergo: 'Закарпат' },
+  volyn: { ukrenergo: 'Волинськ|Волин(?:і|ь|щин)' },
+  rivne: { ukrenergo: 'Рівненськ|Рівненщин' },
 }
 
 /**
@@ -182,7 +188,7 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
  * (@dtek_ua serves five, @Ukrenergo four), kept for a minute.
  */
 export class EmergencyHub {
-  private readonly channels = new Map<string, { at: number; value: Promise<TelegramPost[]> }>()
+  private readonly channels = new Map<string, { at: number; value: Promise<ChannelRead> }>()
   /** Regions whose YASNO status was EmergencyShutdowns at the last look, and since when */
   private readonly yasnoActive = new Map<RegionId, string>()
   /** …and the YASNO episodes that ended since: posts from before the end don't revive them */
@@ -190,12 +196,12 @@ export class EmergencyHub {
 
   constructor(private readonly cacheMs = 60_000) {}
 
-  posts(ctx: ProviderContext, region: RegionId, handle: string, fresh: boolean): Promise<TelegramPost[]> {
+  posts(ctx: ProviderContext, region: RegionId, handle: string, fresh: boolean): Promise<ChannelRead> {
     const hit = this.channels.get(handle)
     const now = ctx.now()
     if (!fresh && hit && Date.now() - hit.at < this.cacheMs) return abortable(hit.value, ctx.signal)
     const since = new Date(now.getTime() - LOOKBACK_HOURS * 3600_000)
-    const value = readChannel(ctx, handle, { region, since })
+    const value = readChannelWindow(ctx, handle, { region, since })
     const entry = { at: Date.now(), value }
     // a cancellable read isn't shared while it runs, so no other caller inherits its cancellation
     if (ctx.signal)
@@ -225,10 +231,11 @@ export class EmergencyHub {
     fetchedAt: string,
     previous?: EmergencyStatus,
   ): EmergencyStatus | null {
-    // after a restart the caller's last status stands in for what this client saw
+    // after a restart the caller's last status stands in for what this client saw; an `unknown`
+    // one too (YASNO's end, made unknown because another source failed then)
     if (previous?.source === 'yasno' && !this.yasnoActive.has(region) && !this.yasnoEnded.has(region)) {
       if (previous.state === 'active') this.yasnoActive.set(region, previous.since ?? previous.fetchedAt)
-      else if (previous.state === 'inactive' && previous.endedAt)
+      else if (previous.endedAt)
         this.yasnoEnded.set(region, { since: previous.since, endedAt: previous.endedAt })
     }
     if (y.active) {
@@ -317,15 +324,27 @@ export interface EmergencyRequest {
  * The region's emergency status from its sources. A source that fails is skipped when another
  * answers; only when all fail is the first error thrown. Silence is never an error: no
  * announcement in the lookback window is `inactive` with `kind: null`.
+ *
+ * A failed source, or a channel read that ran out of pages before the TTL window, makes the
+ * answer partial: "nothing in force" from the rest is `unknown`, and an episode the caller saw
+ * (`previous`) keeps its details while what is left says only that it is on.
  */
 export async function getEmergency(
   hub: EmergencyHub,
   cfg: EmergencyConfig,
-  { ctx, region, fresh, previous }: EmergencyRequest,
+  { ctx, region, fresh, previous: given }: EmergencyRequest,
 ): Promise<EmergencyStatus> {
   const now = ctx.now()
+  const previous = given?.region === region ? given : undefined
   const ttlHours = cfg.ttlHours ?? DEFAULT_TTL_HOURS
   const errors: unknown[] = []
+  /** A channel read that didn't reach back the TTL: an apply it missed may still be in force */
+  let short = false
+  const channelPosts = async (handle: string) => {
+    const read = await hub.posts(ctx, region, handle, fresh)
+    if (Date.parse(read.from) > now.getTime() - ttlHours * 3600_000) short = true
+    return read.posts
+  }
   const attempt = async <T>(work: () => Promise<T>): Promise<T | undefined> => {
     try {
       return await work()
@@ -340,7 +359,7 @@ export async function getEmergency(
     cfg.channels?.length
       ? attempt(async () => {
           const lists = await Promise.all(
-            cfg.channels!.map(async (c) => channelEvents(await hub.posts(ctx, region, c.handle, fresh), c)),
+            cfg.channels!.map(async (c) => channelEvents(await channelPosts(c.handle), c)),
           )
           return lists.flat().sort((a, b) => Date.parse(a.posted) - Date.parse(b.posted))
         })
@@ -361,7 +380,7 @@ export async function getEmergency(
         )
       : undefined,
     cfg.ukrenergo
-      ? attempt(async () => ukrenergoEvents(await hub.posts(ctx, region, UKRENERGO, fresh), cfg.ukrenergo!))
+      ? attempt(async () => ukrenergoEvents(await channelPosts(UKRENERGO), cfg.ukrenergo!))
       : undefined,
   ])
 
@@ -370,22 +389,74 @@ export async function getEmergency(
 
   const fetchedAt = toKyivIso(now)
   const fold = (events: EmergencyEvent[], source: EmergencyStatus['source']) =>
-    foldEvents(events, { region, now, ttlHours, source })
+    foldEvents(events, { region, now, ttlHours, source, previous })
 
-  let status: EmergencyStatus | null = telegram ? fold(telegram, 'telegram') : null
-  // nothing from the operator itself: the national channel, when it names this oblast
-  if ((!status || !status.message) && national?.length) status = fold(national, 'ukrenergo')
+  // the operator's channel and the national one (Chernivtsi), merged by time: a newer
+  // @Ukrenergo apply naming the oblast is newer news than the channel's cancel of yesterday
+  let status: EmergencyStatus | null = null
+  if (telegram || national) {
+    const events = [...(telegram ?? []), ...(national ?? [])].sort(
+      (a, b) => Date.parse(a.posted) - Date.parse(b.posted),
+    )
+    status = fold(events, telegram ? 'telegram' : 'ukrenergo')
+    if (status.message?.url?.startsWith(`https://t.me/${UKRENERGO}/`))
+      status = { ...status, source: 'ukrenergo' }
+  }
 
-  // Mykolaiv: running feed rows name queues and times; otherwise the channel may know more
-  // (an active channel, or a channel's cancel post, wins over finished feed rows, whose end is
-  // only inferred)
-  const channelSaid = status?.state === 'active' || (status?.state === 'inactive' && !!status.message)
-  if (feed && (feed.state === 'active' || !channelSaid)) status = { ...feed, fetchedAt }
+  // Mykolaiv: running feed rows name queues and times, and win. Finished rows are an end
+  // inferred from the feed; the channel wins over them only when it says it is on, or with a
+  // cancel newer than the feed's episode (not yesterday's 19:09 cancel before tonight's rows),
+  // or with an episode of its own after the feed's
+  if (feed) {
+    const posted = status?.message ? Date.parse(status.message.at) : NaN
+    const channelNewer =
+      status?.state === 'active' ||
+      (status?.state === 'inactive' &&
+        posted > Date.parse((status.inferred ? feed.endedAt : null) ?? feed.since ?? ''))
+    if (feed.state === 'active' || !channelNewer) status = { ...feed, fetchedAt }
+  }
 
   if (yasno) status = hub.withYasno(status, yasno, region, fetchedAt, previous)
   status ??= fold([], telegram ? 'telegram' : 'ukrenergo')
 
+  if (!errors.length && !short) return status
   // a source failed: "nothing in force" from the others alone isn't known
-  if (errors.length && status.state === 'inactive') return { ...status, state: 'unknown' }
+  if (status.state === 'inactive') return { ...status, state: 'unknown' }
+  if (status.state === 'active') return carryOver(status, previous, now, ttlHours)
   return status
+}
+
+/**
+ * A source down mid-episode (t.me while YASNO still shows EmergencyShutdowns; the Mykolaiv feed
+ * while the channel's apply stands): what is left says it is on, but knows less. The episode the
+ * caller saw (`previous`, active within the TTL) keeps its kind, queues, area, start and message,
+ * so nothing seems to change; a newer word from the source that works is news and is taken.
+ */
+function carryOver(
+  s: EmergencyStatus,
+  previous: EmergencyStatus | undefined,
+  now: Date,
+  ttlHours: number,
+): EmergencyStatus {
+  if (previous?.state !== 'active') return s
+  if (now.getTime() - Date.parse(previous.fetchedAt) > ttlHours * 3600_000) return s
+  const since =
+    [s.since, previous.since]
+      .filter((x): x is string => !!x)
+      .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null
+  // YASNO's own "EmergencyShutdowns" says nothing but "on"
+  const bare = s.source === 'yasno' && s.message?.url === null && s.message.text.startsWith('YASNO:')
+  const newer =
+    !bare && !!s.message && (!previous.message || Date.parse(s.message.at) > Date.parse(previous.message.at))
+  if (newer) return { ...s, since }
+  return {
+    ...s,
+    kind: previous.kind,
+    scheduleApplies: previous.scheduleApplies,
+    since,
+    queues: previous.queues,
+    queueCount: previous.queueCount,
+    area: previous.area,
+    message: previous.message,
+  }
 }
