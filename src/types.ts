@@ -202,7 +202,20 @@ export interface EmergencyQueues {
 
 export type EmergencyState = 'active' | 'inactive' | 'unknown'
 
-/** What `getEmergency` knows about ГАВ / СГАВ / emergency shutdowns in a region right now. */
+/**
+ * What `getEmergency` knows about ГАВ / СГАВ / emergency shutdowns in a region right now.
+ *
+ * How to tell the cases apart:
+ * - in force: `state: 'active'`, `since` and `message` (the newest announcement) set;
+ * - cancelled: `state: 'inactive'` with `message` (the cancellation post, or the source's own
+ *   signal) and `endedAt` both set;
+ * - ended by the TTL: `state: 'inactive'`, `inferred: true`, `endedAt` set, `message` = the last
+ *   announcement;
+ * - nothing announced in the lookback window (48 h): `state: 'inactive'`, `kind`, `message` and
+ *   `endedAt` all null;
+ * - can't be told: `state: 'unknown'` (the newest post can't be read, or a source failed while
+ *   the others said nothing is in force).
+ */
 export interface EmergencyStatus {
   region: RegionId
   /**
@@ -217,13 +230,20 @@ export interface EmergencyStatus {
   scheduleApplies: boolean | null
   /** Start: the time named in the text ("з 10:35", "О 9:44"), else the post time. ISO with the Kyiv offset */
   since: string | null
-  /** For inactive: when it was cancelled (time in the text, else the post time), or the inferred end */
+  /**
+   * For inactive: when it was cancelled (time in the text, else the post time; for an "UPD …
+   * скасовано" edit the post's own time, Telegram doesn't show when it was edited), or the
+   * inferred end. Null only when nothing was announced.
+   */
   endedAt: string | null
   /** ГАВ/СГАВ queues that are off now when the operator names them; null when not said */
   queues: string[] | null
   /** "застосовано 10 черг" without saying which: the count; null when not said */
   queueCount: number | null
-  /** When limited to a part of the region ("м. Дніпро", "частині Голосіївського та Соломʼянського районів"); null = whole region / not said */
+  /**
+   * When limited to a part of the region ("м. Дніпро", "частині Голосіївського та Соломʼянського
+   * районів"); several areas on at once are joined with "; ". null = whole region / not said
+   */
   area: string | null
   /** True when the end (or state) is inferred, not announced: no cancel post within the TTL */
   inferred: boolean

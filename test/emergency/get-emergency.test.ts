@@ -157,8 +157,8 @@ describe('getEmergency', () => {
     expect(s).toMatchObject({
       state: 'inactive',
       since: '2026-11-03T14:50:38+02:00',
-      // the edit time isn't shown by Telegram
-      endedAt: null,
+      // the edit time isn't shown by Telegram: the post time is the best known
+      endedAt: '2026-11-03T14:50:38+02:00',
       inferred: false,
       message: { url: 'https://t.me/ztoe_ua/1873' },
     })
@@ -231,14 +231,29 @@ describe('getEmergency', () => {
     expect(calls.map((x) => new URL(x.url).host).sort()).toEqual(['app.yasno.ua', 't.me'])
   })
 
-  it('Dnipro: DTEK posts no cancel; YASNO switched back after the post ends it', async () => {
+  it('Dnipro: YASNO ends only an emergency it showed itself', async () => {
+    let yasno = fixture('yasno/planned-outages-EmergencyShutdowns.community-2025-11-25.json')
+    const { fetch } = mockFetch([
+      { match: 't.me/s/dtek_ua', body: page('dtek_ua', [4787]) },
+      { match: '/regions/3/dsos/301/planned-outages', body: () => yasno },
+    ])
+    const c = new OutageClient({ fetch, now: () => new Date('2026-11-05T19:00:00+02:00'), cacheTtlMs: 0 })
+    expect(await c.getEmergency('dnipro')).toMatchObject({ state: 'active', source: 'yasno' })
+    // YASNO switches back: DTEK never posts a Dnipro cancel, so this is the end
+    yasno = fixture('yasno/planned-outages-3-301.json')
+    const s = await c.getEmergency('dnipro')
+    expect(s).toMatchObject({ state: 'inactive', kind: 'emergency', source: 'yasno', scheduleApplies: true })
+    expect(s.message?.text).toBe('YASNO: EmergencyShutdowns → ScheduleApplies')
+    expect(s.endedAt).toBeTruthy()
+  })
+
+  it('YASNO not showing an emergency never cancels a post', async () => {
+    // every group ScheduleApplies, updatedOn after the post: schedules moved, not a cancel
     const s = await client('2026-11-05T23:40:00+02:00', [
       { match: 't.me/s/dtek_ua', body: page('dtek_ua', [4787]) },
-      // every group ScheduleApplies, updatedOn 2026-11-05T19:15Z
       { match: '/regions/3/dsos/301/planned-outages', body: fixture('yasno/planned-outages-3-301.json') },
     ]).client.getEmergency('dnipro')
-    expect(s).toMatchObject({ state: 'inactive', kind: 'emergency', source: 'yasno', scheduleApplies: true })
-    expect(Date.parse(s.endedAt!)).toBeGreaterThan(Date.parse(s.since!))
+    expect(s).toMatchObject({ state: 'active', kind: 'emergency', source: 'telegram' })
   })
 
   it('Mykolaiv: the outage feed names the ГАВ queue', async () => {
@@ -271,7 +286,8 @@ describe('getEmergency', () => {
     expect(later).toMatchObject({ state: 'active', queues: ['2', '3'] })
     const after = await client('2026-11-03T12:00:00+02:00', routes).client.getEmergency('mykolaiv')
     // the mislabelled ГПВ rows and the neighbour's ГАВ don't count
-    expect(after).toMatchObject({ state: 'inactive', endedAt: '2026-11-03T08:30:00+02:00' })
+    // AVARIYA rows (accidents) don't count either
+    expect(after).toMatchObject({ state: 'inactive', endedAt: '2026-11-03T07:30:00+02:00' })
   })
 
   it('Volyn and Rivne: the national channel, when it names the oblast', async () => {
@@ -322,7 +338,11 @@ describe('getEmergency', () => {
         body: fixture('yasno/planned-outages-EmergencyShutdowns.community-2025-11-25.json'),
       },
     ]).client.getEmergency('kyiv')
-    expect(s).toMatchObject({ state: 'active', source: 'yasno', message: null })
+    expect(s).toMatchObject({
+      state: 'active',
+      source: 'yasno',
+      message: { text: 'YASNO: EmergencyShutdowns' },
+    })
     await expect(
       client('2026-11-16T03:00:00+02:00', [
         { match: 't.me/s/', body: 'down', status: 502 },

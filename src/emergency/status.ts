@@ -20,14 +20,15 @@ export interface FoldOptions {
   source: EmergencyStatus['source']
 }
 
-/** What one schedule (ГАВ, СГАВ, unnamed emergency) is doing. */
+/** What one schedule (ГАВ, СГАВ, unnamed emergency) is doing in one area (null = the whole region). */
 interface Track {
   kind: EmergencyKind
+  area: string | null
   active: boolean
   since: string
+  /** Queues off, when known */
   queues: Set<string> | null
   count: number | null
-  area: string | null
   scheduleApplies: boolean | null
   /** Time of the newest event about it, ms */
   lastAt: number
@@ -40,47 +41,85 @@ interface Track {
 const KINDS: readonly EmergencyKind[] = ['gav', 'sgav', 'emergency']
 const MESSAGE_MAX = 2000
 
+const areaKey = (area: string | null) => (area ? area.toLowerCase().replace(/\s+/g, ' ').trim() : '')
+
 /**
- * Announcements, in the order they were posted, → the state now. ГАВ, СГАВ and unnamed
- * emergency shutdowns are followed separately (Kirovohrad lifts СГАВ while ГАВ stays); a cancel
- * of "аварійні відключення" ends all of them, one of "ГАВ" ends ГАВ and the unnamed ones.
- * Operators that never post a cancel are covered by the TTL.
+ * Announcements, in the order they were posted, → the state now.
+ *
+ * - ГАВ, СГАВ and unnamed emergency shutdowns are followed separately (Kirovohrad lifts СГАВ
+ *   while ГАВ stays); a cancel of "аварійні відключення" ends all of them, one of "ГАВ" ends ГАВ
+ *   and the unnamed ones.
+ * - Each area is its own episode: "м. Павлоград: скасовано" ends Pavlohrad, not Dnipro. A cancel
+ *   for the whole region ends every area.
+ * - More queues while one runs add to it (Poltava: "скасовано ГАВ 6-10", then "ввести ГАВ (6-10)"
+ *   while 1-5 never came back). A partial cancel ends the episode only when nothing is known to
+ *   remain; otherwise it stays on and the TTL ends it. A false "cancelled" is worse than a false
+ *   "still on".
+ * - Operators that never post a cancel are covered by the TTL.
  */
 export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions): EmergencyStatus {
-  const tracks = new Map<EmergencyKind, Track>()
-  /** The newest cancel that had no running schedule to end (the apply was before the window) */
+  const tracks = new Map<string, Track>()
+  /** The newest cancel that had nothing running to end (the apply was before the window) */
   let orphanCancel: EmergencyEvent | null = null
   let lastUnclear: EmergencyEvent | null = null
   let lastDecisiveAt = 0
 
   const timeOf = (e: EmergencyEvent) => Math.max(Date.parse(e.posted), Date.parse(e.announcement.at))
+  const keyOf = (kind: EmergencyKind, area: string | null) => `${kind}|${areaKey(area)}`
 
   const end = (t: Track, e: EmergencyEvent) => {
     t.active = false
-    // an "UPD: … скасовано" edit has no time of its own
-    t.endedAt = e.announcement.edited && !e.announcement.timed ? null : e.announcement.at
+    // an "UPD: … скасовано" edit shows no edit time: the post's own time is the best known
+    t.endedAt = e.announcement.edited && !e.announcement.timed ? e.posted : e.announcement.at
     t.inferred = false
     t.event = e
     t.lastAt = timeOf(e)
     t.scheduleApplies = e.announcement.scheduleApplies
   }
 
+  const touch = (t: Track, e: EmergencyEvent) => {
+    t.lastAt = timeOf(e)
+    t.event = e
+  }
+
   const start = (a: Announcement, e: EmergencyEvent, kind: EmergencyKind): Track => {
     const t: Track = {
       kind,
+      area: a.area,
       active: true,
       since: a.at,
       queues: a.queues ? new Set(a.queues) : null,
       count: a.count ?? a.queues?.length ?? null,
-      area: a.area,
       scheduleApplies: a.scheduleApplies,
       lastAt: timeOf(e),
       event: e,
       endedAt: null,
       inferred: false,
     }
-    tracks.set(kind, t)
+    tracks.set(keyOf(kind, a.area), t)
     return t
+  }
+
+  const running = (kind: EmergencyKind, area: string | null) => {
+    const t = tracks.get(keyOf(kind, area))
+    return t?.active ? t : undefined
+  }
+
+  /** A partial cancel applied to `t`; true when nothing is known to remain */
+  const lift = (t: Track, a: Announcement): boolean => {
+    if (t.queues && a.queues) {
+      for (const q of a.queues) t.queues.delete(q)
+      t.count = t.queues.size
+      return t.queues.size === 0
+    }
+    if (t.count !== null && a.count !== null) {
+      t.count -= a.count
+      if (a.queues && t.queues) for (const q of a.queues) t.queues.delete(q)
+      else t.queues = null
+      return t.count <= 0
+    }
+    // how much remains is not known: still on, the TTL ends it
+    return false
   }
 
   for (const e of events) {
@@ -92,78 +131,61 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     lastDecisiveAt = Math.max(lastDecisiveAt, timeOf(e))
 
     if (a.action === 'cancel') {
-      const targets: EmergencyKind[] =
+      const kinds: EmergencyKind[] =
         a.kind === 'emergency' ? [...KINDS] : a.kind === 'gav' ? ['gav', 'emergency'] : ['sgav']
-      let ended = false
-      for (const kind of targets) {
-        const t = tracks.get(kind)
-        if (!t?.active) continue
-        // "м. Павлоград: скасовано" doesn't end what runs in Дніпро
-        if (t.area && a.area && t.area !== a.area) continue
-        ended = true
-        if (!a.partial) {
-          end(t, e)
-          continue
-        }
-        if (t.queues && a.queues) {
-          for (const q of a.queues) t.queues.delete(q)
-          t.count = t.queues.size
-        } else if (t.count !== null && a.count !== null) {
-          t.count -= a.count
-          t.queues = null
-        } else t.count = 0
-        if (!t.count) end(t, e)
-        else {
-          t.lastAt = timeOf(e)
-          t.event = e
-        }
+      // whole region: every area; an area: only that one
+      const targets = [...tracks.values()].filter(
+        (t) => t.active && kinds.includes(t.kind) && (!a.area || areaKey(t.area) === areaKey(a.area)),
+      )
+      for (const t of targets) {
+        if (!a.partial || lift(t, a)) end(t, e)
+        else touch(t, e)
       }
-      if (!ended && a.edited) {
+      if (!targets.length && a.edited) {
         // "UPD: … скасовано" written into the apply post: it was in force from the post time
-        const t = start({ ...a, at: e.posted, queues: null, count: null }, e, a.kind)
-        end(t, e)
-        orphanCancel = null
+        end(start({ ...a, at: e.posted, queues: null, count: null }, e, a.kind), e)
         continue
       }
-      if (!ended && ![...tracks.values()].some((t) => t.active)) orphanCancel = e
+      if (!targets.length && ![...tracks.values()].some((t) => t.active)) orphanCancel = e
       continue
     }
 
     if (a.action === 'update') {
-      const t = tracks.get(a.kind)
-      if (!t?.active) {
+      const t = running(a.kind, a.area)
+      if (!t) {
         if (a.queues?.length) start(a, e, a.kind)
         continue
       }
+      // "знеструмлюються 6-10, вмикаються 1-5": the new set
       if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
       if (a.queues) t.queues = new Set([...(t.queues ?? []), ...a.queues])
-      else if (!t.queues) t.queues = null
-      t.count = t.queues ? t.queues.size : t.count
-      t.lastAt = timeOf(e)
-      t.event = e
+      if (t.queues) t.count = t.queues.size
+      touch(t, e)
       if (t.queues && !t.queues.size) end(t, e)
       continue
     }
 
     // apply
-    const t = tracks.get(a.kind)
-    if (!t?.active) {
+    const t = running(a.kind, a.area)
+    if (!t) {
       start(a, e, a.kind)
       continue
     }
-    if (a.add) {
-      if (t.queues && a.queues) t.queues = new Set([...t.queues, ...a.queues])
-      else if (a.queues || a.count !== null) t.queues = null
-      t.count = t.queues ? t.queues.size : t.count !== null && a.count !== null ? t.count + a.count : null
-    } else if (a.queues || a.count !== null) {
-      t.queues = a.queues ? new Set(a.queues) : null
-      t.count = a.count ?? a.queues?.length ?? null
+    if (a.queues) {
+      // more queues while it runs: they add up
+      t.queues = t.queues || !a.add ? new Set([...(t.queues ?? []), ...a.queues]) : null
+      t.count = t.queues ? t.queues.size : null
+    } else if (a.count !== null) {
+      t.queues = a.add ? null : t.queues
+      t.count = a.add
+        ? t.count !== null
+          ? t.count + a.count
+          : null
+        : Math.max(t.count ?? 0, a.count, t.queues?.size ?? 0)
+      if (t.queues && t.count !== null && t.count > t.queues.size) t.queues = null
     }
-    // the newest statement says where; "тривають" for the whole region widens it again
-    t.area = a.area
     t.scheduleApplies = a.scheduleApplies ?? t.scheduleApplies
-    t.lastAt = timeOf(e)
-    t.event = e
+    touch(t, e)
   }
 
   // operators that never cancel: an apply nobody followed up on for the TTL has ended
@@ -202,20 +224,24 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     })
 
   const byNewest = [...tracks.values()].sort((a, b) => b.lastAt - a.lastAt)
-  const active = byNewest.find((t) => t.active)
-  if (active)
+  const active = byNewest.filter((t) => t.active)
+  if (active.length) {
+    const primary = active[0]!
+    // the whole region, or every area that is on
+    const areas = active.some((t) => !t.area) ? null : [...new Set(active.map((t) => t.area!))].join('; ')
     return status({
       state: 'active',
-      kind: active.kind,
-      scheduleApplies: active.scheduleApplies,
-      since: active.since,
+      kind: primary.kind,
+      scheduleApplies: primary.scheduleApplies,
+      since: active.map((t) => t.since).sort()[0]!,
       endedAt: null,
-      queues: active.queues?.size ? sortQueues(active.queues) : null,
-      queueCount: active.count,
-      area: active.area,
+      queues: primary.queues?.size ? sortQueues(primary.queues) : null,
+      queueCount: primary.count,
+      area: areas,
       inferred: false,
-      message: message(active.event),
+      message: message(primary.event),
     })
+  }
 
   const last = byNewest[0]
   if (last && (!orphanCancel || timeOf(orphanCancel) <= last.lastAt))
@@ -239,7 +265,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       kind: a.kind,
       scheduleApplies: a.scheduleApplies,
       since: null,
-      endedAt: a.edited && !a.timed ? null : a.at,
+      endedAt: a.edited && !a.timed ? orphanCancel.posted : a.at,
       queues: null,
       queueCount: null,
       area: null,
@@ -248,7 +274,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     })
   }
 
-  // nothing announced in the window
+  // nothing announced in the window: no message, which is how it differs from a cancellation
   return status({
     state: 'inactive',
     kind: null,

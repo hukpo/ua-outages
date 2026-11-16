@@ -3,7 +3,7 @@ import type { EmergencyStatus, RegionId } from '../types.js'
 import type { ProviderContext } from '../providers/provider.js'
 import { abortable } from '../util.js'
 import { classifyPost, classifyUkrenergo, districtArea, type Dialect } from './classify.js'
-import { mykolaivFeed, mykolaivFeedStatus, yasnoEmergency } from './sources.js'
+import { mykolaivFeed, mykolaivFeedStatus, yasnoEmergency, type YasnoEmergency } from './sources.js'
 import { foldEvents, type EmergencyEvent } from './status.js'
 import { readChannel, type TelegramPost } from './telegram.js'
 
@@ -54,8 +54,9 @@ const DTEK_AREAS: Record<'kyiv' | 'kyiv-region' | 'dnipro' | 'odesa' | 'donetsk'
     own: /Київщин|Київськ/u,
     whole: ['київщина', 'київська область', 'київська', 'київської області'],
   },
+  // the city and the oblast, not Kyiv's "Дніпровський район" or "Дніпровська набережна"
   dnipro: {
-    own: /Дніпр/u,
+    own: /Дніпро(?![\p{L}])|Дніпр[аіу](?![\p{L}])|Дніпропетров|Дніпровщин/u,
     whole: ['дніпропетровщина', 'дніпропетровська область', 'дніпропетровська'],
   },
   odesa: { own: /Одес|Одещин/u, whole: ['одещина', 'одеська область', 'одеська'] },
@@ -69,34 +70,67 @@ export function dtekHead(text: string): string | null {
   return m ? m[1]!.trim() : null
 }
 
+/** "Київ, Київська та Дніпропетровська область" → its parts; commas in parentheses stay. Exported for tests. */
+export function headParts(head: string): string[] {
+  const out: string[] = []
+  let depth = 0
+  let cur = ''
+  for (let i = 0; i < head.length; i++) {
+    const ch = head[i]!
+    if (ch === '(') depth++
+    else if (ch === ')') depth = Math.max(0, depth - 1)
+    const sep = depth === 0 && (ch === ',' || head.startsWith(' та ', i))
+    if (sep) {
+      out.push(cur)
+      cur = ''
+      if (ch === ' ') i += 3
+    } else cur += ch
+  }
+  out.push(cur)
+  return out.map((p) => p.trim()).filter(Boolean)
+}
+
+const normal = (p: string) => p.toLowerCase().replace(/\s+/g, ' ').trim()
+
 function dtekChannel(region: keyof typeof DTEK_AREAS): ChannelConfig {
   const me = DTEK_AREAS[region]
+  const others = Object.entries(DTEK_AREAS)
+    .filter(([id]) => id !== region)
+    .map(([, a]) => a.own)
+  /** A part of the prefix is about this region: it names it and no other DTEK region */
+  const ownPart = (p: string) => me.own.test(p) && !others.some((o) => o.test(p))
   return {
     handle: 'dtek_ua',
     about: (text) => {
       const head = dtekHead(text)
-      return !!head && me.own.test(head)
+      return !!head && headParts(head).some(ownPart)
     },
     dialect: {
       dtek: true,
       area(text, sentence) {
         const head = dtekHead(text)
         if (!head) return null
-        // "Київ, Київська та Дніпропетровська область" → the parts about this region
-        const mine = head
-          .split(/\s*,\s*|\s+та\s+/u)
-          .filter((p) => me.own.test(p))
-          .filter((p) => !me.whole.includes(p.toLowerCase().replace(/\s+/g, ' ').trim()))
+        // "Київщина, Бучанський район" → "Бучанський район"; "Київ, Київська та Дніпропетровська
+        // область" → nothing narrower than Kyiv
+        const parts = headParts(head)
+        const mine = parts
+          .filter((p) => ownPart(p) || !others.concat(me.own).some((o) => o.test(p)))
+          .filter((p) => !me.whole.includes(normal(p)))
         if (mine.length) return mine.join(', ')
-        return districtArea(sentence.slice(sentence.indexOf(':') + 1))
+        // the place after the verb: "застосовані екстрені відключення в місті Дніпрі, прилеглих
+        // до обласного центру районах та в частині Павлоградського району"
+        const rest = sentence.slice(sentence.indexOf(':') + 1)
+        const after = new RegExp(`екстрен\\S*\\s+відключ\\S*\\s+(?:у|в)\\s+(.+?)\\s*$`, 'iu').exec(rest)
+        if (after) return after[1]!.replace(/[.!‼️\s]+$/u, '')
+        return districtArea(rest)
       },
     },
   }
 }
 
-/** ЦЕК: "Шановні споживачі м. ДНІПРО‼️" → "м. Дніпро". Exported for tests. */
+/** ЦЕК: "Шановні споживачі м. ДНІПРО‼️", "Шановні мешканці м. ПАВЛОГРАД" → "м. Дніпро". Exported for tests. */
 export function cekArea(text: string): string | null {
-  const m = /споживачі\s+м\.\s*([\p{Lu}'ʼ’-]{2,})/u.exec(text)
+  const m = /(?:споживачі|мешканці|жителі)\s+м\.\s*([\p{Lu}'ʼ’-]{2,})/u.exec(text)
   if (!m) return null
   const name = m[1]!.toLowerCase().replace(/(^|[-'ʼ’])\p{Ll}/gu, (c) => c.toUpperCase())
   return `м. ${name}`
@@ -118,10 +152,8 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
   kyiv: { channels: [dtekChannel('kyiv')], yasno: { regionId: 25, dsoId: 902 } },
   'kyiv-region': { channels: [dtekChannel('kyiv-region')] },
   dnipro: { channels: [dtekChannel('dnipro')], yasno: { regionId: 3, dsoId: 301 } },
-  'dnipro-cek': {
-    channels: [{ handle: 'cek_info', dialect: { area: (text) => cekArea(text) } }],
-    yasno: { regionId: 3, dsoId: 303 },
-  },
+  // YASNO 3/303 never showed EmergencyShutdowns, not even during ЦЕК's own (15.11 13:39–15:27)
+  'dnipro-cek': { channels: [{ handle: 'cek_info', dialect: { area: (text) => cekArea(text) } }] },
   odesa: { channels: [dtekChannel('odesa')] },
   donetsk: { channels: [dtekChannel('donetsk')] },
   zaporizhzhia: { channels: [oblenergo('Zaporizhzhyaoblenergo_news', /Запорі/u)] },
@@ -151,6 +183,8 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
  */
 export class EmergencyHub {
   private readonly channels = new Map<string, { at: number; value: Promise<TelegramPost[]> }>()
+  /** Regions whose YASNO status was EmergencyShutdowns at the last look, and since when */
+  private readonly yasnoActive = new Map<RegionId, string>()
 
   constructor(private readonly cacheMs = 60_000) {}
 
@@ -174,6 +208,61 @@ export class EmergencyHub {
       })
     }
     return value
+  }
+
+  /**
+   * YASNO's status combined with the posts. EmergencyShutdowns is the machine-readable "on now".
+   * YASNO not showing it says nothing by itself: it never flags some emergencies (partial
+   * areas; ЦЕК never), and `updatedOn` moves with every schedule. Only an episode YASNO itself
+   * showed, and has stopped showing, is ended by it (DTEK posts no Dnipro cancels).
+   */
+  withYasno(
+    posts: EmergencyStatus | null,
+    y: YasnoEmergency,
+    region: RegionId,
+    fetchedAt: string,
+  ): EmergencyStatus | null {
+    if (y.active) {
+      const since = this.yasnoActive.get(region) ?? y.changedAt ?? fetchedAt
+      this.yasnoActive.set(region, since)
+      if (posts?.state === 'active') return { ...posts, source: 'yasno' }
+      return {
+        region,
+        state: 'active',
+        kind: 'emergency',
+        scheduleApplies: false,
+        since,
+        endedAt: null,
+        queues: null,
+        queueCount: null,
+        area: null,
+        inferred: false,
+        message: { text: `YASNO: ${y.status}`, url: null, at: y.changedAt ?? fetchedAt },
+        source: 'yasno',
+        fetchedAt,
+      }
+    }
+    const seen = this.yasnoActive.get(region)
+    this.yasnoActive.delete(region)
+    if (!seen) return posts
+    // a cancel post after YASNO switched it on already says it all
+    if (posts?.state === 'inactive' && posts.message) return posts
+    const endedAt = y.changedAt && Date.parse(y.changedAt) >= Date.parse(seen) ? y.changedAt : fetchedAt
+    return {
+      region,
+      state: 'inactive',
+      kind: posts?.kind ?? 'emergency',
+      scheduleApplies: true,
+      since: posts?.since ?? seen,
+      endedAt,
+      queues: null,
+      queueCount: null,
+      area: null,
+      inferred: false,
+      message: { text: `YASNO: EmergencyShutdowns → ${y.status}`, url: null, at: endedAt },
+      source: 'yasno',
+      fetchedAt,
+    }
   }
 }
 
@@ -243,7 +332,7 @@ export async function getEmergency(
             await mykolaivFeed(
               ctx,
               region,
-              new Date(now.getTime() - 24 * 3600_000),
+              new Date(now.getTime() - 12 * 3600_000),
               new Date(now.getTime() + 3600_000),
             ),
             region,
@@ -263,78 +352,18 @@ export async function getEmergency(
   const fold = (events: EmergencyEvent[], source: EmergencyStatus['source']) =>
     foldEvents(events, { region, now, ttlHours, source })
 
-  // Mykolaiv: the feed names queues and times; the channel is the fallback
-  if (feed) return { ...feed, fetchedAt }
-
   let status: EmergencyStatus | null = telegram ? fold(telegram, 'telegram') : null
   // nothing from the operator itself: the national channel, when it names this oblast
   if ((!status || !status.message) && national?.length) status = fold(national, 'ukrenergo')
 
-  if (yasno) status = withYasno(status, yasno, region, fetchedAt)
-  return status ?? fold([], telegram ? 'telegram' : 'ukrenergo')
-}
+  // Mykolaiv: running feed rows name queues and times; otherwise the channel may know more
+  // (an active channel wins over finished feed rows)
+  if (feed && (feed.state === 'active' || status?.state !== 'active')) status = { ...feed, fetchedAt }
 
-/**
- * YASNO's status combined with the posts: it is the machine-readable truth for "on now" and
- * DTEK's only cancel signal for Dnipro; the posts add the start, the area and the text.
- */
-function withYasno(
-  posts: EmergencyStatus | null,
-  y: { active: boolean; changedAt: string | null },
-  region: RegionId,
-  fetchedAt: string,
-): EmergencyStatus {
-  const changed = y.changedAt ? Date.parse(y.changedAt) : NaN
-  if (y.active) {
-    if (posts?.state === 'active') return { ...posts, source: 'yasno' }
-    return {
-      region,
-      state: 'active',
-      kind: 'emergency',
-      scheduleApplies: false,
-      since: y.changedAt,
-      endedAt: null,
-      queues: null,
-      queueCount: null,
-      area: null,
-      inferred: false,
-      message: posts?.message ?? null,
-      source: 'yasno',
-      fetchedAt,
-    }
-  }
-  if (posts?.state === 'active') {
-    // YASNO not (yet) showing it, but updated after the post: that is the cancel DTEK doesn't
-    // always post (never for Dnipro). Updated before the post: YASNO lags or shows only part of
-    // the city, so the post stands.
-    const since = posts.since ? Date.parse(posts.since) : NaN
-    if (Number.isFinite(changed) && Number.isFinite(since) && changed > since)
-      return {
-        ...posts,
-        state: 'inactive',
-        endedAt: y.changedAt,
-        queues: null,
-        queueCount: null,
-        scheduleApplies: true,
-        source: 'yasno',
-      }
-    return posts
-  }
-  return (
-    posts ?? {
-      region,
-      state: 'inactive',
-      kind: null,
-      scheduleApplies: null,
-      since: null,
-      endedAt: null,
-      queues: null,
-      queueCount: null,
-      area: null,
-      inferred: false,
-      message: null,
-      source: 'yasno',
-      fetchedAt,
-    }
-  )
+  if (yasno) status = hub.withYasno(status, yasno, region, fetchedAt)
+  status ??= fold([], telegram ? 'telegram' : 'ukrenergo')
+
+  // a source failed: "nothing in force" from the others alone isn't known
+  if (errors.length && status.state === 'inactive') return { ...status, state: 'unknown' }
+  return status
 }

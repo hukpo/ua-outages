@@ -11,8 +11,10 @@ const YASNO = 'https://app.yasno.ua/api/blackout-service/public/shutdowns'
 export interface YasnoEmergency {
   /** Any group's today is `EmergencyShutdowns` */
   active: boolean
-  /** When the status last changed (the newest `updatedOn`), ISO; null when not given */
+  /** When the data last changed (the newest `updatedOn`; moves with every schedule too), ISO */
   changedAt: string | null
+  /** Today's status of the groups, e.g. "EmergencyShutdowns", "ScheduleApplies" */
+  status: string
 }
 
 /**
@@ -26,16 +28,22 @@ export function parseYasnoEmergency(data: unknown, region: RegionId): YasnoEmerg
   let active = false
   let changed = 0
   let groups = 0
+  let status = ''
   for (const [key, g] of Object.entries(data as Record<string, unknown>)) {
     if (!/^\d+(\.\d+)?$/.test(key) || !g || typeof g !== 'object') continue
     groups++
     const group = g as { today?: { status?: string }; updatedOn?: string }
     if (group.today?.status === 'EmergencyShutdowns') active = true
+    else status ||= group.today?.status ?? ''
     const u = group.updatedOn ? Date.parse(group.updatedOn) : NaN
     if (Number.isFinite(u) && u > changed) changed = u
   }
   if (!groups) throw new OutageError('parse', 'YASNO planned-outages: no groups', { region })
-  return { active, changedAt: changed ? toKyivIso(new Date(changed)) : null }
+  return {
+    active,
+    changedAt: changed ? toKyivIso(new Date(changed)) : null,
+    status: active ? 'EmergencyShutdowns' : status || 'unknown',
+  }
 }
 
 export async function yasnoEmergency(
@@ -63,6 +71,8 @@ export interface MkOutageRow {
 
 /** A ГАВ/СГАВ row of the feed (not a mislabelled ГПВ one, not a neighbour's ГАВ). */
 function isEmergencyRow(r: MkOutageRow): boolean {
+  // AVARIYA is an accident record even when its reason names the schedule
+  if (r.type === 'AVARIYA') return false
   const reason = r.reason ?? ''
   if (!/^\s*(?:спеціальн\S*\s+)?графік\S*\s+аварійних/iu.test(reason)) return false
   const tail = reason.split('|').slice(1).join('|')
@@ -141,22 +151,24 @@ export function mykolaivFeedStatus(
   }
 }
 
-/** Outage rows of the whole region from `from` to `to` (the feed pages by 100). */
+/**
+ * Outage rows of the whole region from `from` to `to`. The feed pages by 100, oldest start
+ * first, so the running rows are on the last pages: past `maxPages` the newest pages are read.
+ */
 export async function mykolaivFeed(
   ctx: ProviderContext,
   region: RegionId,
   from: Date,
   to: Date,
-  maxPages = 5,
+  maxPages = 8,
 ): Promise<MkOutageRow[]> {
-  const rows: MkOutageRow[] = []
-  for (let page = 1; page <= maxPages; page++) {
+  const page = async (n: number) => {
     ctx.signal?.throwIfAborted()
     const data = await ctx.http.json<{ data?: unknown; last_page?: number }>(MK_FEED, {
       region,
       method: 'POST',
       body: {
-        page,
+        page: n,
         perPage: 100,
         from: Math.floor(from.getTime() / 1000),
         to: Math.floor(to.getTime() / 1000),
@@ -164,8 +176,11 @@ export async function mykolaivFeed(
     })
     if (!Array.isArray(data?.data))
       throw new OutageError('parse', 'Mykolaiv outage feed: no "data" list', { region, url: MK_FEED })
-    rows.push(...(data.data as MkOutageRow[]))
-    if (!data.last_page || page >= data.last_page) break
+    return { rows: data.data as MkOutageRow[], last: Math.max(1, Number(data.last_page) || 1) }
   }
+  const first = await page(1)
+  const rows = [...first.rows]
+  const start = Math.max(2, first.last - maxPages + 2)
+  for (let n = start; n <= first.last; n++) rows.push(...(await page(n)).rows)
   return rows
 }
