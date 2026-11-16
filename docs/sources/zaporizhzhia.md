@@ -49,8 +49,22 @@ Group naming: `1.1`–`6.2` (черга.підчерга), 12 groups.
 
 ## Address search
 
-**Not available via plain fetch.** Homepage links "Дізнатися свою чергу за адресою" to a Google Apps Script web app
-`https://script.google.com/macros/s/AKfycbzkN3KDDReQuxcjAHdkIpVoVwF2RKCSUnWlcwSPbipfMnxNWYuLF-BtZv2oHxk5FG_V/exec` → **HTTP 404 "Сторінку не знайдено"** today. Alternative: Telegram bot https://t.me/esozoebot (not an API). No address→queue dataset found.
+Verified 2026-11-16. The homepage's Apps Script lookup is gone (404), but two pages link one public Google Sheet per group:
+
+- `https://www.zoe.com.ua/перелік-адрес-для-кожної-з-черг-з-підч/`: the city of Zaporizhzhia, households. Links are titled `м. Запоріжжя, Черга 1, підчерга 2`; 11 sheets (2.1 has none). Each sheet has a title row, then `"Вулиця","Будинок"` and one row per street, with the houses joined by `|`.
+- `https://www.zoe.com.ua/перелік-адрес-для-кожної-з-черг-з-підче/`: the rest of the area. Links are titled `1 черга ІІ підчерга`; 12 sheets. Columns are громада, населений пункт, вулиця, будинки, категорія (consumer names, including people: don't store or show them), черга/підчерга "за графіком" and "фактична по режиму". The actual group may differ from the sheet's group. An empty group says `Відключення відсутні`.
+- CSV: `https://docs.google.com/spreadsheets/d/<id>/gviz/tq?tqx=out:csv[&gid=<gid>]`, no auth.
+
+Houses look like `1|10А|34-40|1–15|1-9 поспіль|1-9 непарні|17 п.1–2|1 (п.1-4)|145 (5 пов)|70/1|будинки без номерів - 5`. Almost every range has ends of the same parity, so it covers one side of the street. An empty cell is the whole street.
+
+How the SDK reads it (`src/providers/zaporizhzhia-addresses.ts`):
+
+- It loads both pages and every sheet once per 6 hours, about 4k rows in all.
+- Ranges cover one side unless marked `поспіль` or their ends differ in parity.
+- Entrances, floors and notes are dropped, and a building listed on several sheets gets every group it is on (`otherGroups`).
+- A number that isn't listed but falls inside a range ("48а" in "46-54") gets the range's group.
+- When a settlement has one or two rows under another community and ten times as many under its own, those rows are merged into the main one. "м. Вільнянськ" has 433 rows under its own community and one stray row in each of two others.
+- Old street names in brackets ("вул. Автоклубна (Виборзька)") stay in the name, and only fuzzy search reaches them.
 
 ## Failure modes
 

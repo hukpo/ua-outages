@@ -3,24 +3,29 @@ import { STANDARD_GROUPS } from '../image/table.js'
 import type { ProviderInfo } from '../types.js'
 import { postsToSchedule, type SchedulePost } from './posts.js'
 import type { Provider } from './provider.js'
+import { zoeAddresses } from './zaporizhzhia-addresses.js'
 
 /**
  * Zaporizhzhiaoblenergo posts schedules on a WordPress archive page, newest first; corrections
  * are new posts ("ОНОВЛЕНО ГПВ НА 5 ЛИСТОПАДА … (оновлено 21:25)"). The posts carry no machine
  * timestamps, so page order decides which version is current. A post lists only the groups that
- * have outages that day; the rest have none. No address lookup is available.
+ * have outages that day; the rest have none. Addresses come from the operator's Google Sheets,
+ * one per group (`zaporizhzhia-addresses.ts`).
  */
 const INFO: ProviderInfo = {
   id: 'zaporizhzhia',
   name: 'Запорізька область',
   operator: 'Запоріжжяобленерго',
   website: 'https://www.zoe.com.ua/outage/',
-  capabilities: { schedule: true, addressSearch: false },
+  capabilities: { schedule: true, addressSearch: true },
 }
 
 export function zaporizhzhiaProvider(): Provider {
+  const addresses = zoeAddresses(INFO.id, INFO.operator)
   return {
     info: INFO,
+    sampleAddress: { city: 'Запоріжжя', street: 'бульвар Шевченка', house: '10А' },
+    ...addresses,
     async getSchedules(ctx) {
       const html = await ctx.http.text(INFO.website, { region: INFO.id })
       return parseZoe(html, ctx.now())
