@@ -44,13 +44,17 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
   national summaries (other oblasts named) don't count. DTEK's dialect drops "аварійні" (local
   damage).
 - **Folding** (`src/emergency/status.ts`): ГАВ, СГАВ and unnamed emergency shutdowns are followed
-  separately; partial cancels and swaps change the queue set; a cancel scoped to another area
-  (ЦЕК "м. Павлоград") doesn't end the rest. TTL: 12 h after the last word (Sumy 6 h).
-- **YASNO** `planned-outages`: any group with `today.status = EmergencyShutdowns` is active. When
-  YASNO shows no emergency but `updatedOn` is after the DTEK apply post, the episode is taken as
-  ended (DTEK never posts Dnipro cancels).
+  separately, one episode per area (null = whole region); a cancel for an area ends that area, a
+  whole-region cancel ends all. More queues while one runs add up; a partial cancel ends it only
+  when nothing is known to remain. TTL: 12 h after the last word (Sumy 6 h).
+- **YASNO** `planned-outages` (Kyiv 25/902, Dnipro 3/301): any group with `today.status =
+EmergencyShutdowns` is active. YASNO not showing it ends nothing by itself (`updatedOn` moves
+  with every schedule publish, and YASNO doesn't flag partial-area emergencies); only an episode
+  this client saw as EmergencyShutdowns and that YASNO stopped showing is ended. ЦЕК (3/303)
+  isn't used: it stayed `WaitingForSchedule` through ЦЕК's own emergency of 15.11 13:39–15:27.
 - **Mykolaiv outage feed** `POST https://www.energy.mk.ua/outage/api/v1/outage` (whole region,
-  24 h window): rows whose `reason` starts "Графік аварійних відключень", minus mislabelled
+  12 h window; oldest first, so past 8 pages the newest are read; `AVARIYA` rows skipped; an
+  active @mk_energy_ua post wins over finished rows): rows whose `reason` starts "Графік аварійних відключень", minus mislabelled
   "ГПВ ч 5,2" and a neighbour's "ГАО Кіровоград Обленерго". Running rows = active; their queue
   from "ГАВ черга 3" / "ГАВ 3 черга".
 - **@Ukrenergo**: only for Zakarpattia, Volyn, Rivne and Chernivtsi (after its own channel), by

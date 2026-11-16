@@ -219,12 +219,13 @@ if (outages.region('poltava').capabilities.emergency) {
 }
 ```
 
-- `state`: `active` (in force now), `inactive` (cancelled, or nothing announced in the last 48 h; then `kind` and `message` are null), `unknown` (the newest post names an emergency schedule, but what it says can't be read). Nothing posted is never an error.
+- `state`: `active` (in force now), `inactive` (cancelled, ended by the TTL, or nothing announced in the last 48 h), `unknown` (the newest post can't be read, or one of the region's sources failed while the others said nothing is in force). Nothing posted is never an error.
+- Telling `inactive` apart: a cancellation always has `message` (the cancel post, or YASNO's own switch) and `endedAt`; a TTL end has `inferred: true`; "nothing announced" has `kind`, `message` and `endedAt` all null.
 - `kind`: `gav`, `sgav`, or `emergency` when the operator doesn't say which (DTEK, "аварійні відключення").
 - `since`: the time in the text ("з 10:35", "О 9:44", "з 08 год. 24 хв.", "станом на 22:02"), else the post time. `endedAt`: the cancellation, or the inferred end.
 - `queues` / `queueCount`: the ГАВ queues off now, when the operator names them ("1-5 черга", "черги 3 та 4", "в повному обсязі" = all ten, "заміна черг: знеструмлюються 6-10, вмикаються 1-5"), or just how many ("10 черг"). Compare `queues` with `GroupMatch.emergency.gav` to tell a user whether their queue is off.
 - `scheduleApplies`: ГПВ continues alongside ("Також продовжують діяти ГПВ") or is suspended ("графіки не діють"); null when not said.
-- `area`: when only part of the region is affected ("м. Дніпро", "частині Голосієвського та Соломянського районів", "Ніжинському і Прилуцькому районах", "промислові споживачі").
+- `area`: when only part of the region is affected ("м. Дніпро", "частині Голосієвського та Соломянського районів", "Ніжинському і Прилуцькому районах", "промислові споживачі"). Each area is its own episode: a cancel for "м. Павлоград" doesn't end Dnipro; a cancel for the whole region ends every area.
 - `inferred`: many operators never post a cancellation. An announcement nobody followed up on for 12 h (Sumy: 6 h) counts as ended at that point.
 - `source`: `telegram` (the operator's channel), `yasno`, `api` (Mykolaiv's outage feed) or `ukrenergo` (the national channel, a low-confidence fallback).
 
@@ -232,7 +233,7 @@ if (outages.region('poltava').capabilities.emergency) {
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------- |
 | Kyiv, Dnipro (DTEK)             | YASNO `EmergencyShutdowns` + @dtek_ua                                                                       | no                     | Kyiv yes; Dnipro only via YASNO       |
 | Kyiv region, Odesa, Donetsk     | @dtek_ua (posts by prefix: "Київщина:", "Одещина:" …)                                                       | no                     | mostly                                |
-| Dnipro (ЦЕК)                    | @cek_info + YASNO                                                                                           | no (ГАВ vs СГАВ only)  | yes                                   |
+| Dnipro (ЦЕК)                    | @cek_info (YASNO 3/303 never flags it)                                                                      | no (ГАВ vs СГАВ only)  | yes                                   |
 | Poltava                         | @poltavaOE                                                                                                  | ranges, counts         | yes, with times                       |
 | Sumy                            | @SumyEnergo                                                                                                 | ranges, swaps          | never (6 h TTL)                       |
 | Ivano-Frankivsk                 | @prykarpattyaoblenergo_official                                                                             | queue numbers, changes | yes                                   |
@@ -245,7 +246,7 @@ if (outages.region('poltava').capabilities.emergency) {
 | Zakarpattia, Volyn, Rivne       | @Ukrenergo only, when it names the oblast                                                                   | no                     | rarely ("лише у Харківській області") |
 | Укрзалізниця (`uz-*`)           | none (Kherson isn't covered at all): `capabilities.emergency` is false, `getEmergency` throws `unsupported` |                        |                                       |
 
-Limits worth knowing: the posts are free text, read with patterns built from the operators' real wording; a new phrasing may read as nothing (`inactive`) or `unknown` until the patterns learn it. DTEK says "екстрені відключення" for ГАВ and "аварійні" for local damage after attacks; the latter is not reported. Telegram doesn't show when a post was edited, so an "UPD … скасовано" cancellation has `endedAt: null`. Ukrenergo names oblasts only sometimes, so for Zakarpattia, Volyn and Rivne a quiet `inactive` means little. Results are cached like schedules (`fresh: true` skips the cache), and a channel shared by several regions is fetched once.
+Limits worth knowing: the posts are free text, read with patterns built from the operators' real wording; a new phrasing may read as nothing (`inactive`) or `unknown` until the patterns learn it. DTEK says "екстрені відключення" for ГАВ and "аварійні" for local damage after attacks; the latter is not reported. Telegram doesn't show when a post was edited, so an "UPD … скасовано" cancellation gets the post's own time as `endedAt`. Negated, conditional and future wording ("не скасовано", "скасовано не буде", "можуть бути скасовані", "після скасування") is never read as a cancellation, and "аварійні відключення не застосовуються" is ignored rather than read as one: a false "cancelled" is worse than a false "still on", which the TTL ends. A partial cancel ("скасовано 5 черг") ends the episode only when the remaining queues are known to be none. YASNO not showing `EmergencyShutdowns` never cancels a post by itself (its `updatedOn` moves with every schedule); it ends only an emergency YASNO itself showed earlier in the same client. Ukrenergo names oblasts only sometimes, so for Zakarpattia, Volyn and Rivne a quiet `inactive` means little. Results are cached like schedules (`fresh: true` skips the cache), and a channel shared by several regions is fetched once.
 
 ### Helpers
 
