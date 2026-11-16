@@ -56,6 +56,8 @@ const areaKey = (area: string | null) => (area ? area.toLowerCase().replace(/\s+
  *   remain; otherwise it stays on and the TTL ends it. A false "cancelled" is worse than a false
  *   "still on".
  * - Operators that never post a cancel are covered by the TTL.
+ * - "(1-5 ввімкнені)", "замість 1 та 2 черг …" switch queues back on; "знову введені ГАВ (для
+ *   6-10 черг)" while those are off means the rest was lifted in between (Sumy never says so).
  */
 export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions): EmergencyStatus {
   const tracks = new Map<string, Track>()
@@ -190,7 +192,13 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       start(a, e, a.kind)
       continue
     }
-    if (a.queues) {
+    // "для 6-10 черг (1-5 ввімкнені)": those are back on
+    if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
+    if (a.queues && a.again && t.queues?.size && a.queues.every((q) => t.queues!.has(q))) {
+      // "знову введені ГАВ (для 6-10 черг)" while 6-10 are off: all was lifted in between, unannounced
+      t.queues = new Set(a.queues)
+      t.count = t.queues.size
+    } else if (a.queues) {
       // more queues while it runs: they add up
       t.queues = t.queues || !a.add ? new Set([...(t.queues ?? []), ...a.queues]) : null
       t.count = t.queues ? t.queues.size : null

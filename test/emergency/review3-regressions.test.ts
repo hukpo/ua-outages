@@ -68,6 +68,84 @@ const client = (now: string, routes: Route[]) =>
 const feed = (rows: object[]) => JSON.stringify({ current_page: 1, last_page: 1, data: rows })
 const MK_FEED = 'energy.mk.ua/outage/api/v1/outage'
 
+describe('5. queue rotations replace, not add up', () => {
+  it('Sumy 3847 "для 1-5 черг" then 3848 "для 6-10 черг (1-5 ввімкнені)": 6–10', () => {
+    expect(read('sumy', post('SumyEnergo/3848').text, post('SumyEnergo/3848').at)).toMatchObject({
+      queues: ['6', '7', '8', '9', '10'],
+      restored: ['1', '2', '3', '4', '5'],
+    })
+    const s = fold('sumy', ['SumyEnergo/3847', 'SumyEnergo/3848'], '2026-11-05T12:30:00+02:00')
+    expect(s).toMatchObject({
+      state: 'active',
+      queues: ['6', '7', '8', '9', '10'],
+      queueCount: 5,
+    })
+  })
+
+  it('Sumy 08.11: full volume at 10:10, then 13:16 "знову введені ГАВ (для 6-10 черг)": 6–10', () => {
+    const ids = ['SumyEnergo/3861', 'SumyEnergo/3862', 'SumyEnergo/3863']
+    expect(fold('sumy', ids.slice(0, 2), '2026-11-08T11:00:00+02:00').queueCount).toBe(10)
+    expect(fold('sumy', ids, '2026-11-08T13:40:00+02:00')).toMatchObject({
+      state: 'active',
+      queues: ['6', '7', '8', '9', '10'],
+      queueCount: 5,
+      since: '2026-11-08T08:30:00+02:00',
+    })
+  })
+
+  it('Poltava: "ввести ГАВ (6-10)" after "скасовано 6-10" while 1-5 run still adds up', () => {
+    const s = fold(
+      'poltava',
+      ['poltavaOE/4522', 'poltavaOE/4523', 'poltavaOE/4524'],
+      '2026-11-10T18:00:00+02:00',
+    )
+    expect(s.queueCount).toBe(10)
+  })
+
+  it('Mykolaiv 11.11.2024: 7337 keeps 5–6 off, 1–4 back on', () => {
+    expect(read('mykolaiv', post('mk_energy_ua/7337').text, post('mk_energy_ua/7337').at)).toMatchObject({
+      action: 'update',
+      queues: ['5', '6', '7', '8', '9', '10'],
+      restored: ['1', '2', '3', '4'],
+    })
+    const s = fold(
+      'mykolaiv',
+      ['mk_energy_ua/7334', 'mk_energy_ua/7335', 'mk_energy_ua/7336', 'mk_energy_ua/7337'],
+      '2024-11-11T09:00:00+02:00',
+    )
+    expect(s).toMatchObject({
+      state: 'active',
+      queues: ['5', '6', '7', '8', '9', '10'],
+    })
+  })
+
+  it('Mykolaiv 7340 "замість 1 та 2 черг будуть знеструмлені 7 та 8": 1, 2 on; 3–8 off', () => {
+    expect(read('mykolaiv', post('mk_energy_ua/7340').text, post('mk_energy_ua/7340').at)).toMatchObject({
+      action: 'update',
+      queues: ['3', '4', '5', '6', '7', '8'],
+      restored: ['1', '2'],
+    })
+    const ids = [7334, 7335, 7336, 7337, 7338, 7339, 7340].map((id) => `mk_energy_ua/${id}`)
+    expect(fold('mykolaiv', ids.slice(0, 5), '2024-11-11T10:00:00+02:00').queues).toEqual([
+      '1',
+      '2',
+      '7',
+      '8',
+      '9',
+      '10',
+    ])
+    expect(fold('mykolaiv', ids.slice(0, 6), '2024-11-11T11:00:00+02:00').queues).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+    ])
+    expect(fold('mykolaiv', ids, '2024-11-11T11:30:00+02:00').queues).toEqual(['3', '4', '5', '6', '7', '8'])
+  })
+})
+
 describe('13. national alerts are not the operator’s own', () => {
   for (const key of ['Ukrenergo/5603', 'Ukrenergo/5499'])
     for (const region of ['zhytomyr', 'khmelnytskyi', 'kharkiv'] as const)

@@ -32,7 +32,7 @@ export interface Announcement {
   timed: boolean
   /** apply: queues switched off; cancel: queues switched back on; update: queues switched off now */
   queues: string[] | null
-  /** update: queues switched back on */
+  /** update, apply: queues switched back on ("(1-5 ввімкнені)", "замість 1 та 2 черг …") */
   restored: string[] | null
   /** "10 черг" without numbers; with numbers, how many */
   count: number | null
@@ -40,6 +40,11 @@ export interface Announcement {
   all: boolean
   /** apply: adds to what is in force ("додатково", "ще") instead of replacing it */
   add: boolean
+  /**
+   * apply: "знову введені ГАВ (для 6-10 черг)": the queues named are in force again, so whatever
+   * ran before was lifted in between (Sumy never posts that)
+   */
+  again: boolean
   /** cancel of some queues only ("скасовано 5 черг ГАВ (з 6 по 10)") */
   partial: boolean
   /** ГПВ applies alongside: true; suspended: false; not said: null */
@@ -249,7 +254,7 @@ const APPLY = new RegExp(
 )
 /** A post about how the switched-off queues changed */
 const UPDATE = new RegExp(
-  `зміни\\s+в\\s+(?:застосуванні\\s+)?(?:гав|граф)|заміна\\s+черг|оновлення\\s+щодо\\s+граф${L}*\\s+аварійн|ситуація\\s+по\\s+гав`,
+  `зміни\\s+в\\s+(?:застосуванні\\s+)?(?:гав|граф)|заміна\\s+черг|підмін${L}*\\s+черг|оновлення\\s+щодо\\s+граф${L}*\\s+аварійн|ситуація\\s+по\\s+гав`,
   'iu',
 )
 /** Explanations and reminders: they use the same words without announcing anything */
@@ -259,6 +264,7 @@ const EXPLAINER = new RegExp(
   'iu',
 )
 const ADD = new RegExp(`${NOT_L}(?:додатково|ще)${END_L}`, 'iu')
+const AGAIN = new RegExp(`${NOT_L}(?:знову|повторно)${END_L}`, 'iu')
 
 /** DTEK: "Київ: повертаємось до графіків" cancels without naming the emergency */
 const BACK_TO_SCHEDULES = new RegExp(`поверта${L}*\\s+до\\s+(?:${L}+\\s+){0,2}?граф`, 'iu')
@@ -628,10 +634,15 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
     const named = off ? extractQueues(off, null).list : null
     if (off && named) {
       const kind = termOf(off, dialect)!
+      // "Зараз будуть знеструмлені 7, 8, 9, 10 черги по ГАВ. 5 та 6 черги залишаються відключені.
+      // 1, 2, 3 та 4 черги скоро будуть заживлені.": the other lines say what else is off and on
+      const swap = swapOf(all, null)
+      const queues = sortQueues([...named, ...swap.off]).filter((q) => !swap.on.includes(q))
       return {
         ...base('update', kind, [off], text, posted, dialect, false),
-        queues: named,
-        count: named.length,
+        queues,
+        restored: swap.on.length ? swap.on : null,
+        count: queues.length,
       }
     }
   }
@@ -687,6 +698,7 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
     count: q.count,
     all: q.all,
     add: first.action === 'apply' && same.some((x) => ADD.test(x)),
+    again: first.action === 'apply' && same.some((x) => AGAIN.test(x)),
     partial: first.action === 'cancel' && !q.all && (!!named || q.count !== null),
   }
   // "ГАВ скасовано частково: увімкнено 6-10 черги, 1-5 черги залишаються вимкненими": only 6-10
@@ -704,12 +716,16 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
     announcement.count = Number(total[1])
     if (named && named.length !== announcement.count) announcement.queues = null
   }
-  // "Сумщині введені графіки аварійних відключень для 6-10 черг (1-5 ввімкнені)": the rest is on
+  // "Сумщині введені графіки аварійних відключень для 6-10 черг (1-5 ввімкнені)", "Відключаємо 1
+  // та 2 черги ГАВ. Зможемо заживити 5 і 6 черги ГАВ.": those are back on
   if (announcement.action === 'apply' && !announcement.add) {
-    const { on } = swapOf(same, null)
-    if (on.length && named) {
-      announcement.queues = named.filter((n) => !on.includes(n))
-      announcement.count = announcement.queues.length
+    const { on } = swapOf(all, null)
+    if (on.length) {
+      announcement.restored = on
+      if (named) {
+        announcement.queues = named.filter((n) => !on.includes(n))
+        announcement.count = announcement.queues.length
+      }
     }
   }
   return announcement
@@ -751,6 +767,7 @@ function base(
     count: null,
     all: false,
     add: false,
+    again: false,
     partial: false,
     scheduleApplies: scheduleAppliesOf(action, text),
     area: dialect.area ? dialect.area(text, decisive) : districtArea(decisive),
@@ -766,10 +783,28 @@ function scheduleAppliesOf(action: Announcement['action'], text: string): boolea
   return on ? true : null
 }
 
-const ON_WORDS = new RegExp(`увімкн|ввімкн|вмика|відновл|зі\\s+світлом|заживл|поверта${L}*\\s+електро`, 'iu')
-const OFF_WORDS = new RegExp(`вимкн|знеструмлю|без\\s+(?:електро)?(?:постачання|світла)|відключ`, 'iu')
+const ON_WORDS = new RegExp(`увімкн|ввімкн|вмика|віднов|зі\\s+світлом|зажив|поверта${L}*\\s+електро`, 'iu')
+const OFF_WORDS = new RegExp(
+  `вимкн|знеструмлю|знеструмлен|без\\s+(?:електро)?(?:постачання|світла)|відключ`,
+  'iu',
+)
+const NUMS = String.raw`((?:\d{1,2}\s*(?:,|і|та|й)\s*)*\d{1,2})`
+/** "замість 1 та 2 черг будуть знеструмлені 7 та 8": 1, 2 back on, 7, 8 off */
+const INSTEAD_QUEUES = new RegExp(
+  `замість\\s+${NUMS}\\s*(?:-?\\p{L}{1,3}\\s+)?черг${L}*\\s+(?:(?:буде|будуть|зараз)\\s+)*(?:знеструмл|вимкн|відключ|вимика)${L}*\\s+${NUMS}(?![\\d.])`,
+  'giu',
+)
+const SCHEDULE_NAME = new RegExp(
+  `граф${L}*\\s+(?:${L}+\\s+)?(?:відключ|вимкн|знеструм)${L}*|(?:аварійн|погодинн)${L}*\\s+(?:відключ|вимкн)${L}*`,
+  'giu',
+)
+const numsOf = (s: string) =>
+  s
+    .split(/\D+/)
+    .filter(Boolean)
+    .map((n) => String(Number(n)))
 const CLAUSE_BREAK = new RegExp(
-  `[;\\n]|\\.\\s|,\\s+(?=(?:\\S+\\s+){0,3}?(?:вимкн|знеструм|вмика|увімкн|ввімкн|відновл|заживл|залиша))|натомість|\\(`,
+  `[;\\n]|\\.\\s|,\\s+(?=(?:\\S+\\s+){0,3}?(?:вимкн|знеструм|вмика|увімкн|ввімкн|віднов|зажив|залиша))|натомість|\\(`,
   'iu',
 )
 
@@ -777,14 +812,25 @@ const CLAUSE_BREAK = new RegExp(
 function swapOf(parts: string[], fullVolume: number | null): { off: string[]; on: string[] } {
   const off = new Set<string>()
   const on = new Set<string>()
-  for (const clause of parts.join('\n').split(CLAUSE_BREAK)) {
-    const isOn = ON_WORDS.test(clause)
-    const isOff = OFF_WORDS.test(clause.replace(new RegExp(ON_WORDS.source, 'giu'), ' '))
+  const text = parts.join('\n').replace(INSTEAD_QUEUES, (_, back: string, now: string) => {
+    for (const n of numsOf(back)) on.add(n)
+    for (const n of numsOf(now)) off.add(n)
+    return ' '
+  })
+  for (const clause of text.split(CLAUSE_BREAK)) {
+    // "відновимо електропостачання 7,8,9,10 чергам графіку АВАРІЙНИХ відключень": the
+    // schedule's name is no verb
+    const said = clause.replace(SCHEDULE_NAME, ' ')
+    const isOn = ON_WORDS.test(said)
+    const isOff = OFF_WORDS.test(said.replace(new RegExp(ON_WORDS.source, 'giu'), ' '))
     if (isOn === isOff) continue
-    // "♦️7,8 - залишаються відключеними": a list before a dash, without the word "черги"
+    // "♦️7,8 - залишаються відключеними": a list before a dash, without the word "черги";
+    // "(1-5 ввімкнені)": a range
+    const span = /^[^\p{L}\d]*(\d{1,2})\s*[-–—]\s*(\d{1,2})(?![\d.])\s+\p{L}/u.exec(clause)
     const bare = /^[^\p{L}\d]*((?:\d{1,2}\s*,\s*)*\d{1,2})\s*[-–—:]\s/u.exec(clause)?.[1]
     const q =
-      extractQueues(clause, fullVolume).list ?? (bare ? bare.split(/\D+/).filter(Boolean).map(String) : null)
+      extractQueues(clause, fullVolume).list ??
+      (span ? range(Number(span[1]), Number(span[2])) : bare ? numsOf(bare) : null)
     for (const n of q ?? []) (isOn ? on : off).add(n)
   }
   for (const n of on) off.delete(n)
@@ -832,6 +878,7 @@ function ukr(action: 'apply' | 'cancel', text: string, posted: Date): Announceme
     count: null,
     all: false,
     add: false,
+    again: false,
     partial: false,
     scheduleApplies: scheduleAppliesOf(action, text),
     area: null,
