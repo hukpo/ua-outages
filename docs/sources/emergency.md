@@ -46,7 +46,11 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
 - **Folding** (`src/emergency/status.ts`): ГАВ, СГАВ and unnamed emergency shutdowns are followed
   separately, one episode per area (null = whole region); a cancel for an area ends that area, a
   whole-region cancel ends all. More queues while one runs add up; a partial cancel ends it only
-  when nothing is known to remain. TTL: 12 h after the last word (Sumy 6 h).
+  when nothing is known to remain. TTL: 12 h after the last word, applied between posts too, so a new post after the gap starts a new
+  episode (Sumy 6 h: it never cancels, and the same commands last minutes to ~4 h in Poltava;
+  Kharkiv stays 12 h: its own episodes ran from ~1 h to ~16 h, 10.10.2025 07:56 → "станом на
+  23:54", and Ukrenergo still listed it on 04.11.2026 after the 02.11 apply). Posts that take
+  effect later count from their time.
 - **YASNO** `planned-outages` (Kyiv 25/902, Dnipro 3/301): any group with `today.status =
 EmergencyShutdowns` is active. YASNO not showing it ends nothing by itself (`updatedOn` moves
   with every schedule publish, and YASNO doesn't flag partial-area emergencies); only an episode
