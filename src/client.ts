@@ -8,6 +8,7 @@ import { normalizeHouse } from './text.js'
 import type {
   AddressQuery,
   City,
+  EmergencyStatus,
   GroupId,
   GroupMatch,
   GroupSchedule,
@@ -66,6 +67,10 @@ export class OutageClient {
   /** Fetches started, so a slower older one never replaces a newer one in the cache */
   private seq = 0
   private readonly searchCache = new Map<string, { at: number; value: Promise<unknown[]> }>()
+  private readonly emergencyCache = new Map<
+    RegionId,
+    { at: number; seq: number; value: Promise<EmergencyStatus> }
+  >()
 
   constructor(opts: OutageClientOptions = {}) {
     this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()) }
@@ -88,6 +93,7 @@ export class OutageClient {
       capabilities: {
         ...p.info.capabilities,
         streetSearch: !!(p.searchStreets && p.searchHouses && p.groupOf),
+        emergency: !!p.getEmergency,
       },
     }
   }
@@ -143,6 +149,50 @@ export class OutageClient {
         { region },
       )
     return { region, group: id, days, updatedAt: all.updatedAt, fetchedAt: all.fetchedAt }
+  }
+
+  // --- emergency schedules ---
+
+  /**
+   * Whether emergency schedules (ГАВ, СГАВ, emergency shutdowns) are in force in a region now,
+   * read from the operator's announcements (mostly its Telegram channel). Check
+   * `region(id).capabilities.emergency` first: regions without a source throw `unsupported`.
+   *
+   * Nothing posted is not an error: it is `inactive` with `kind: null`. Many operators never
+   * post a cancellation; an announcement nobody followed up on for 12 h counts as ended
+   * (`inferred: true`). Cached like schedules; `fresh` skips the cache.
+   */
+  async getEmergency(region: RegionId, opts: ScheduleOptions = {}): Promise<EmergencyStatus> {
+    const p = this.provider(region)
+    if (!p.getEmergency)
+      throw new OutageError('unsupported', `${p.info.name}: no source of emergency (ГАВ) announcements`, {
+        region,
+      })
+    const { signal } = opts
+    signal?.throwIfAborted()
+    const hit = this.emergencyCache.get(region)
+    const now = Date.now()
+    if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return abortable(hit.value, signal)
+    const ctx = { ...this.context(signal), ...(opts.fresh ? { fresh: true } : {}) }
+    const value = p.getEmergency(ctx)
+    const entry = { at: now, seq: ++this.seq, value }
+    if (this.cacheTtlMs > 0) {
+      if (signal)
+        value.then(
+          () => {
+            if ((this.emergencyCache.get(region)?.seq ?? 0) < entry.seq)
+              this.emergencyCache.set(region, entry)
+          },
+          () => {},
+        )
+      else {
+        this.emergencyCache.set(region, entry)
+        value.catch(() => {
+          if (this.emergencyCache.get(region) === entry) this.emergencyCache.delete(region)
+        })
+      }
+    }
+    return abortable(value, signal)
   }
 
   // --- address search ---
