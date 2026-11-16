@@ -213,8 +213,12 @@ export type EmergencyState = 'active' | 'inactive' | 'unknown'
  *   announcement;
  * - nothing announced in the lookback window (48 h): `state: 'inactive'`, `kind`, `message` and
  *   `endedAt` all null;
- * - can't be told: `state: 'unknown'` (the newest post can't be read, or a source failed while
- *   the others said nothing is in force).
+ * - can't be told: `state: 'unknown'` (the newest post can't be read; a partial or area-only
+ *   cancel with nothing known before it, e.g. "скасовано ГАВ для 6-10 черг"; or a source failed
+ *   while the others said nothing is in force).
+ *
+ * A post that takes effect later ("О 19:00 - заміна черг" posted 18:52, "з 18:00 будуть
+ * застосовуватися") counts only from that time.
  */
 export interface EmergencyStatus {
   region: RegionId

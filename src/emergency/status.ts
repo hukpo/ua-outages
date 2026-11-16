@@ -122,10 +122,29 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     return false
   }
 
+  const ttl = opts.ttlHours * 3600_000
+  const now = opts.now.getTime()
+  /** Episodes nobody followed up on for the TTL ended then (operators that never cancel) */
+  const expire = (at: number) => {
+    for (const t of tracks.values())
+      if (t.active && at - t.lastAt > ttl) {
+        t.active = false
+        t.endedAt = toKyivIso(new Date(t.lastAt + ttl))
+        t.inferred = true
+      }
+  }
+
   for (const e of events) {
     const a = e.announcement
+    // "О 19:00 - заміна черг" posted at 18:52: not yet; the state stays as it is until then
+    if (Date.parse(a.at) > now) continue
+    // a new post after a long silence starts a new episode, it doesn't continue yesterday's
+    expire(timeOf(e))
     if (a.action === 'unclear') {
-      lastUnclear = e
+      // "ГАВ: …" that can't be read while one runs: it is still news about it, the state stands
+      const on = [...tracks.values()].filter((t) => t.active && (t.kind === a.kind || a.kind === 'emergency'))
+      if (on.length) for (const t of on) touch(t, e)
+      else lastUnclear = e
       continue
     }
     lastDecisiveAt = Math.max(lastDecisiveAt, timeOf(e))
@@ -176,27 +195,20 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       t.queues = t.queues || !a.add ? new Set([...(t.queues ?? []), ...a.queues]) : null
       t.count = t.queues ? t.queues.size : null
     } else if (a.count !== null) {
-      t.queues = a.add ? null : t.queues
-      t.count = a.add
-        ? t.count !== null
-          ? t.count + a.count
-          : null
-        : Math.max(t.count ?? 0, a.count, t.queues?.size ?? 0)
-      if (t.queues && t.count !== null && t.count > t.queues.size) t.queues = null
+      if (a.add) {
+        t.queues = null
+        t.count = t.count !== null ? t.count + a.count : null
+      } else {
+        // "в обсязі 5 черг": the volume now; queue ids that don't fit it are no longer known
+        if (t.queues && t.queues.size !== a.count) t.queues = null
+        t.count = a.count
+      }
     }
     t.scheduleApplies = a.scheduleApplies ?? t.scheduleApplies
     touch(t, e)
   }
 
-  // operators that never cancel: an apply nobody followed up on for the TTL has ended
-  const ttl = opts.ttlHours * 3600_000
-  const now = opts.now.getTime()
-  for (const t of tracks.values())
-    if (t.active && now - t.lastAt > ttl) {
-      t.active = false
-      t.endedAt = toKyivIso(new Date(t.lastAt + ttl))
-      t.inferred = true
-    }
+  expire(now)
 
   const fetchedAt = toKyivIso(opts.now)
   const message = (e: EmergencyEvent | null) =>
@@ -260,6 +272,21 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
 
   if (orphanCancel) {
     const a = orphanCancel.announcement
+    // "скасовано ГАВ для 6-10 черг", "м. Павлоград: скасовано" with nothing known before: the
+    // rest may still be on, so not a region-wide "cancelled"
+    if (a.partial || a.area)
+      return status({
+        state: 'unknown',
+        kind: a.kind,
+        scheduleApplies: a.scheduleApplies,
+        since: null,
+        endedAt: null,
+        queues: null,
+        queueCount: null,
+        area: a.area,
+        inferred: false,
+        message: message(orphanCancel),
+      })
     return status({
       state: 'inactive',
       kind: a.kind,

@@ -1,5 +1,6 @@
 export { OutageClient } from './client.js'
 export type {
+  EmergencyOptions,
   HealthCheckOptions,
   HealthReport,
   OutageClientOptions,

@@ -160,9 +160,10 @@ export class OutageClient {
    *
    * Nothing posted is not an error: it is `inactive` with `kind: null`. Many operators never
    * post a cancellation; an announcement nobody followed up on for 12 h counts as ended
-   * (`inferred: true`). Cached like schedules; `fresh` skips the cache.
+   * (`inferred: true`). Cached like schedules; `fresh` skips the cache. Pass `previous` (the last
+   * status you stored) after a restart so an emergency seen only through YASNO can still end.
    */
-  async getEmergency(region: RegionId, opts: ScheduleOptions = {}): Promise<EmergencyStatus> {
+  async getEmergency(region: RegionId, opts: EmergencyOptions = {}): Promise<EmergencyStatus> {
     const p = this.provider(region)
     if (!p.getEmergency)
       throw new OutageError('unsupported', `${p.info.name}: no source of emergency (ГАВ) announcements`, {
@@ -174,7 +175,7 @@ export class OutageClient {
     const now = Date.now()
     if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return abortable(hit.value, signal)
     const ctx = { ...this.context(signal), ...(opts.fresh ? { fresh: true } : {}) }
-    const value = p.getEmergency(ctx)
+    const value = p.getEmergency(ctx, opts.previous ? { previous: opts.previous } : undefined)
     const entry = { at: now, seq: ++this.seq, value }
     if (this.cacheTtlMs > 0) {
       if (signal)
@@ -549,6 +550,15 @@ export interface ScheduleOptions {
   fresh?: boolean
   /** Cancels the call: it rejects with the signal's reason and sends no further requests */
   signal?: AbortSignal
+}
+
+export interface EmergencyOptions extends ScheduleOptions {
+  /**
+   * The status this call returned last time, if the app kept it (e.g. across a restart). The
+   * client remembers on its own which emergencies YASNO showed, so that it can tell when YASNO
+   * stops showing one; a new process doesn't, and without this would never see that end.
+   */
+  previous?: EmergencyStatus
 }
 
 export interface SearchOptions {

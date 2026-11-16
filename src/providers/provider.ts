@@ -63,5 +63,5 @@ export interface Provider {
    * ГАВ / СГАВ status of the region now (`OutageClient.getEmergency`). Present only when the
    * region has a source for it; nothing announced is `inactive`, never an error.
    */
-  getEmergency?(ctx: ProviderContext): Promise<EmergencyStatus>
+  getEmergency?(ctx: ProviderContext, opts?: { previous?: EmergencyStatus }): Promise<EmergencyStatus>
 }

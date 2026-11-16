@@ -118,7 +118,8 @@ function withEmergency(hub: EmergencyHub, providers: Provider[]): Provider[] {
     const region = p.info.id
     return {
       ...p,
-      getEmergency: (ctx) => getEmergency(hub, cfg, { ctx, region, fresh: !!ctx.fresh }),
+      getEmergency: (ctx, opts) =>
+        getEmergency(hub, cfg, { ctx, region, fresh: !!ctx.fresh, previous: opts?.previous }),
     }
   })
 }

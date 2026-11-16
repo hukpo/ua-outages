@@ -120,7 +120,8 @@ const CANCEL = new RegExp(
     `деактивован${L}*`,
     `деактивац${L}*`,
     `замість\\s+(?:граф${L}*\\s+)?аварійн`,
-    `замінено\\s+на`,
+    // "ГАВ замінено на графіки погодинних відключень" (the other way round is an apply)
+    `замінено\\s+на\\s+(?:граф${L}*\\s+)?(?:погодинн|гпв)`,
   ].join('|'),
   'iu',
 )
@@ -140,8 +141,32 @@ const NOT_A_CANCEL = new RegExp(
     `скасуванн${L}*\\s+(?:${L}+\\s+){0,3}?(?:залеж|відбуд|можлив|очіку)${L}*`,
     `(?:після|до|щодо|для|без)\\s+(?:їх\\s+)?скасуванн${L}*`,
     `скасувати\\s+[^.]{0,60}?не\\s+вда${L}*`,
+    // "діятимуть до завершення ремонтних робіт", "до припинення дефіциту потужності"
+    `(?:до|після)\\s+(?:повного\\s+)?(?:завершення|припинення|відміни|закінчення)`,
   ].join('|'),
   'giu',
+)
+/**
+ * ГПВ cancelled: "Графіки погодинних відключень скасовано, натомість застосовано графіки
+ * аварійних", "ГПВ відмінено та застосовано ГАВ". The cancel is about ГПВ; what follows may
+ * apply the emergency schedule.
+ */
+const GPV_CANCELLED = new RegExp(
+  [
+    `(?:граф${L}*\\s+(?:погодинн|стабілізаційн)${L}*(?:\\s+(?:відключ|вимкн)${L}*)?|${NOT_L}гпв${END_L})(?:\\s+${L}+){0,3}?\\s+(?:скасован|відмінен)${L}*`,
+    `(?:скасован|відмінен)${L}*\\s+(?:${L}+\\s+){0,2}?(?:граф${L}*\\s+(?:погодинн|стабілізаційн)${L}*(?:\\s+(?:відключ|вимкн)${L}*)?|гпв${END_L})`,
+  ].join('|'),
+  'giu',
+)
+/** Denials: "Інформація про скасування аварійних відключень … не відповідає дійсності" */
+const DENIAL = new RegExp(`не\\s+відповіда${L}*\\s+дійсн|${NOT_L}фейк|${NOT_L}неправд`, 'iu')
+/**
+ * Hypotheses, conditions, purposes and the past: "У разі перевищення лімітів … будуть
+ * застосовані ГАВ", "щоб уникнути застосування", "Вчора було застосовано ГАВ". Not news of now.
+ */
+const NOT_NOW = new RegExp(
+  `${NOT_L}(?:у|в)\\s+разі${END_L}|${NOT_L}(?:якщо|щоб|аби|вчора|напередодні)${END_L}|уникн${L}*|${NOT_L}(?:було|були)${END_L}|минул${L}*\\s+доби|під\\s+час\\s+(?:застосування|дії)`,
+  'iu',
 )
 /**
  * A negated verb says what is not happening: "не скасовано", "поки що не скасовано", "не
@@ -158,8 +183,11 @@ const APPLY = new RegExp(
   [
     `застосован${L}*`,
     `застосову(?:ється|ються|ватимуться)`,
-    `застосування`,
+    // nouns only as news: "команда на застосування ГАВ", "Повідомляємо про застосування",
+    // "вказівка про введення графіків аварійних вимкнень"
+    `(?:про|на)\\s+(?:застосування|введення)`,
     `будуть\\s+застосовуватися`,
+    `замінено\\s+на\\s+(?:граф${L}*\\s+)?аварійн${L}*`,
     `запроваджен${L}*`,
     `введен${L}*`,
     `ввести`,
@@ -208,7 +236,7 @@ const SCHEDULE_ON = new RegExp(
   'iu',
 )
 const SCHEDULE_OFF = new RegExp(
-  `граф${L}*(?:\\s+(?:погодинн|стабілізаційн|знеструмлен|відключен)${L}*)*[^.!?\\n]{0,90}?\\s(?:наразі\\s+|тимчасово\\s+)?не\\s+ді(?:ють|є)`,
+  `граф${L}*(?:\\s+(?:погодинн|стабілізаційн|знеструмлен|відключен)${L}*)*[^.!?\\n]{0,90}?\\s(?:наразі\\s+|тимчасово\\s+)?не\\s+ді(?:ють|є)|${GPV_CANCELLED.source}`,
   'iu',
 )
 
@@ -311,7 +339,12 @@ export function extractQueues(text: string, fullVolume: number | null = null): Q
     else {
       const n = nums[0]!
       const form = m[2]!.toLowerCase()
-      if (form === 'черг' || n <= 4) count = Math.max(count ?? 0, n)
+      // "N черг" (5+) and "2–4 черги" count; "N чергу" (N ≥ 2: "застосовано 3 чергу"), "N черга",
+      // "N черги" for N ≥ 5 ("7 черги ГАВ") and "для N черги" name one queue. "1 чергу" is the
+      // count one (Chernihiv: "застосовано 1 чергу Графіка")
+      const forQueue = /для\s*$/iu.test(withoutRanges.slice(Math.max(0, m.index! - 6), m.index!))
+      const counts = form === 'черг' || (form === 'черги' && n <= 4) || (form === 'чергу' && n === 1)
+      if (counts && !forQueue) count = Math.max(count ?? 0, n)
       else list.add(String(n))
     }
   }
@@ -389,13 +422,15 @@ const ABOUT_GPV = new RegExp(
 )
 
 /** The sentence without what doesn't happen: negated verbs, conditional or future cancels */
-const asserted = (s: string) => s.replace(NOT_A_CANCEL, ' ').replace(NEGATED, ' ').replace(ABOUT_GPV, ' ')
+const unhedged = (s: string) => s.replace(NOT_A_CANCEL, ' ').replace(NEGATED, ' ')
+/** …and without what is said about ГПВ ("діють графіки погодинних", "ГПВ скасовано") */
+const asserted = (s: string) => unhedged(s).replace(GPV_CANCELLED, ' ').replace(ABOUT_GPV, ' ')
 
 /** "може призвести до значних аварійних відключень": a possibility, not an announcement */
 const MAYBE = new RegExp(`${NOT_L}(?:може|можуть|можливі|можливо|ймовірн${L}*|загроза|ризик)${END_L}`, 'iu')
 
-/** It says what is not, may be or will be: no event, and no headline fallback either */
-const hedged = (s: string) => asserted(s) !== s || MAYBE.test(s)
+/** It says what is not, may be, was or would be: no event, and no headline fallback either */
+const hedged = (s: string) => unhedged(s) !== s || MAYBE.test(s) || NOT_NOW.test(s) || DENIAL.test(s)
 
 /** A sentence that may announce something about this operator's region */
 const candidate = (s: string, dialect: Dialect) =>
@@ -403,6 +438,9 @@ const candidate = (s: string, dialect: Dialect) =>
 
 function hitOf(s: string, index: number, dialect: Dialect): Hit | null {
   if (!candidate(s, dialect)) return null
+  // "можуть бути застосовані", "у разі перевищення … будуть застосовані", "Вчора було
+  // застосовано", "… не відповідає дійсності": nothing happening now
+  if (MAYBE.test(s) || NOT_NOW.test(s) || DENIAL.test(s)) return null
   const kind = termOf(s, dialect)
   const said = asserted(s)
   if (!kind) {
@@ -411,8 +449,13 @@ function hitOf(s: string, index: number, dialect: Dialect): Hit | null {
       return { sentence: s, index, kind: 'emergency', action: 'cancel' }
     return null
   }
-  if (CANCEL.test(said)) return { sentence: s, index, kind, action: 'cancel' }
-  if (APPLY.test(said)) return { sentence: s, index, kind, action: 'apply' }
+  const cancels = CANCEL.test(said)
+  const applies = APPLY.test(said)
+  // both in one sentence: in force ("скасовано …, натомість застосовано ГАВ"); a false "cancelled"
+  // is the worse mistake. "Замість аварійних діють графіки погодинних" is a cancel: the apply verb
+  // there is about ГПВ and was stripped.
+  if (cancels && !applies) return { sentence: s, index, kind, action: 'cancel' }
+  if (applies) return { sentence: s, index, kind, action: 'apply' }
   if (BACK_TO_SCHEDULES.test(said)) return { sentence: s, index, kind, action: 'cancel' }
   return null
 }
@@ -421,35 +464,53 @@ function hitOf(s: string, index: number, dialect: Dialect): Hit | null {
 
 const TIME_RES: RegExp[] = [
   // "22.01.2026 з 08 год. 24 хв."
-  /(?<date>\d{2}\.\d{2}\.\d{4})\s+з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/iu,
-  /(?:^|[\s(])з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/iu,
+  /(?<date>\d{2}\.\d{2}\.\d{4})\s+з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/giu,
+  /(?:^|[\s(])з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/giu,
   // "з 10:35", "О 9:44", "об 11:12", "В 06:10", "станом на 22:02", "з 18.00"
-  /(?:^|[\s(])(?:з|о|об|в|станом\s+на|на)\s+(?<h>\d{1,2})[:.](?<m>\d{2})(?!\d)/iu,
+  /(?:^|[\s(])(?:з|о|об|в|станом\s+на|на)\s+(?<h>\d{1,2})(?<sep>[:.])(?<m>\d{2})(?![\d.]\d)/giu,
 ]
 
-/** The time named in `text` as an instant, read against the post time. */
+/** Words of the future: "будуть застосовуватися", "буде введено", "діятимуть" */
+const FUTURE = new RegExp(`${NOT_L}(?:буде|будуть)${END_L}|${L}+тимуть${END_L}|${L}+тиметься${END_L}`, 'iu')
+
+/** "з 16.11" is a date, not 16:11: a valid day.month within a week of the post */
+function looksLikeDate(h: number, m: number, posted: Date): boolean {
+  if (m < 1 || m > 12 || h < 1 || h > 31) return false
+  const y = Number(kyivDate(posted).slice(0, 4))
+  return [y - 1, y, y + 1].some((yy) => {
+    const t = Date.UTC(yy, m - 1, h)
+    return new Date(t).getUTCDate() === h && Math.abs(t - posted.getTime()) <= 7 * 86400_000
+  })
+}
+
+/**
+ * The time named in `text` as an instant, read against the post time. Reports are about what
+ * happened ("О 23:55 скасовано" posted at noon was last night); a time ahead is taken only for
+ * the near future (3 h), or the day ahead when the verb is in the future tense.
+ */
 function timeIn(text: string, posted: Date): Date | null {
   for (const re of TIME_RES) {
-    const m = re.exec(text)
-    if (!m?.groups) continue
-    const h = Number(m.groups.h)
-    const min = Number(m.groups.m)
-    if (h > 23 || min > 59) continue
-    let date = m.groups.date
-      ? m.groups.date.split('.').reverse().join('-')
-      : findUaDate(text.replace(/\d{1,2}\s*[:.]\s*\d{2}(?!\.\d)/g, ' '), posted)
-    const explicit = !!date
-    date ??= kyivDate(posted)
-    let at = kyivInstant(date, h * 60 + min)
-    if (!explicit) {
-      // announcements report what happened, sometimes what starts shortly: "О 23:55 скасовано"
-      // posted at 12:00 was last night, "з 18:00" posted at 15:30 is today; "з 00:05" posted at
-      // 23:58 is tomorrow
-      const diff = at.getTime() - posted.getTime()
-      if (diff > 3 * 3600_000) at = new Date(at.getTime() - 86400_000)
-      else if (diff < -21 * 3600_000) at = new Date(at.getTime() + 86400_000)
+    for (const m of text.matchAll(re)) {
+      if (!m.groups) continue
+      const h = Number(m.groups.h)
+      const min = Number(m.groups.m)
+      if (h > 23 || min > 59) continue
+      // "з 16.11" (a date), but "з 18.00", "з 22.27" (times)
+      if (m.groups.sep === '.' && looksLikeDate(h, min, posted)) continue
+      let date = m.groups.date
+        ? m.groups.date.split('.').reverse().join('-')
+        : findUaDate(text.replace(/\d{1,2}\s*[:.]\s*\d{2}(?!\.\d)/g, ' '), posted)
+      const explicit = !!date
+      date ??= kyivDate(posted)
+      let at = kyivInstant(date, h * 60 + min)
+      if (!explicit) {
+        const ahead = FUTURE.test(text) ? 20 * 3600_000 : 3 * 3600_000
+        const diff = at.getTime() - posted.getTime()
+        if (diff > ahead) at = new Date(at.getTime() - 86400_000)
+        else if (diff < ahead - 24 * 3600_000) at = new Date(at.getTime() + 86400_000)
+      }
+      return at
     }
-    return at
   }
   return null
 }
@@ -489,6 +550,25 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
   // the "UPD" line comes first; "UPD." may stand as a sentence of its own
   let first = upd ? hits.find((h) => h.index <= 1) : hits[0]
   if (upd && !first) first = hits[0]
+  // "ГАВ: вимкнено 6 та 7 черги": the queues off now, as a change
+  if (!first && !update) {
+    const off = all.find(
+      (x) =>
+        candidate(x, dialect) &&
+        termOf(x, dialect) &&
+        !hedged(x) &&
+        /вимкнен|знеструмлен|відключен/iu.test(x),
+    )
+    const named = off ? extractQueues(off, null).list : null
+    if (off && named) {
+      const kind = termOf(off, dialect)!
+      return {
+        ...base('update', kind, [off], text, posted, dialect, false),
+        queues: named,
+        count: named.length,
+      }
+    }
+  }
   if (!first && !update) {
     // the first sentence naming the schedule without saying what happened ("…на Житомирщині
     // аварійні знеструмлення."); one that negates or hedges ("ГАВ поки що не скасовано") says nothing
@@ -620,7 +700,7 @@ function scheduleAppliesOf(action: Announcement['action'], text: string): boolea
 const ON_WORDS = new RegExp(`увімкн|ввімкн|вмика|відновл|зі\\s+світлом|заживл|поверта${L}*\\s+електро`, 'iu')
 const OFF_WORDS = new RegExp(`вимкн|знеструмлю|без\\s+(?:електро)?(?:постачання|світла)|відключ`, 'iu')
 const CLAUSE_BREAK = new RegExp(
-  `[;\\n]|\\.\\s|,\\s*(?=(?:\\S+\\s+){0,3}?(?:вимкн|знеструм|вмика|увімкн|ввімкн|відновл|заживл|залиша))|натомість|\\(`,
+  `[;\\n]|\\.\\s|,\\s+(?=(?:\\S+\\s+){0,3}?(?:вимкн|знеструм|вмика|увімкн|ввімкн|відновл|заживл|залиша))|натомість|\\(`,
   'iu',
 )
 
@@ -632,7 +712,10 @@ function swapOf(parts: string[], fullVolume: number | null): { off: string[]; on
     const isOn = ON_WORDS.test(clause)
     const isOff = OFF_WORDS.test(clause.replace(new RegExp(ON_WORDS.source, 'giu'), ' '))
     if (isOn === isOff) continue
-    const q = extractQueues(clause, fullVolume).list
+    // "♦️7,8 - залишаються відключеними": a list before a dash, without the word "черги"
+    const bare = /^[^\p{L}\d]*((?:\d{1,2}\s*,\s*)*\d{1,2})\s*[-–—:]\s/u.exec(clause)?.[1]
+    const q =
+      extractQueues(clause, fullVolume).list ?? (bare ? bare.split(/\D+/).filter(Boolean).map(String) : null)
     for (const n of q ?? []) (isOn ? on : off).add(n)
   }
   for (const n of on) off.delete(n)

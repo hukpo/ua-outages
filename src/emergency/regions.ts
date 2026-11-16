@@ -185,6 +185,8 @@ export class EmergencyHub {
   private readonly channels = new Map<string, { at: number; value: Promise<TelegramPost[]> }>()
   /** Regions whose YASNO status was EmergencyShutdowns at the last look, and since when */
   private readonly yasnoActive = new Map<RegionId, string>()
+  /** …and the YASNO episodes that ended since: posts from before the end don't revive them */
+  private readonly yasnoEnded = new Map<RegionId, { since: string | null; endedAt: string }>()
 
   constructor(private readonly cacheMs = 60_000) {}
 
@@ -221,8 +223,16 @@ export class EmergencyHub {
     y: YasnoEmergency,
     region: RegionId,
     fetchedAt: string,
+    previous?: EmergencyStatus,
   ): EmergencyStatus | null {
+    // after a restart the caller's last status stands in for what this client saw
+    if (previous?.source === 'yasno' && !this.yasnoActive.has(region) && !this.yasnoEnded.has(region)) {
+      if (previous.state === 'active') this.yasnoActive.set(region, previous.since ?? previous.fetchedAt)
+      else if (previous.state === 'inactive' && previous.endedAt)
+        this.yasnoEnded.set(region, { since: previous.since, endedAt: previous.endedAt })
+    }
     if (y.active) {
+      this.yasnoEnded.delete(region)
       const since = this.yasnoActive.get(region) ?? y.changedAt ?? fetchedAt
       this.yasnoActive.set(region, since)
       if (posts?.state === 'active') return { ...posts, source: 'yasno' }
@@ -243,23 +253,31 @@ export class EmergencyHub {
       }
     }
     const seen = this.yasnoActive.get(region)
-    this.yasnoActive.delete(region)
-    if (!seen) return posts
-    // a cancel post after YASNO switched it on already says it all
-    if (posts?.state === 'inactive' && posts.message) return posts
-    const endedAt = y.changedAt && Date.parse(y.changedAt) >= Date.parse(seen) ? y.changedAt : fetchedAt
+    if (seen) {
+      this.yasnoActive.delete(region)
+      const endedAt = y.changedAt && Date.parse(y.changedAt) >= Date.parse(seen) ? y.changedAt : fetchedAt
+      this.yasnoEnded.set(region, { since: posts?.since ?? seen, endedAt })
+    }
+    const ended = this.yasnoEnded.get(region)
+    if (!ended) return posts
+    // a post newer than YASNO's switch back (a new apply, or a cancel) is the newer word; the
+    // apply posts from before it are what YASNO ended
+    if (posts?.message && Date.parse(posts.message.at) > Date.parse(ended.endedAt)) {
+      if (posts.state === 'active') this.yasnoEnded.delete(region)
+      return posts
+    }
     return {
       region,
       state: 'inactive',
       kind: posts?.kind ?? 'emergency',
       scheduleApplies: true,
-      since: posts?.since ?? seen,
-      endedAt,
+      since: ended.since,
+      endedAt: ended.endedAt,
       queues: null,
       queueCount: null,
       area: null,
       inferred: false,
-      message: { text: `YASNO: EmergencyShutdowns → ${y.status}`, url: null, at: endedAt },
+      message: { text: `YASNO: EmergencyShutdowns → ${y.status}`, url: null, at: ended.endedAt },
       source: 'yasno',
       fetchedAt,
     }
@@ -291,6 +309,8 @@ export interface EmergencyRequest {
   ctx: ProviderContext
   region: RegionId
   fresh: boolean
+  /** The status the caller got last time (kept across restarts): see `EmergencyOptions.previous` */
+  previous?: EmergencyStatus
 }
 
 /**
@@ -301,7 +321,7 @@ export interface EmergencyRequest {
 export async function getEmergency(
   hub: EmergencyHub,
   cfg: EmergencyConfig,
-  { ctx, region, fresh }: EmergencyRequest,
+  { ctx, region, fresh, previous }: EmergencyRequest,
 ): Promise<EmergencyStatus> {
   const now = ctx.now()
   const ttlHours = cfg.ttlHours ?? DEFAULT_TTL_HOURS
@@ -357,10 +377,12 @@ export async function getEmergency(
   if ((!status || !status.message) && national?.length) status = fold(national, 'ukrenergo')
 
   // Mykolaiv: running feed rows name queues and times; otherwise the channel may know more
-  // (an active channel wins over finished feed rows)
-  if (feed && (feed.state === 'active' || status?.state !== 'active')) status = { ...feed, fetchedAt }
+  // (an active channel, or a channel's cancel post, wins over finished feed rows, whose end is
+  // only inferred)
+  const channelSaid = status?.state === 'active' || (status?.state === 'inactive' && !!status.message)
+  if (feed && (feed.state === 'active' || !channelSaid)) status = { ...feed, fetchedAt }
 
-  if (yasno) status = hub.withYasno(status, yasno, region, fetchedAt)
+  if (yasno) status = hub.withYasno(status, yasno, region, fetchedAt, previous)
   status ??= fold([], telegram ? 'telegram' : 'ukrenergo')
 
   // a source failed: "nothing in force" from the others alone isn't known

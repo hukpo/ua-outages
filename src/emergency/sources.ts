@@ -135,6 +135,8 @@ export function mykolaivFeedStatus(
     }
   }
   const finished = gav.map((r) => t(r.finish_at)).filter(Number.isFinite)
+  // `finish_at` is often the dispatcher's estimate (set ahead, corrected later), and a gap
+  // between rows may be a rotation: an end read from the feed is inferred, not announced
   return {
     region,
     state: 'inactive',
@@ -145,7 +147,7 @@ export function mykolaivFeedStatus(
     queues: null,
     queueCount: null,
     area: null,
-    inferred: false,
+    inferred: true,
     message: message(newest),
     source: 'api',
   }
