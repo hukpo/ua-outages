@@ -267,13 +267,9 @@ describe('DTEK /ua/ajax route (Kyiv region)', () => {
     const { client, calls } = krem()
     const m = await client.findGroup('kyiv-region', { city: 'Ірпінь', street: 'Західна', house: '2' })
     expect(m).toMatchObject({ region: 'kyiv-region', group: '4.1' })
-    expect(calls.map((c) => c.form.get('method'))).toEqual([
-      'checkDisconUpdate',
-      'checkDisconUpdate',
-      'getStreets',
-      'getHomeNum',
-    ])
-    // the street list is asked for once per session
+    // the handshake, the street list, the houses: no schedule read is needed for an address
+    expect(calls.map((c) => c.form.get('method'))).toEqual(['checkDisconUpdate', 'getStreets', 'getHomeNum'])
+    // the street list is asked for once a day
     await client.searchStreets('kyiv-region', 'Захід', { city: { id: 'м. Ірпінь', name: 'м. Ірпінь' } })
     expect(calls.filter((c) => c.form.get('method') === 'getStreets')).toHaveLength(1)
   })
