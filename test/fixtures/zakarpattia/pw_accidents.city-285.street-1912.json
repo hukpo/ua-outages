@@ -1,0 +1,90 @@
+{
+ "@context": "/api/contexts/PwAccident",
+ "@id": "/api/pw_accidents",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_accidents/235606190",
+   "@type": "PwAccident",
+   "id": 235606190,
+   "code_otg": "33",
+   "city": {
+    "@id": "/api/pw_cities/285",
+    "@type": "PwCity",
+    "id": 285,
+    "name": "Шаян",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/1912",
+    "@type": "PwStreet",
+    "id": 1912,
+    "city": {
+     "@id": "/api/pw_cities/285",
+     "@type": "PwCity",
+     "id": 285,
+     "name": "Шаян",
+     "codeOtg": ""
+    },
+    "name": "Яблунева"
+   },
+   "dateEvent": "2026-07-06T13:49:00+00:00",
+   "datePlanIn": "2026-07-06T17:00:00+00:00",
+   "koment": "ПІДКЛЮЧЕННЯ АБ. ЗГІДНО ТЕЛЕФОНОГРАМИ-[ПІБ вилучено]",
+   "switchSubReason": 0,
+   "otg": {
+    "@id": "/api/pw_otgs/33",
+    "@type": "PwOtg",
+    "id": 33,
+    "code": "33",
+    "name": "Вишківська"
+   },
+   "buildingNames": "22",
+   "typeOff": 0
+  },
+  {
+   "@id": "/api/pw_accidents/235606191",
+   "@type": "PwAccident",
+   "id": 235606191,
+   "code_otg": "33",
+   "city": {
+    "@id": "/api/pw_cities/285",
+    "@type": "PwCity",
+    "id": 285,
+    "name": "Шаян",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/1912",
+    "@type": "PwStreet",
+    "id": 1912,
+    "city": {
+     "@id": "/api/pw_cities/285",
+     "@type": "PwCity",
+     "id": 285,
+     "name": "Шаян",
+     "codeOtg": ""
+    },
+    "name": "Яблунева"
+   },
+   "dateEvent": "2026-11-09T16:54:00+00:00",
+   "datePlanIn": "2026-12-09T17:00:00+00:00",
+   "koment": "ВІДКЛЮЧЕННЯ ТП ЗГІДНО ТЕЛЕФОНОГРАМИ ПО ЗВЕРНЕННЮ СПОЖИВАЧА",
+   "switchSubReason": 0,
+   "otg": {
+    "@id": "/api/pw_otgs/33",
+    "@type": "PwOtg",
+    "id": 33,
+    "code": "33",
+    "name": "Вишківська"
+   },
+   "buildingNames": "33",
+   "typeOff": 1
+  }
+ ],
+ "hydra:totalItems": 2,
+ "hydra:view": {
+  "@id": "/api/pw_accidents?otg.id=&city.id=285&street.id=1912",
+  "@type": "hydra:PartialCollectionView"
+ }
+}

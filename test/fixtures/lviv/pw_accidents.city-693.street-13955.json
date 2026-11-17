@@ -1,0 +1,51 @@
+{
+ "@context": "/api/contexts/PwAccident",
+ "@id": "/api/pw_accidents",
+ "@type": "hydra:Collection",
+ "hydra:totalItems": 1,
+ "hydra:member": [
+  {
+   "@id": "/api/pw_accidents/278215629",
+   "@type": "PwAccident",
+   "id": 278215629,
+   "code_otg": "UA46060250000025047",
+   "city": {
+    "@id": "/api/pw_cities/693",
+    "@type": "PwCity",
+    "id": 693,
+    "name": "Львів",
+    "codeOtg": "UA46060250000025047"
+   },
+   "street": {
+    "@id": "/api/pw_streets/13955",
+    "@type": "PwStreet",
+    "id": 13955,
+    "city": {
+     "@id": "/api/pw_cities/693",
+     "@type": "PwCity",
+     "id": 693,
+     "name": "Львів",
+     "codeOtg": "UA46060250000025047"
+    },
+    "name": "Патона Є."
+   },
+   "dateEvent": "2026-11-17T22:44:31+02:00",
+   "datePlanIn": "2026-11-18T00:00:00+02:00",
+   "koment": "",
+   "switchSubReason": 0,
+   "otg": {
+    "@id": "/api/pw_otgs/28",
+    "@type": "PwOtg",
+    "id": 28,
+    "code": "UA46060250000025047",
+    "name": "Львівська"
+   },
+   "buildingNames": "12",
+   "typeOff": 1
+  }
+ ],
+ "hydra:view": {
+  "@id": "/api/pw_accidents?city.id=693&otg.id=&street.id=13955",
+  "@type": "hydra:PartialCollectionView"
+ }
+}

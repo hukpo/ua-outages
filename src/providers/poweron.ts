@@ -3,7 +3,17 @@ import type { RequestOptions } from '../http.js'
 import { normalizeGroup } from '../schedule.js'
 import { houseKey } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
-import type { City, EmergencyQueues, GroupId, GroupMatch, House, ProviderInfo, Street } from '../types.js'
+import type {
+  City,
+  EmergencyQueues,
+  GroupId,
+  GroupMatch,
+  House,
+  HouseOutage,
+  HouseOutageKind,
+  ProviderInfo,
+  Street,
+} from '../types.js'
 import { sharedList, type Provider, type ProviderContext } from './provider.js'
 
 /**
@@ -121,6 +131,8 @@ export interface PowerOnAddressOptions {
   findBuilding?(ctx: ProviderContext, street: Street, house: string): Promise<PowerOnBuilding[]>
   /** Optional authoritative group lookup for one building, used by `groupOf`. */
   buildingGroups?(ctx: ProviderContext, street: Street, house: House): Promise<GroupId[]>
+  /** Adds `outageOf`, read from the backend's `pw_accidents` (see `powerOnOutages`) */
+  outages?: Omit<PowerOnOutageOptions, 'info' | 'label' | 'api'>
 }
 
 /** Settlements and streets: the lists change rarely (Cherkasy keeps its directory as long) */
@@ -128,7 +140,8 @@ const LIST_TTL_MS = 24 * 3_600_000
 /** The buildings of a street with their groups */
 const BUILDINGS_TTL_MS = 6 * 3_600_000
 
-type AddressSearch = Required<Pick<Provider, 'searchCities' | 'searchStreets' | 'searchHouses' | 'groupOf'>>
+type AddressSearch = Required<Pick<Provider, 'searchCities' | 'searchStreets' | 'searchHouses' | 'groupOf'>> &
+  Pick<Provider, 'outageOf'>
 
 /**
  * City → street → house → group lookup on a PowerOn backend. Static lists (all settlements,
@@ -190,13 +203,28 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
     return remember(street, await opts.streetBuildings(ctx, street), true)
   }
 
+  const find = (e: { byNumber: Map<string, PowerOnBuilding> } | undefined, house: House) =>
+    e?.byNumber.get(house.number) ??
+    [...(e?.byNumber.values() ?? [])].find((b) => houseKey(b.number) === houseKey(house.number))
+
   const toHouse = (street: Street, b: PowerOnBuilding): House => ({
     id: b.number,
     number: b.number,
     streetId: street.id,
   })
 
+  const outages =
+    opts.outages && powerOnOutages({ ...opts.outages, info: opts.info, label: opts.label, api: opts.api })
+
   return {
+    ...(outages
+      ? {
+          // the groups come from the building list the address lookup has just read
+          outageOf: (ctx: ProviderContext, house: House, street: Street, city?: City) =>
+            outages.outageOf(ctx, house, street, city, find(kept(street), house)?.groups ?? []),
+        }
+      : {}),
+
     async searchCities(ctx) {
       return cities(ctx)
     },
@@ -240,16 +268,13 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
 
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
       let groups: GroupId[] | undefined
-      const find = (e: { byNumber: Map<string, PowerOnBuilding> } | undefined) =>
-        e?.byNumber.get(house.number) ??
-        [...(e?.byNumber.values() ?? [])].find((b) => houseKey(b.number) === houseKey(house.number))
       // the emergency queues come with the building lists; no extra request just for them
-      let emergency = find(kept(street))?.emergency
+      let emergency = find(kept(street), house)?.emergency
       if (opts.buildingGroups) groups = await opts.buildingGroups(ctx, street, house)
       if (!groups?.length) {
-        let b = find(kept(street))
+        let b = find(kept(street), house)
         if (!b && opts.findBuilding) b = (await opts.findBuilding(ctx, street, house.number))[0]
-        if (!b) b = find(await loadStreet(ctx, street))
+        if (!b) b = find(await loadStreet(ctx, street), house)
         if (!b)
           throw new OutageError(
             'not-found',
@@ -271,6 +296,212 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
         address: { city: city?.name, street: street.name, house: house.number },
         ...(emergency ? { emergency } : {}),
+      }
+    },
+  }
+}
+
+// --- outages now (`pw_accidents`) ---
+
+/**
+ * A row of `pw_accidents`: an outage the operator's dispatchers have logged, for the houses
+ * of one street (`buildingNames`, comma-separated). `koment` is the dispatcher's own note: the
+ * operators' sites never show it, and it can carry names (Zakarpattia, 17.11.2026), so only a
+ * bare group ("3,1", Zhytomyr's ГПВ rows) is read from it.
+ */
+export interface PowerOnAccident {
+  city?: { id?: number; name?: string } | null
+  street?: { id?: number; name?: string } | null
+  buildingNames?: string | null
+  /** When it started */
+  dateEvent?: string | null
+  /** When power is expected back */
+  datePlanIn?: string | null
+  typeOff?: number | null
+  switchSubReason?: number | null
+  koment?: string | null
+}
+
+/**
+ * The SPA's own labels («Чому немає світла?», `main.*.js` of Zhytomyr and Lviv, 16.11.2026):
+ * `switchSubReason`, when above 0, says which schedule switched the houses off; otherwise
+ * `typeOff` says what kind of outage it is.
+ *
+ * Seen live (17.11.2026): `switchSubReason` 2 in Zhytomyr (every ГПВ slot, one row per street
+ * and group), and `typeOff` 0 and 1 with `switchSubReason` 0 in Lviv, Zhytomyr and Zakarpattia.
+ * UNVERIFIED: `switchSubReason` 1 and 3 (ГАВ, СГАВ) have not been seen in a live list; no ГАВ
+ * was in force while this was written. They are mapped to `emergency` because the operator's
+ * own site labels them as those schedules, not on a guess.
+ */
+const SWITCH_SUB_REASON: Record<number, { kind: HouseOutageKind; reason: string }> = {
+  1: { kind: 'emergency', reason: 'Графік аварійних відключень' },
+  2: { kind: 'scheduled', reason: 'Графік погодинних відключень' },
+  3: { kind: 'emergency', reason: 'Спеціальний графік аварійних відключень' },
+}
+const TYPE_OFF: Record<number, { kind: HouseOutageKind; reason: string }> = {
+  0: { kind: 'planned', reason: 'Планове відключення' },
+  // the operators' unscheduled outage: local damage, a drone strike ("УДАР БПЛА" in Zhytomyr's
+  // note), a line cut off on request. Not ГАВ: that is `switchSubReason` 1
+  1: { kind: 'repair', reason: 'Аварійне відключення' },
+  2: { kind: 'other', reason: 'Оперативні перемикання' },
+  // Lviv's SPA only
+  30: { kind: 'other', reason: 'Можливе аварійне вимкнення' },
+}
+
+/** Rows whose planned end is this far behind are no longer taken as current */
+const ACCIDENT_GRACE_MS = 30 * 60_000
+
+/**
+ * The outage a row describes, the way the operator's site labels it. Exported for tests.
+ * `trustOffset` as for `parsePowerOnTime`.
+ */
+export function accidentOutage(
+  row: PowerOnAccident,
+  trustOffset = false,
+): Pick<HouseOutage, 'kind' | 'reason' | 'scheduleApplies' | 'from' | 'to'> {
+  const sub = row.switchSubReason ?? 0
+  const label =
+    sub > 0
+      ? (SWITCH_SUB_REASON[sub] ?? { kind: 'other' as const, reason: `switchSubReason ${sub}` })
+      : (TYPE_OFF[row.typeOff ?? -1] ?? { kind: 'other' as const, reason: `typeOff ${row.typeOff ?? '?'}` })
+  return {
+    ...label,
+    scheduleApplies: label.kind === 'emergency' ? false : label.kind === 'scheduled' ? true : null,
+    from: parsePowerOnTime(row.dateEvent, trustOffset),
+    to: parsePowerOnTime(row.datePlanIn, trustOffset),
+  }
+}
+
+/** House numbers of a row: "1, 10, 17а, 2-А" (Zakarpattia also has blanks and "б/н") */
+export function accidentHouses(row: PowerOnAccident): string[] {
+  return (row.buildingNames ?? '')
+    .split(',')
+    .map((h) => h.trim())
+    .filter((h) => h && /\d/.test(h))
+}
+
+/** Which outages come first when several rows list a house */
+const KIND_RANK: Record<HouseOutageKind, number> = {
+  emergency: 0,
+  repair: 1,
+  planned: 2,
+  other: 3,
+  scheduled: 4,
+}
+
+/**
+ * The row that says why `house` is off at `now`, or null. A row counts while it has started
+ * and its planned end is less than half an hour behind (the ГПВ rows' own "+30 хв на
+ * перемикання"). The lists are not cleaned up: Zakarpattia's held rows from June 2025 and
+ * Zhytomyr's kept every ГПВ slot for an hour and more after it ended (17.11.2026), so a row
+ * past its planned end says nothing about now. Exported for tests.
+ */
+export function currentAccident(
+  rows: readonly PowerOnAccident[],
+  house: string,
+  now: Date,
+  trustOffset = false,
+): { row: PowerOnAccident; outage: ReturnType<typeof accidentOutage> } | null {
+  const want = houseKey(house)
+  const t = now.getTime()
+  let best: { row: PowerOnAccident; outage: ReturnType<typeof accidentOutage> } | null = null
+  for (const row of rows) {
+    if (!accidentHouses(row).some((h) => houseKey(h) === want)) continue
+    const outage = accidentOutage(row, trustOffset)
+    if (outage.from && Date.parse(outage.from) > t) continue
+    if (outage.to && Date.parse(outage.to) + ACCIDENT_GRACE_MS <= t) continue
+    if (
+      !best ||
+      KIND_RANK[outage.kind] < KIND_RANK[best.outage.kind] ||
+      (KIND_RANK[outage.kind] === KIND_RANK[best.outage.kind] &&
+        (outage.to ?? '\uffff') > (best.outage.to ?? '\uffff'))
+    )
+      best = { row, outage }
+  }
+  return best
+}
+
+export interface PowerOnOutageOptions {
+  info: ProviderInfo
+  label: string
+  api: string
+  /** The public page of the list («Чому немає світла?»), for `HouseOutage.url` */
+  site: string
+  /** The backend's times carry a real offset (Lviv); see `parsePowerOnTime` */
+  trustOffset?: boolean
+}
+
+/** A street's rows are read once per this; the list changes by the minute */
+const ACCIDENTS_TTL_MS = 5 * 60_000
+/** `fresh` still takes what the same call has just read */
+const FRESH_TTL_MS = 15_000
+/** A street has a few rows; pages are 30 rows */
+const MAX_ACCIDENT_PAGES = 5
+
+/**
+ * `outageOf` on a PowerOn backend: the street's rows of `pw_accidents`, the list the site shows
+ * under «Чому немає світла?», by the same ids as the address lookup. One request per street
+ * (more only past 30 rows), kept 5 minutes.
+ */
+export function powerOnOutages(opts: PowerOnOutageOptions) {
+  const region = opts.info.id
+  const cache = new Map<string, { at: number; rows: Promise<PowerOnAccident[]> }>()
+
+  const load = async (ctx: ProviderContext, cityId: string, streetId: string) => {
+    const rows: PowerOnAccident[] = []
+    for (let page = 1; page <= MAX_ACCIDENT_PAGES; page++) {
+      // the query the site itself sends; past the CDN, which may keep a list for minutes
+      const q = `page=${page}&otg.id=&city.id=${encodeURIComponent(cityId)}&street.id=${encodeURIComponent(streetId)}`
+      const data = await uncachedJson<{ 'hydra:view'?: { 'hydra:next'?: string } }>(
+        ctx,
+        `${opts.api}/pw_accidents?${q}`,
+        { region },
+      )
+      rows.push(...hydraList<PowerOnAccident>(data, `${opts.label} pw_accidents`, region))
+      if (!data || typeof data !== 'object' || !data['hydra:view']?.['hydra:next']) break
+    }
+    return rows
+  }
+
+  const streetRows = (ctx: ProviderContext, cityId: string, streetId: string) => {
+    const key = `${cityId}\u0000${streetId}`
+    const hit = cache.get(key)
+    if (hit && Date.now() - hit.at < (ctx.fresh ? FRESH_TTL_MS : ACCIDENTS_TTL_MS)) return hit.rows
+    const rows = load(ctx, cityId, streetId)
+    if (cache.size > 500) cache.clear()
+    cache.set(key, { at: Date.now(), rows })
+    rows.catch(() => {
+      if (cache.get(key)?.rows === rows) cache.delete(key)
+    })
+    return rows
+  }
+
+  return {
+    async outageOf(
+      ctx: ProviderContext,
+      house: House,
+      street: Street,
+      city: City | undefined,
+      groups: readonly GroupId[],
+    ): Promise<HouseOutage | null> {
+      const cityId = street.cityId ?? city?.id ?? ''
+      const rows = (await streetRows(ctx, cityId, street.id)).filter(
+        (r) =>
+          (r.street?.id === undefined || String(r.street.id) === street.id) &&
+          (r.city?.id === undefined || String(r.city.id) === cityId),
+      )
+      const hit = currentAccident(rows, house.number, ctx.now(), opts.trustOffset)
+      if (!hit) return null
+      // a ГПВ row is per group; its note is that group ("3,1")
+      const noted = hit.outage.kind === 'scheduled' ? parseCherg(hit.row.koment) : null
+      return {
+        region,
+        address: { city: city?.name ?? hit.row.city?.name, street: street.name, house: house.number },
+        ...hit.outage,
+        groups: groups.length ? [...groups] : noted ? [noted] : [],
+        updatedAt: null,
+        url: opts.site,
+        fetchedAt: toKyivIso(ctx.now()),
       }
     },
   }

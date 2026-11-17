@@ -449,7 +449,8 @@ export class OutageClient {
 
   /**
    * Whether a house is off right now and why, from the operator's own record of the address
-   * (DTEK's sites: `capabilities.houseOutage`). `null` when the operator lists no outage there.
+   * (`capabilities.houseOutage`: DTEK's sites, the PowerOn lists of Lviv, Ternopil, Zakarpattia
+   * and Zhytomyr). `null` when the operator lists no outage there.
    *
    * This is the only place that sees per-house emergency outages: while a region as a whole is
    * back on the schedule (`getEmergency` is `inactive`), some houses can still be off under
@@ -457,9 +458,9 @@ export class OutageClient {
    * `kind: 'emergency'` result means the schedule doesn't apply to this house now.
    *
    * The address is looked up on the operator's site, so names may be spelled as for `findGroup`.
-   * One request per street, cached for 5 minutes (`fresh: true` skips that). Ask for the houses
-   * people asked about; the sites are behind a bot check that blocks a client asking for
-   * hundreds of streets in a row.
+   * One request per street (or house), cached for 5 minutes (`fresh: true` skips that). Ask for
+   * the houses people asked about; DTEK's sites are behind a bot check that blocks a client
+   * asking for hundreds of streets in a row, and the others rate-limit too.
    */
   async getHouseOutage(
     region: RegionId,

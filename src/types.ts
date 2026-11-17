@@ -331,9 +331,9 @@ export interface HouseOutage {
   from: string | null
   /** When power is expected back: the operator's estimate, often moved */
   to: string | null
-  /** Outage groups of the house, as in `GroupMatch` (first = `group`) */
+  /** Outage groups of the house, as in `GroupMatch` (first = `group`); empty where the source gives none (Zhytomyr) */
   groups: GroupId[]
-  /** When the operator last updated its per-house records */
+  /** When the operator last updated its per-house records; null where it doesn't say (all but DTEK) */
   updatedAt: string | null
   /** Where it was read */
   url: string

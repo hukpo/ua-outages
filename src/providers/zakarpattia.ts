@@ -187,6 +187,8 @@ export function zakarpattiaProvider(): Provider {
       info: INFO,
       label: 'Zakarpattia',
       api: API,
+      // Kyiv wall clock labelled +00:00: works end at "17:00:00+00:00"
+      outages: { site: 'https://outage.zakarpat.energy/' },
       async streetBuildings(ctx, street) {
         // the `buildingNames` filter of this endpoint matches substrings ("5" finds "15"),
         // so the whole street is loaded (a few rows) and houses are matched here

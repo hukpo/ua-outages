@@ -76,6 +76,8 @@ export function lvivProvider(): Provider {
       info: INFO,
       label: 'Lviv',
       api: API,
+      // times here carry their real offset ("22:44:31+02:00", 17.11.2026)
+      outages: { site: INFO.website, trustOffset: true },
       // the whole street is one row per account (a big street is ~2 MB), which is what the
       // official site downloads; an exact building filter is tried first to keep it light
       streetBuildings: (ctx, street) => accounts(ctx, street.cityId ?? '', street.id),
