@@ -201,6 +201,22 @@ describe('Cherkasy address lookup', () => {
     }
   })
 
+  it('keeps the account list out of an error (review of 0.4.3)', async () => {
+    // a broken answer: JSON.parse quotes the text around the fault, which is an account number
+    for (const answer of [
+      () => accounts(3).replace(/\]$/, ',]'),
+      () => '[{"LS":xTEST0001}]',
+      () => '"TEST0001"',
+    ]) {
+      const { client } = cabinet({ ls_list_by_addr: answer })
+      const err = await client.findGroup('cherkasy', SAMPLE).catch((e) => e)
+      expect(err).toMatchObject({ name: 'OutageError', code: 'parse' })
+      expect(err.details.url).toBeUndefined()
+      expect(err.cause).toBeUndefined()
+      expect(`${err.message} ${err.stack} ${JSON.stringify(err.details)}`).not.toMatch(/TEST\d/)
+    }
+  })
+
   it('rejects a changed API', async () => {
     const { client } = cabinet({ department_list: () => '"error"' })
     await expect(client.findGroup('cherkasy', SAMPLE)).rejects.toMatchObject({ code: 'parse' })

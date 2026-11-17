@@ -224,11 +224,26 @@ export function cherkasyAddresses(region: RegionId, operator: string) {
       const accounts: string[] = []
       for (const spelling of house.id.split(SPELLINGS)) {
         ctx.signal?.throwIfAborted()
-        for (const a of rows<{ LS?: string | number }>(
-          await call(ctx, { op: 'ls_list_by_addr', street_id: street.id, house: spelling }),
-          'ls_list_by_addr',
-          region,
-        )) {
+        let list: { LS?: string | number }[]
+        try {
+          list = rows<{ LS?: string | number }>(
+            await call(ctx, { op: 'ls_list_by_addr', street_id: street.id, house: spelling }),
+            'ls_list_by_addr',
+            region,
+          )
+        } catch (e) {
+          ctx.signal?.throwIfAborted()
+          // the answer is the list of account numbers: a parse error quotes the text around the
+          // fault in its `cause`, so the error is rebuilt without it
+          const o = e instanceof OutageError ? e : null
+          const status = o?.details.status
+          throw new OutageError(
+            o?.code ?? 'network',
+            `${operator}: the lookup of accounts at this address failed${status ? ` (HTTP ${status})` : ''}`,
+            { region, ...(status ? { status } : {}) },
+          )
+        }
+        for (const a of list) {
           const account = String(a.LS ?? '').trim()
           if (account && !accounts.includes(account)) accounts.push(account)
         }

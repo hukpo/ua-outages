@@ -211,7 +211,7 @@ describe('getEmergency', () => {
           {
             id: 1,
             at: '2025-11-25T07:00:00Z',
-            text: POSTS['dtek_ua/4684']!.text,
+            text: POSTS['dtek_ua/4684']!.text.replace(/\s*UPD:[^\n]*$/u, ''),
           },
           { id: 2, at: '2025-11-25T07:30:00Z', text: POSTS['dtek_ua/4589']!.text },
         ]),
@@ -236,7 +236,17 @@ describe('getEmergency', () => {
   it('Dnipro: YASNO ends only an emergency it showed itself', async () => {
     let yasno = fixture('yasno/planned-outages-EmergencyShutdowns.community-2025-11-25.json')
     const { fetch } = mockFetch([
-      { match: 't.me/s/dtek_ua', body: page('dtek_ua', [4787]) },
+      {
+        match: 't.me/s/dtek_ua',
+        // the post as it was first: it now ends with "UPD: екстрені відключення скасовано"
+        body: previewPage('dtek_ua', [
+          {
+            id: 4787,
+            at: POSTS['dtek_ua/4787']!.at,
+            text: POSTS['dtek_ua/4787']!.text.replace(/\s*UPD:[^\n]*$/u, ''),
+          },
+        ]),
+      },
       { match: '/regions/3/dsos/301/planned-outages', body: () => yasno },
     ])
     const c = new OutageClient({ fetch, now: () => new Date('2026-11-05T19:00:00+02:00'), cacheTtlMs: 0 })
@@ -252,7 +262,17 @@ describe('getEmergency', () => {
   it('YASNO not showing an emergency never cancels a post', async () => {
     // every group ScheduleApplies, updatedOn after the post: schedules moved, not a cancel
     const s = await client('2026-11-05T23:40:00+02:00', [
-      { match: 't.me/s/dtek_ua', body: page('dtek_ua', [4787]) },
+      {
+        match: 't.me/s/dtek_ua',
+        // the post as it was first: it now ends with "UPD: екстрені відключення скасовано"
+        body: previewPage('dtek_ua', [
+          {
+            id: 4787,
+            at: POSTS['dtek_ua/4787']!.at,
+            text: POSTS['dtek_ua/4787']!.text.replace(/\s*UPD:[^\n]*$/u, ''),
+          },
+        ]),
+      },
       { match: '/regions/3/dsos/301/planned-outages', body: fixture('yasno/planned-outages-3-301.json') },
     ]).client.getEmergency('dnipro')
     expect(s).toMatchObject({ state: 'active', kind: 'emergency', source: 'telegram' })

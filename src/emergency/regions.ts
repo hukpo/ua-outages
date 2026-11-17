@@ -2,7 +2,7 @@ import { toKyivIso } from '../time.js'
 import type { EmergencyStatus, RegionId } from '../types.js'
 import type { ProviderContext } from '../providers/provider.js'
 import { abortable } from '../util.js'
-import { classifyPost, classifyUkrenergo, districtArea, type Dialect } from './classify.js'
+import { classifyPostAll, classifyUkrenergo, districtArea, type Dialect } from './classify.js'
 import { mykolaivFeed, mykolaivFeedStatus, yasnoEmergency, type YasnoEmergency } from './sources.js'
 import { foldEvents, type EmergencyEvent } from './status.js'
 import { readChannelWindow, type ChannelRead, type TelegramPost } from './telegram.js'
@@ -123,7 +123,10 @@ function dtekChannel(region: keyof typeof DTEK_AREAS): ChannelConfig {
         // the place after the verb: "застосовані екстрені відключення в місті Дніпрі, прилеглих
         // до обласного центру районах та в частині Павлоградського району"
         const rest = sentence.slice(sentence.indexOf(':') + 1)
-        const after = new RegExp(`екстрен\\S*\\s+відключ\\S*\\s+(?:у|в)\\s+(.+?)\\s*$`, 'iu').exec(rest)
+        const after = new RegExp(
+          `екстрен\\S*\\s+відключ\\S*\\s+(?:у|в)\\s+(?!зв'язку|разі|результаті)(.+?)\\s*$`,
+          'iu',
+        ).exec(rest)
         if (after) return after[1]!.replace(/[.!‼️\s]+$/u, '')
         return districtArea(rest)
       },
@@ -296,8 +299,8 @@ export function channelEvents(posts: readonly TelegramPost[], channel: ChannelCo
   const events: EmergencyEvent[] = []
   for (const p of posts) {
     if (channel.about && !channel.about(p.text)) continue
-    const a = classifyPost(p.text, new Date(p.at), channel.dialect)
-    if (a) events.push({ announcement: a, text: p.text, url: p.url, posted: p.at })
+    for (const a of classifyPostAll(p.text, new Date(p.at), channel.dialect))
+      events.push({ announcement: a, text: p.text, url: p.url, posted: p.at })
   }
   return events
 }

@@ -38,12 +38,28 @@ interface Track {
   event: EmergencyEvent
   endedAt: string | null
   inferred: boolean
+  /** Queues a partial cancel has already switched back on */
+  lifted: Set<string>
+  /** Said to last at least until then ("до кінця доби"), ms; 0 when not said */
+  until: number
 }
 
 const KINDS: readonly EmergencyKind[] = ['gav', 'sgav', 'emergency']
 const MESSAGE_MAX = 2000
 
-const areaKey = (area: string | null) => (area ? area.toLowerCase().replace(/\s+/g, ' ').trim() : '')
+/**
+ * One area, however it is written: "у Ніжинському і Прилуцькому районах" and "…та Прилуцькому…",
+ * "м. Полтава" and "м. Полтаві"
+ */
+const areaKey = (area: string | null) =>
+  area
+    ? area
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .replace(/ (?:і|й) /g, ' та ')
+        .replace(/^(м\. ?\S+?)[аеиіоуюяї]$/u, '$1')
+        .trim()
+    : ''
 
 /**
  * Announcements, in the order they were posted, → the state now.
@@ -114,6 +130,8 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       event: e,
       endedAt: null,
       inferred: false,
+      lifted: new Set(),
+      until: a.until ? Date.parse(a.until) : 0,
     }
     tracks.set(keyOf(kind, a.area), t)
     return t
@@ -132,7 +150,11 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       return t.queues.size === 0
     }
     if (t.count !== null && a.count !== null) {
-      t.count -= a.count
+      // the same queues named again ("Скасовано ГАВ для 1, 2 та 3 черг", posted twice) are not
+      // lifted twice
+      const fresh = a.queues ? a.queues.filter((q) => !t.lifted.has(q)) : null
+      for (const q of fresh ?? []) t.lifted.add(q)
+      t.count -= fresh ? fresh.length : a.count
       if (a.queues && t.queues) for (const q of a.queues) t.queues.delete(q)
       else t.queues = null
       return t.count <= 0
@@ -145,12 +167,15 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   const now = opts.now.getTime()
   /** Episodes nobody followed up on for the TTL ended then (operators that never cancel) */
   const expire = (at: number) => {
-    for (const t of tracks.values())
-      if (t.active && at - t.lastAt > ttl) {
+    for (const t of tracks.values()) {
+      // "до кінця доби": not before then
+      const end = Math.max(t.lastAt + ttl, t.until)
+      if (t.active && at > end) {
         t.active = false
-        t.endedAt = toKyivIso(new Date(t.lastAt + ttl))
+        t.endedAt = toKyivIso(new Date(end))
         t.inferred = true
       }
+    }
   }
 
   for (const e of events) {
@@ -233,6 +258,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       }
     }
     t.scheduleApplies = a.scheduleApplies ?? t.scheduleApplies
+    if (a.until) t.until = Math.max(t.until, Date.parse(a.until))
     touch(t, e)
   }
 

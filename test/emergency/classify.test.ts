@@ -204,8 +204,16 @@ describe('classifyPost: apply', () => {
       kind: 'emergency',
       scheduleApplies: false,
     })
-    expect(read('dtek_ua/4684', DTEK)).toMatchObject({
+    // (the post as it was first: it now ends with "UPD: екстрені відключення скасовані")
+    const before = POSTS['dtek_ua/4684']!.text.replace(/\s*UPD:[^\n]*$/u, '')
+    expect(classifyPost(before, new Date(POSTS['dtek_ua/4684']!.at), DTEK)).toMatchObject({
       action: 'apply',
+      area: 'частині Голосієвського та Соломянського районів',
+    })
+    // …and as it is: the edit under the text cancels what the text applied, there
+    expect(read('dtek_ua/4684', DTEK)).toMatchObject({
+      action: 'cancel',
+      edited: true,
       area: 'частині Голосієвського та Соломянського районів',
     })
     // "тривають" restates; "Поки що скасувати … не вдається" is no cancel
