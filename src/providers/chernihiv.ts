@@ -231,14 +231,24 @@ function joined(slots: readonly MinuteSlot[]): MinuteSlot[] {
  * 14:48, every card began at 14:30 or later, and the outages running then were cut to start at
  * 14:30. What the earlier poster had before that moment is kept, the rest is replaced.
  */
-function layer(base: MinuteSlot[][], poster: MinuteSlot[][], posted: number): MinuteSlot[][] {
+function layer(
+  base: ChannelDay,
+  poster: MinuteSlot[][],
+  posted: number,
+): Pick<ChannelDay, 'cards' | 'started'> {
   const cut = Math.min(posted, ...poster.flat().map((s) => s.start))
-  return poster.map((later, i) =>
-    joined([
-      ...base[i]!.filter((s) => s.start < cut).map((s) => ({ ...s, end: Math.min(s.end, cut) })),
-      ...later.filter((s) => s.end > cut).map((s) => ({ ...s, start: Math.max(s.start, cut) })),
-    ]),
-  )
+  const before = (slots: MinuteSlot[]) =>
+    slots.filter((s) => s.start < cut).map((s) => ({ ...s, end: Math.min(s.end, cut) }))
+  return {
+    cards: poster.map((later, i) =>
+      joined([
+        ...before(base.cards[i]!),
+        ...later.filter((s) => s.end > cut).map((s) => ({ ...s, start: Math.max(s.start, cut) })),
+      ]),
+    ),
+    // a stretch a change post started before then stays what it was
+    started: base.started.map(before),
+  }
 }
 
 const clock = (text: string | undefined) => (text ? parseClock(text.replace('.', ':')) : null)
@@ -276,7 +286,7 @@ function amend(day: ChannelDay, text: string, posted: number, exact = true, live
         STANDARD_GROUPS.forEach((_, i) => day.open.add(i))
       continue
     }
-    const added = /з\s+(\d{1,2}[:.]\d{2})\s+до\s+(\d{1,2}[:.]\d{2})\s+додатково\s+відключа/iu.exec(line)
+    const added = /з\s+(\d{1,2}[:.]\d{2})\s+до\s+(\d{1,2}[:.]\d{2})\s+(?:додатково\s+)?відключа/iu.exec(line)
     const until = added ? null : /до\s+(\d{1,2}[:.]\d{2})\s+продовжується,?\s+відключення/iu.exec(line)
     const begun =
       added || until
@@ -297,7 +307,9 @@ function amend(day: ChannelDay, text: string, posted: number, exact = true, live
         const running = [...slots, ...day.started[g]!].some((s) => s.start < start && start < s.end)
         const next = slots.find((s) => s.start >= start)?.start ?? 1440
         if (running) day.open.add(g)
-        else if (next > start) day.started[g]!.push({ start, end: next, kind: 'maybe' })
+        // the same start posted again is the same outage
+        else if (next > start && !day.started[g]!.some((s) => s.start === start))
+          day.started[g]!.push({ start, end: next, kind: 'maybe' })
         continue
       }
       if (!exact || !until || end === null) {
@@ -307,9 +319,15 @@ function amend(day: ChannelDay, text: string, posted: number, exact = true, live
       // an outage a post started is running now: this is its end, and it was off all along
       const running = live ? day.started[g]!.find((s) => s.start <= posted && posted < s.end) : undefined
       if (running) {
-        day.started[g] = day.started[g]!.filter((s) => s !== running)
+        day.started[g] = day.started[g]!.filter((s) => s.start !== running.start)
         if (posted < end) day.cards[g] = joined([...slots, { start: running.start, end, kind: 'off' }])
         else day.open.add(g)
+        continue
+      }
+      // a started stretch still ahead (or on a day after the post's) before that end: whether the
+      // outage that goes on is that one or the poster's isn't said
+      if (day.started[g]!.some((s) => s.start < end && s.end > posted)) {
+        day.open.add(g)
         continue
       }
       const last = slots.filter((s) => s.start < end).at(-1)
@@ -398,11 +416,11 @@ export function chernihivChannelDays(
       STANDARD_GROUPS.forEach((g, i) => (drawn[g] = toDay(date, poster.cards[i]!)))
       ;(posters[date] ??= []).push({ publishedAt: post.at, schedules: drawn })
       const base = days.get(date)
-      const cards =
+      const { cards, started } =
         poster.stamped && base
-          ? layer(base.cards, poster.cards, date === postDate ? kyivMinuteOfDay(at) : 0)
-          : poster.cards
-      days.set(date, { cards, publishedAt: post.at, open: new Set(), started: poster.cards.map(() => []) })
+          ? layer(base, poster.cards, date === postDate ? kyivMinuteOfDay(at) : 0)
+          : { cards: poster.cards, started: poster.cards.map(() => []) }
+      days.set(date, { cards, publishedAt: post.at, open: new Set(), started })
       url = post.url
     }
     const changes = CHANGES.exec(post.text)

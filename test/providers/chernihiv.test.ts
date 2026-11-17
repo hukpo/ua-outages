@@ -338,7 +338,11 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     // posted at 14:48, its cards begin at 14:30: before that the evening poster, after it the new one
     expect(day(s, '1.1', '2026-11-02')).toBe('12:00-16:00 19:00-00:00') // 12:00-15:30 | 14:30-16:00 19:00-00:00
     expect(day(s, '3.2', '2026-11-02')).toBe('06:00-09:00 19:00-00:00') // 15:30-19:00 is gone
-    expect(day(s, '5.1', '2026-11-02')).toBe('06:00-09:00 14:30-19:00')
+    // 13:49 "З 13:30 починається відключення для черг 5/1 та 5/2", 11:05 "З 11:00 … 6/2": what
+    // the change posts said before 14:30 isn't undone by the re-issue
+    expect(day(s, '5.1', '2026-11-02')).toBe('06:00-09:00 ~13:30-14:30 14:30-19:00')
+    expect(day(s, '5.2', '2026-11-02')).toBe('06:00-09:00 ~13:30-14:30 14:30-19:00')
+    expect(day(s, '6.2', '2026-11-02')).toBe('~11:00-12:00 12:00-16:00 19:00-22:30')
     // "До 14:00 продовжується відключення для черги 4/1" at 11:20 had moved its end from 12:00
     expect(day(s, '4.1', '2026-11-02')).toBe('09:00-14:00 16:00-19:00')
     expect(day(s, '2.1', '2026-11-02')).toBe('09:00-12:00 16:00-21:00')
@@ -445,6 +449,47 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     expect(() => posterDay({ date: '2026-11-18', dateGuess: null }, again, '2026-11-17')).toThrow(
       /the post says today/,
     )
+  })
+
+  it('changes posted the evening before: a "продовжується" after a start without an end is not applied', () => {
+    const post = (id: number, at: string, text: string): TelegramPost => ({
+      channel: 'chernigivoblenergo',
+      id,
+      url: `https://t.me/chernigivoblenergo/${id}`,
+      at,
+      text,
+      edited: false,
+      photos: id === 5650 ? ['x'] : [],
+    })
+    const change = (id: number, at: string, line: string) => ({
+      post: post(
+        id,
+        at,
+        `📊 За вказівкою НЕК "Укренерго", маємо зміни у Графіку погодинних відключень (ГПВ) на 4 листопада ☝️.\n\n🕗 ${line}`,
+      ),
+      photos: [],
+    })
+    const r = chernihivChannelDays(
+      [
+        {
+          post: post(
+            5650,
+            '2026-11-03T20:34:00+02:00',
+            'За вказівкою НЕК "Укренерго", 4 листопада в області діятиме Графік погодинних відключень (ГПВ) ☝️.',
+          ),
+          photos: [fixtureBytes('chernihiv/posters/tg-5650.jpg')],
+        },
+        change(5651, '2026-11-03T21:00:00+02:00', 'З 21:00 починається відключення для черги 3/2.'),
+        change(5652, '2026-11-03T21:10:00+02:00', 'До 23:00 продовжується відключення для черги 3/2.'),
+      ],
+      '2026-11-03',
+    )
+    // not the poster's 13:00-20:00 drawn on to 23:00 (an outage 20:00-21:00 nobody announced)
+    expect(r.days['2026-11-04']!.schedules['3.2']).toEqual({
+      date: '2026-11-04',
+      status: 'unknown',
+      intervals: [],
+    })
   })
 
   it('a change for two days at once is applied to neither, and leaves the queues it names unknown', () => {
@@ -560,6 +605,25 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
         change(5661, '2026-11-04T17:55:00+02:00', 'З 18:00 починається відключення для черги 6/1.'),
       )('6.1'),
     ).toBe('unknown')
+    // the same start posted twice is one outage, and one "продовжується" ends it
+    expect(
+      nov4(
+        change(5660, '2026-11-04T20:55:00+02:00', 'З 21:00 починається відключення для черги 3/2.'),
+        change(5661, '2026-11-04T20:58:00+02:00', 'З 21:00 починається відключення для черги 3/2.'),
+        change(5662, '2026-11-04T21:30:00+02:00', 'До 23:00 продовжується відключення для черги 3/2.'),
+      )('3.2'),
+    ).toBe('03:00-09:30 13:00-20:00 21:00-23:00')
+    // a "продовжується" with a started stretch still ahead: which outage goes on isn't said
+    expect(
+      nov4(
+        change(5660, '2026-11-04T18:00:00+02:00', 'З 21:00 починається відключення для черги 3/2.'),
+        change(5661, '2026-11-04T19:00:00+02:00', 'До 23:00 продовжується відключення для черги 3/2.'),
+      )('3.2'),
+    ).toBe('unknown')
+    // an exact outage without "додатково" is the same exact outage
+    expect(
+      nov4(change(5660, '2026-11-04T09:00:00+02:00', 'З 21:00 до 22:00 відключаються черги 3/2.'))('3.2'),
+    ).toBe('03:00-09:30 13:00-20:00 21:00-22:00')
     // the other queues of those posts keep the poster
     expect(ended('3.2')).toBe('03:00-09:30 13:00-20:00')
   })
