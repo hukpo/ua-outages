@@ -1,8 +1,17 @@
 import { emergencyQueues } from '../emergency/queues.js'
+import { isEmergencyRow, MK_FEED, type MkOutageRow } from '../emergency/sources.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import type {
+  City,
+  DaySchedule,
+  GroupMatch,
+  HouseOutage,
+  HouseOutageKind,
+  ProviderInfo,
+  RegionSchedule,
+} from '../types.js'
 import { asSource } from './as-source.js'
 import { sharedList, type Provider, type ProviderContext } from './provider.js'
 import { mergeSources } from './sources.js'
@@ -48,8 +57,17 @@ const INFO: ProviderInfo = {
   capabilities: { schedule: true, addressSearch: true },
 }
 
+/** A house's rows of the outage feed are read once per this */
+const FEED_TTL_MS = 5 * 60_000
+/** `fresh` still takes what the same call has just read */
+const FRESH_TTL_MS = 15_000
+/** How far back a house's rows are asked for: an outage that started earlier is not seen */
+const FEED_LOOKBACK_MS = 7 * 24 * 3_600_000
+const FEED_PER_PAGE = 100
+
 export function mykolaivProvider(): Provider {
   const region = INFO.id
+  const feedCache = new Map<string, { at: number; rows: Promise<MkOutageRow[]> }>()
 
   const get = <T>(ctx: ProviderContext, path: string) => ctx.http.json<T>(`${BASE}${path}`, { region })
   const list = async <T>(ctx: ProviderContext, path: string) => {
@@ -112,16 +130,36 @@ export function mykolaivProvider(): Provider {
       return houses.map((h) => ({ id: String(h.iddom), number: h.nazdom.trim(), streetId: street.id }))
     },
 
+    async outageOf(ctx, house, street, city): Promise<HouseOutage | null> {
+      const key = house.id
+      const hit = feedCache.get(key)
+      let rows: Promise<MkOutageRow[]>
+      if (hit && Date.now() - hit.at < (ctx.fresh ? FRESH_TTL_MS : FEED_TTL_MS)) rows = hit.rows
+      else {
+        rows = houseFeed(ctx, house.id, ctx.now())
+        if (feedCache.size > 500) feedCache.clear()
+        feedCache.set(key, { at: Date.now(), rows })
+        rows.catch(() => {
+          if (feedCache.get(key)?.rows === rows) feedCache.delete(key)
+        })
+      }
+      const row = currentFeedRow(await rows, ctx.now())
+      if (!row) return null
+      // the groups come with the address (`outage-queue`); the feed doesn't name them for every row
+      const groups = (await houseQueues(ctx, house.id)).gpv
+      return {
+        region,
+        address: { city: city?.name, street: street.name, house: house.number },
+        ...feedOutage(row),
+        groups,
+        updatedAt: null,
+        url: 'https://www.energy.mk.ua/',
+        fetchedAt: toKyivIso(ctx.now()),
+      }
+    },
+
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
-      const rows = await list<{ outage?: { name: string; type_id: number } }>(
-        ctx,
-        `/addr/dom/${house.id}/outage-queue`,
-      )
-      const of = (type: number) =>
-        rows.filter((r) => r.outage?.type_id === type).map((r) => r.outage!.name.trim())
-      const gpv = of(GPV_TYPE)
-      // ГАВ names are "1".."10" and the reserve "1(Р)".."10(Р)"
-      const emergency = emergencyQueues({ gav: of(GAV_TYPE), sgav: of(SGAV_TYPE) })
+      const { gpv, emergency } = await houseQueues(ctx, house.id)
       if (!gpv.length)
         throw new OutageError(
           'not-found',
@@ -138,6 +176,108 @@ export function mykolaivProvider(): Provider {
         ...(emergency ? { emergency } : {}),
       }
     },
+  }
+
+  async function houseQueues(ctx: ProviderContext, iddom: string) {
+    const rows = await list<{ outage?: { name: string; type_id: number } }>(
+      ctx,
+      `/addr/dom/${iddom}/outage-queue`,
+    )
+    const of = (type: number) =>
+      rows.filter((r) => r.outage?.type_id === type).map((r) => r.outage!.name.trim())
+    const gpv = of(GPV_TYPE)
+    // ГАВ names are "1".."10" and the reserve "1(Р)".."10(Р)"
+    const emergency = emergencyQueues({ gav: of(GAV_TYPE), sgav: of(SGAV_TYPE) })
+    return { gpv, emergency }
+  }
+
+  /**
+   * One house's rows of the outage feed of www.energy.mk.ua (`house_id` = the address chain's
+   * `iddom`), the last week of them. With `house_id` the house's rows all come on page 1,
+   * oldest first (17.11.2026: 25 rows over 14 days, page 2 empty); `total` and `last_page` are
+   * of something else and are not followed. A full page is followed by the next, to be safe.
+   */
+  async function houseFeed(ctx: ProviderContext, iddom: string, now: Date): Promise<MkOutageRow[]> {
+    const rows: MkOutageRow[] = []
+    for (let page = 1; page <= 5; page++) {
+      const data = await ctx.http.json<{ data?: unknown }>(MK_FEED, {
+        region,
+        method: 'POST',
+        body: {
+          page,
+          perPage: FEED_PER_PAGE,
+          from: Math.floor((now.getTime() - FEED_LOOKBACK_MS) / 1000),
+          to: Math.floor(now.getTime() / 1000) + 3600,
+          house_id: Number(iddom),
+        },
+      })
+      if (!Array.isArray(data?.data))
+        throw new OutageError('parse', 'Mykolaiv outage feed: no "data" list', { region, url: MK_FEED })
+      rows.push(...(data.data as MkOutageRow[]))
+      if (data.data.length < FEED_PER_PAGE) break
+    }
+    return rows
+  }
+}
+
+/**
+ * The feed row that says why a house is off at `now`: started, and `finish_at` (an estimate,
+ * corrected when power is back) not reached. The newest start wins. Exported for tests.
+ */
+export function currentFeedRow(rows: readonly MkOutageRow[], now: Date): MkOutageRow | null {
+  const t = now.getTime()
+  const at = (s: string | null | undefined) => (s ? Date.parse(s) : NaN)
+  return (
+    rows
+      .filter((r) => {
+        const s = at(r.start_at)
+        const f = at(r.finish_at)
+        return Number.isFinite(s) && s <= t && !(Number.isFinite(f) && f <= t)
+      })
+      .sort((a, b) => at(b.start_at) - at(a.start_at))[0] ?? null
+  )
+}
+
+/**
+ * A row of the feed as a house outage. `reason` is "<category> | <dispatcher's words>", `type`
+ * GAO (a schedule), AVARIYA (an accident) or PLAN. Seen on 03.11 and 17.11.2026:
+ * - "Графік аварійних відключень | ГАВ черга 1" (GAO): ГАВ, `emergency`. A row of that category
+ *   whose words name ГПВ or another oblenergo ("ГАВ Кіровоград Обленерго"), or typed as an
+ *   accident, is not taken for it: `other`, with its words;
+ * - "Графік погодинних відключень | ГПВ підчерга 5.2": `scheduled`;
+ * - "Пошкодження повітряної лінії" and other "Пошкодження …" (AVARIYA, once GAO), or an AVARIYA
+ *   row without words: `repair`; "Оперативні перемикання" (AVARIYA): `other`;
+ * - PLAN ("Поточний ремонт", "Реконструкція", …): `planned`.
+ * Exported for tests.
+ */
+export function feedOutage(
+  row: MkOutageRow,
+): Pick<HouseOutage, 'kind' | 'reason' | 'scheduleApplies' | 'from' | 'to'> {
+  const reason = (row.reason ?? '').replace(/\s+/g, ' ').trim()
+  const head = reason.split('|')[0]!.trim()
+  const kind: HouseOutageKind = /графік\S*\s+аварійних/iu.test(head)
+    ? isEmergencyRow(row)
+      ? 'emergency'
+      : 'other'
+    : /графік\S*\s+погодинних/iu.test(head)
+      ? 'scheduled'
+      : /пошкодж/iu.test(head) || (row.type === 'AVARIYA' && !head)
+        ? 'repair'
+        : row.type === 'PLAN'
+          ? 'planned'
+          : 'other'
+  const iso = (s: string | null | undefined) => {
+    const ms = s ? Date.parse(s) : NaN
+    return Number.isFinite(ms) ? toKyivIso(new Date(ms)) : null
+  }
+  return {
+    kind,
+    reason:
+      reason ||
+      (row.type === 'AVARIYA' ? 'Аварійне відключення' : row.type === 'PLAN' ? 'Планове відключення' : ''),
+    scheduleApplies: kind === 'emergency' ? false : kind === 'scheduled' ? true : null,
+    from: iso(row.start_at),
+    to: iso(row.finish_at),
   }
 }
 

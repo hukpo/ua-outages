@@ -8,10 +8,14 @@ import type {
   DaySchedule,
   EmergencyQueues,
   GroupMatch,
+  House,
+  HouseOutage,
   IntervalKind,
   ProviderInfo,
   RegionSchedule,
+  Street,
 } from '../types.js'
+import { parseUaDateTime } from './gpv.js'
 import { sharedList, type Provider, type ProviderContext } from './provider.js'
 import { findUaDate } from './ua-text.js'
 
@@ -34,6 +38,23 @@ const INFO: ProviderInfo = {
 const CELL: Record<string, IntervalKind | null | undefined> = { s1: null, s2: 'off', s3: 'maybe' }
 
 const DIRECTORY_TTL_MS = 24 * 3_600_000
+/** A house's status is read once per this */
+const RESULT_TTL_MS = 5 * 60_000
+/** `fresh` still takes what the same call has just read */
+const FRESH_TTL_MS = 15_000
+
+/** The answer of `disconnectinforesult-cabinet.php` for one house */
+export interface PoltavaResult {
+  gp_qnum_1?: string | null
+  gp_qnum_2?: string | null
+  /** The house's status now, as the site prints it */
+  fn_accident_message?: string | null
+  /** 0 with "не зареєстровано перерв", 4 with a ГПВ outage; others not seen */
+  message_type?: number | null
+  /** When the outage started, "05.11.2026 23:00" */
+  accident_str?: string | null
+  gav_message?: string | null
+}
 
 interface Instance {
   instance_id: number
@@ -42,6 +63,23 @@ interface Instance {
 
 export function poltavaProvider(): Provider {
   const region = INFO.id
+  const results = new Map<string, { at: number; row: Promise<PoltavaResult | undefined> }>()
+
+  const result = async (ctx: ProviderContext, street: Street, house: House) => {
+    const body = await ctx.http.text(`${CUSTOMS}/disconnectinforesult-cabinet.php`, {
+      region,
+      method: 'POST',
+      // "streerid" is the operator's spelling
+      body: new URLSearchParams({
+        disconn: JSON.stringify({ cityid: street.cityId, streerid: street.id, house: house.number }),
+      }),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+    return parseJsonList<PoltavaResult>(body, region)[0]
+  }
 
   const search = async (ctx: ProviderContext, payload: Record<string, string | number>) => {
     // JSON arrives labelled text/html, so parse it ourselves
@@ -118,25 +156,43 @@ export function poltavaProvider(): Provider {
       }))
     },
 
-    async groupOf(ctx, house, street, city): Promise<GroupMatch> {
-      const body = await ctx.http.text(`${CUSTOMS}/disconnectinforesult-cabinet.php`, {
+    async outageOf(ctx, house, street, city): Promise<HouseOutage | null> {
+      const key = `${street.cityId}\u0000${street.id}\u0000${house.number}`
+      const hit = results.get(key)
+      let row: Promise<PoltavaResult | undefined>
+      if (hit && Date.now() - hit.at < (ctx.fresh ? FRESH_TTL_MS : RESULT_TTL_MS)) row = hit.row
+      else {
+        row = result(ctx, street, house)
+        if (results.size > 500) results.clear()
+        const entry = { at: Date.now(), row }
+        results.set(key, entry)
+        row.catch(() => {
+          if (results.get(key) === entry) results.delete(key)
+        })
+      }
+      const r = await row
+      // "Увага! За вказаною адресою зареєстровано декілька підключень…": no status for the address
+      if (!r || /декілька підключень/iu.test(r.fn_accident_message ?? ''))
+        throw new OutageError(
+          'not-found',
+          `${house.number}, ${street.name}: the operator answers nothing for this house (a building with several connections needs a lookup by personal account)`,
+          { region },
+        )
+      const outage = poltavaOutage(r)
+      if (!outage) return null
+      return {
         region,
-        method: 'POST',
-        // "streerid" is the operator's spelling
-        body: new URLSearchParams({
-          disconn: JSON.stringify({ cityid: street.cityId, streerid: street.id, house: house.number }),
-        }),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-          'X-Requested-With': 'XMLHttpRequest',
-        },
-      })
-      const [row] = parseJsonList<{
-        gp_qnum_1?: string | null
-        gp_qnum_2?: string | null
-        fn_accident_message?: string
-        gav_message?: string | null
-      }>(body, region)
+        address: { city: city?.name, street: street.name, house: house.number },
+        ...outage,
+        groups: r.gp_qnum_1 ? [r.gp_qnum_2 ? `${r.gp_qnum_1}.${r.gp_qnum_2}` : r.gp_qnum_1] : [],
+        updatedAt: null,
+        url: INFO.website,
+        fetchedAt: toKyivIso(ctx.now()),
+      }
+    },
+
+    async groupOf(ctx, house, street, city): Promise<GroupMatch> {
+      const row = await result(ctx, street, house)
       const emergency = parseGavMessage(row?.gav_message)
       if (!row?.gp_qnum_1)
         throw new OutageError(
@@ -151,6 +207,38 @@ export function poltavaProvider(): Provider {
         ...(emergency ? { emergency } : {}),
       }
     },
+  }
+}
+
+/**
+ * A house's status line (`fn_accident_message`) as an outage; null when it says there is none.
+ * The site prints it as it comes, and only two forms have been seen (16–17.11.2026):
+ * "не зареєстровано перерв в електропостачанні" (`message_type` 0) and "зареєстрована перерва в
+ * електропостачанні внаслідок застосування графіку погодинних відключень (ГПВ) 05.11.2026 р. з
+ * 23 годин(и) 00 хвилин(и). Очікуваний час закінчення …: 06.11.2026 р. о 02 годин(и) 00
+ * хвилин(и)." (`message_type` 4), the schedule's own outage. Everything else is `other` with the
+ * operator's words: a ГАВ outage is expected to read "…графіку аварійних відключень (ГАВ)…",
+ * but that has not been seen, so it is not taken for `emergency` (UNVERIFIED). Exported for tests.
+ */
+export function poltavaOutage(
+  r: PoltavaResult,
+): Pick<HouseOutage, 'kind' | 'reason' | 'scheduleApplies' | 'from' | 'to'> | null {
+  const text = (r.fn_accident_message ?? '').replace(/\s+/g, ' ').trim()
+  if (/^не зареєстровано перерв/iu.test(text) || (!text && !r.message_type)) return null
+  const scheduled = /внаслідок застосування графіку погодинних відключень \(ГПВ\)/iu.test(text)
+  const end =
+    /закінчення[^:]*:\s*(\d{2}\.\d{2}\.\d{4})\s*р\.?\s*о\s*(\d{1,2})\s*годин\S*\s*(\d{1,2})\s*хвилин/iu.exec(
+      text,
+    )
+  const start = /(\d{2}\.\d{2}\.\d{4})\s*р\.?\s*з\s*(\d{1,2})\s*годин\S*\s*(\d{1,2})\s*хвилин/iu.exec(text)
+  const at = (m: RegExpExecArray | null) =>
+    m ? parseUaDateTime(`${m[1]} ${m[2]}:${m[3]!.padStart(2, '0')}`) : null
+  return {
+    kind: scheduled ? 'scheduled' : 'other',
+    reason: text || `message_type ${r.message_type}`,
+    scheduleApplies: scheduled ? true : null,
+    from: parseUaDateTime(r.accident_str) ?? at(start),
+    to: at(end),
   }
 }
 
