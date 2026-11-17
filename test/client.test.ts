@@ -715,6 +715,24 @@ describe('health check: freshness and sources', () => {
     expect(ahead.ok).toBe(true)
   })
 
+  it('does not call a region stale because its newest publication is a cancellation of today', async () => {
+    const unknownToday = { date: '2026-11-05', status: 'unknown' as const, intervals: [] }
+    const days = [makeDay('2026-11-04', []), unknownToday]
+    const p = withSchedule({ sources: [okSource] }, days)
+    const report = await client(p).healthCheck({ strict: true })
+    expect(report).toMatchObject({ ok: true, stale: false })
+    expect(report.regions[0]).toMatchObject({
+      status: 'ok',
+      freshness: { state: 'fresh', today: 'missing', coveredThrough: '2026-11-05' },
+    })
+    // a cancellation and nothing else is not "empty" either
+    const only = await client(withSchedule({ sources: [okSource] }, [unknownToday])).healthCheck()
+    expect(only.regions[0]!.status).toBe('ok')
+    // no channel supplied today: stuck on yesterday, as before
+    const behind = await client(withSchedule({}, days)).healthCheck({ strict: true })
+    expect(behind).toMatchObject({ ok: false, stale: true })
+  })
+
   it('passes staleAfterHours and tomorrowExpectedAt on', async () => {
     const p = withSchedule({ updatedAt: '2026-11-04T20:00:00+02:00' }, [makeDay('2026-11-06', [])])
     expect((await client(p).healthCheck()).regions[0]!.status).toBe('ok')

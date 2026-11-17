@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import {
   announcements,
   khmelnytskyiProvider,
@@ -268,6 +269,13 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     // neither the old hours nor "no outages"
     expectUnpublished(s, 12)
     expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-17'] })
+    // a cancellation is a publication: the region is neither silent nor behind
+    expect(assessFreshness(s, { now })).toMatchObject({
+      state: 'fresh',
+      today: 'missing',
+      coveredThrough: '2026-11-17',
+      issues: [{ code: 'source-failed' }],
+    })
     expect(announcements(sitePage(cancel, first).body as string, now)).toHaveLength(2)
 
     // a schedule published after the cancellation stands again

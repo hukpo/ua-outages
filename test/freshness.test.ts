@@ -203,6 +203,62 @@ describe('assessFreshness', () => {
     expect(() => assessFreshness(s, { tomorrowExpectedAt: 'evening' })).toThrow(RangeError)
   })
 
+  it('counts a day the operator cancelled as a publication, not as a source left behind', () => {
+    const cancelled = (dates: string[], ok = true) => ({
+      id: 'telegram:@x',
+      url: null,
+      ok,
+      dates,
+      updatedAt: '2026-11-05T07:00:00+02:00',
+    })
+    // yesterday's schedule, and today called off this morning: `unknown` for every group
+    const days = { '1.1': [off('2026-11-04'), unknown('2026-11-05')], '1.2': [unknown('2026-11-05')] }
+    const s = region(days, { sources: [cancelled(['2026-11-05'])] })
+    expect(assessFreshness(s, { now: NOW })).toEqual({
+      state: 'fresh',
+      // nothing to show for today, and nothing out of date either
+      today: 'missing',
+      tomorrow: 'missing',
+      coveredThrough: '2026-11-05',
+      ageMinutes: 180,
+      fetchedMinutesAgo: 2,
+      issues: [],
+    })
+    // the same days with no channel having supplied today: stuck on yesterday
+    expect(codes(region(days))).toEqual(['behind'])
+    expect(codes(region(days, { sources: [cancelled([])] }))).toEqual(['behind'])
+    expect(codes(region(days, { sources: [cancelled(['2026-11-04'])] }))).toEqual(['behind'])
+    // a cancellation alone is something published, and an old one doesn't make today "not updated"
+    const only = region(
+      { '1.1': [unknown('2026-11-05')] },
+      { sources: [cancelled(['2026-11-05'])], updatedAt: '2026-11-03T07:00:00+02:00' },
+    )
+    expect(assessFreshness(only, { now: NOW })).toMatchObject({ state: 'fresh', issues: [] })
+    expect(assessFreshness(region({ '1.1': [unknown('2026-11-05')] }), { now: NOW }).state).toBe(
+      'unpublished',
+    )
+    // tomorrow called off is not "tomorrow missing"
+    const both = region(
+      { '1.1': [off('2026-11-05'), unknown('2026-11-06')] },
+      { sources: [cancelled(['2026-11-05', '2026-11-06'])] },
+    )
+    expect(codes(both, { tomorrowExpectedAt: '09:00' })).toEqual([])
+    expect(assessFreshness(both, { now: NOW })).toMatchObject({
+      tomorrow: 'missing',
+      coveredThrough: '2026-11-06',
+    })
+    // one group of such a region
+    const group: GroupSchedule = {
+      region: 'kyiv',
+      group: '1.1',
+      days: days['1.1'],
+      updatedAt: s.updatedAt,
+      fetchedAt: s.fetchedAt,
+      sources: s.sources,
+    }
+    expect(codes(group)).toEqual([])
+  })
+
   it('lists a partly published today', () => {
     const s = region({ '1.1': [off('2026-11-05')], '1.2': [unknown('2026-11-05')], '2.1': [] })
     const f = assessFreshness(s, { now: NOW })
