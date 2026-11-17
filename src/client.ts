@@ -708,7 +708,7 @@ function choose<T extends { score?: number }>(
 }
 
 /** Failures a last good result may stand in for: the operator couldn't be read. Not a wrong question, not a cancel */
-const STALE_CODES: ReadonlySet<OutageErrorCode> = new Set(['network', 'http', 'blocked', 'parse'])
+const STALE_CODES: ReadonlySet<OutageErrorCode> = new Set(['network', 'http', 'blocked', 'parse', 'too-large'])
 /**
  * After a failure answered with the last good result, calls with `staleIfError` get that answer
  * again without asking the operator for this long (or the cache TTL, when shorter): a source
