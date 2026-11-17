@@ -30,6 +30,12 @@ export interface OutageClientOptions extends HttpOptions {
   now?: () => Date
   /** Replace the built-in providers (tests, or your own sources) */
   providers?: readonly Provider[]
+  /**
+   * Also read channels that are not the operator's own, for regions whose operator has none a
+   * plain request can read. Today: a community mirror for `vinnytsia`, which otherwise has no
+   * schedule. Such a channel has `official: false` in the result's `sources`. Off by default.
+   */
+  unofficialSources?: boolean
   /** Default of `ScheduleOptions.staleIfError` for every `getSchedules` / `getSchedule` call. Off by default */
   staleIfError?: StaleIfError
 }
@@ -100,7 +106,12 @@ export class OutageClient {
     this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()) }
     this.cacheTtlMs = opts.cacheTtlMs ?? 5 * 60_000
     this.staleIfError = opts.staleIfError ?? false
-    this.providers = new Map((opts.providers ?? createProviders()).map((p) => [p.info.id, p]))
+    this.providers = new Map(
+      (opts.providers ?? createProviders({ unofficialSources: opts.unofficialSources })).map((p) => [
+        p.info.id,
+        p,
+      ]),
+    )
   }
 
   /** Every supported region with what it can do. */

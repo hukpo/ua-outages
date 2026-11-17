@@ -28,6 +28,7 @@ export type RegionId =
   | 'poltava'
   | 'zaporizhzhia'
   | 'mykolaiv'
+  | 'vinnytsia'
   // АТ «Укрзалізниця»: homes wired to the railway's grid, one per oblast page (two branches in Vinnytsia and Sumy)
   | 'uz-kyiv'
   | 'uz-vinnytsia'
@@ -147,6 +148,11 @@ export interface SourceStatus {
   /** When the operator last published on this channel what the SDK read from it, ISO; null if it doesn't say */
   updatedAt: string | null
   error?: { code: OutageErrorCode; message: string }
+  /**
+   * `false` when this is not the operator's own channel but a community mirror of it, read only
+   * with `unofficialSources: true` (Vinnytsia). Absent for every official channel.
+   */
+  official?: false
   /**
    * Another channel won a day this one also has published data for, and their outage times
    * differ. Usually this channel is simply behind; if the newer one is wrong, this is the trace.
