@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { compareGroups } from '../schedule.js'
-import { normalizeHouse, normalizeSettlement, normalizeStreet, streetType } from '../text.js'
+import { houseKey, normalizeSettlement, normalizeStreet, streetType } from '../text.js'
 import type { City, GroupId, GroupMatch, House, RegionId, Street } from '../types.js'
 import { mapLimit, SharedTask } from '../util.js'
 import type { ProviderContext } from './provider.js'
@@ -118,7 +118,7 @@ export function zoeAddresses(region: RegionId, operator: string) {
       const entry = await streetEntry(ctx, street)
       const houses = [...entry.houses.values()].map((h) => h.house)
       // "36а" inside "34-40", any number on a street listed whole: not in the list, but known
-      const q = query ? normalizeHouse(query) : ''
+      const q = query ? houseKey(query) : ''
       if (q && !entry.houses.has(q) && groupsOf(entry, q).size)
         houses.push({ id: houseId(street.id, q), number: query!.trim(), streetId: street.id })
       return houses
@@ -320,7 +320,8 @@ function addRow(
   const parsed = parseHouses(housesCell)
   if (parsed.whole) st.whole.add(group)
   const add = (number: string, fromRange: boolean) => {
-    const norm = normalizeHouse(number)
+    // "1/1" and "11" are two houses: the key keeps what separates two numbers
+    const norm = houseKey(number)
     if (!norm) return
     let h = st.houses.get(norm)
     if (!h) {

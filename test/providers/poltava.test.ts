@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { assessFreshness } from '../../src/freshness.js'
 import { parseFilials, parseGpvFragment } from '../../src/providers/poltava.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { expectUnpublished, fixture, mockFetch } from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:40:00+02:00')
 const C = 'https://www.poe.pl.ua/customs'
@@ -72,8 +72,8 @@ describe('Poltavaoblenergo', () => {
     })
   })
 
-  it('treats a notice without a table as no schedule', () => {
-    expect(parseGpvFragment('<p>Відключення не застосовуються</p>', NOW).groups).toEqual([])
+  it('treats a notice without a table as nothing published: twelve groups, every day unknown', () => {
+    expectUnpublished(parseGpvFragment('<p>Відключення не застосовуються</p>', NOW), 12)
   })
 
   it('reads the district list', () => {

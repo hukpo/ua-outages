@@ -22,9 +22,17 @@ function setup(page = fixture('dtek/shutdowns.trimmed.html')) {
   return { client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0 }), calls }
 }
 
+/** A full 24-cell day, power on except where `cells` says otherwise */
+const day = (cells: Record<string, string>) => ({
+  ...Object.fromEntries(Array.from({ length: 24 }, (_, i) => [String(i + 1), 'yes'])),
+  ...cells,
+})
+
 describe('GPV hourly format', () => {
   it('maps half-hour codes', () => {
-    expect(gpvCellsToSlots({ '1': 'second', '2': 'no', '3': 'first', '4': 'mfirst', '5': 'yes' })).toEqual([
+    expect(
+      gpvCellsToSlots(day({ '1': 'second', '2': 'no', '3': 'first', '4': 'mfirst', '5': 'yes' })),
+    ).toEqual([
       { start: 30, end: 60, kind: 'off' },
       { start: 60, end: 120, kind: 'off' },
       { start: 120, end: 150, kind: 'off' },
@@ -35,7 +43,7 @@ describe('GPV hourly format', () => {
   it('treats [] as an empty schedule and keys days by Kyiv date', () => {
     expect(parseGpvDays('odesa', [])).toEqual({})
     // 1793829600 = 2026-11-05 00:00 Kyiv
-    const days = parseGpvDays('odesa', { '1793829600': { 'GPV1.1': { '1': 'no' } } })
+    const days = parseGpvDays('odesa', { '1793829600': { 'GPV1.1': day({ '1': 'no' }) } })
     expect(days['1.1']![0]!.date).toBe('2026-11-05')
   })
 

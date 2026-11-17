@@ -1,10 +1,10 @@
 import { OutageError } from '../errors.js'
 import type { RequestOptions } from '../http.js'
 import { normalizeGroup } from '../schedule.js'
-import { normalizeHouse } from '../text.js'
+import { houseKey } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
 import type { City, EmergencyQueues, GroupId, GroupMatch, House, ProviderInfo, Street } from '../types.js'
-import type { Provider, ProviderContext } from './provider.js'
+import { sharedList, type Provider, type ProviderContext } from './provider.js'
 
 /**
  * Shared pieces of the "PowerOn" platform («Чому немає світла?», by inneti) used by Lviv,
@@ -123,6 +123,11 @@ export interface PowerOnAddressOptions {
   buildingGroups?(ctx: ProviderContext, street: Street, house: House): Promise<GroupId[]>
 }
 
+/** Settlements and streets: the lists change rarely (Cherkasy keeps its directory as long) */
+const LIST_TTL_MS = 24 * 3_600_000
+/** The buildings of a street with their groups */
+const BUILDINGS_TTL_MS = 6 * 3_600_000
+
 type AddressSearch = Required<Pick<Provider, 'searchCities' | 'searchStreets' | 'searchHouses' | 'groupOf'>>
 
 /**
@@ -132,13 +137,47 @@ type AddressSearch = Required<Pick<Provider, 'searchCities' | 'searchStreets' | 
  */
 export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch {
   const region = opts.info.id
-  let cities: Promise<City[]> | null = null
-  const streets = new LruCache<string, Promise<Street[]>>(8)
+  // one request for the whole region (a few hundred KB) instead of one per hromada
+  const cities = sharedList(LIST_TTL_MS, async (ctx): Promise<City[]> => {
+    const data = await ctx.http.json(`${opts.api}/pw_cities?pagination=false`, { region })
+    const all = hydraList<{ id: number; name: string; otg?: { name?: string } | string }>(
+      data,
+      `${opts.label} pw_cities`,
+      region,
+    )
+      .filter((c) => c.name?.trim())
+      .map((c) => ({
+        id: String(c.id),
+        name: c.name.trim(),
+        ...(typeof c.otg === 'object' && c.otg?.name ? { district: `${c.otg.name.trim()} громада` } : {}),
+      }))
+    // thrown here, so an empty answer is not kept as the list
+    if (!all.length) throw new OutageError('parse', `${opts.label}: the settlement list is empty`, { region })
+    return all
+  })
+  const streets = new LruCache<string, (ctx: ProviderContext) => Promise<Street[]>>(8)
   /** street id → building number → groups; `complete` once the whole street was loaded */
-  const buildings = new LruCache<string, { complete: boolean; byNumber: Map<string, PowerOnBuilding> }>(32)
+  const buildings = new LruCache<
+    string,
+    { complete: boolean; byNumber: Map<string, PowerOnBuilding>; at: number }
+  >(32)
+  /** What is kept of a street, while it is recent enough: a building's group can change */
+  const kept = (street: Street) => {
+    const entry = buildings.get(street.id)
+    if (entry && Date.now() - entry.at > BUILDINGS_TTL_MS) {
+      buildings.delete(street.id)
+      return undefined
+    }
+    return entry
+  }
 
   const remember = (street: Street, list: PowerOnBuilding[], complete: boolean) => {
-    const entry = buildings.get(street.id) ?? { complete: false, byNumber: new Map() }
+    // a whole street replaces what was kept; a single building joins it
+    const entry = (complete ? undefined : kept(street)) ?? {
+      complete: false,
+      byNumber: new Map(),
+      at: Date.now(),
+    }
     for (const b of list) entry.byNumber.set(b.number, b)
     entry.complete ||= complete
     buildings.set(street.id, entry)
@@ -146,7 +185,7 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
   }
 
   const loadStreet = async (ctx: ProviderContext, street: Street) => {
-    const cached = buildings.get(street.id)
+    const cached = kept(street)
     if (cached?.complete) return cached
     return remember(street, await opts.streetBuildings(ctx, street), true)
   }
@@ -158,36 +197,15 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
   })
 
   return {
-    async searchCities(ctx, query) {
-      // one request for the whole region (a few hundred KB) instead of one per hromada
-      cities ??= (async () => {
-        const data = await ctx.http.json(`${opts.api}/pw_cities?pagination=false`, { region })
-        return hydraList<{ id: number; name: string; otg?: { name?: string } | string }>(
-          data,
-          `${opts.label} pw_cities`,
-          region,
-        )
-          .filter((c) => c.name?.trim())
-          .map((c) => ({
-            id: String(c.id),
-            name: c.name.trim(),
-            ...(typeof c.otg === 'object' && c.otg?.name ? { district: `${c.otg.name.trim()} громада` } : {}),
-          }))
-      })().catch((e) => {
-        cities = null
-        throw e
-      })
-      const all = await cities
-      if (!all.length)
-        throw new OutageError('parse', `${opts.label}: the settlement list is empty`, { region })
-      return all
+    async searchCities(ctx) {
+      return cities(ctx)
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${opts.info.name}: pick a city first`, { region })
       let list = streets.get(city.id)
       if (!list) {
-        list = (async () => {
+        list = sharedList(LIST_TTL_MS, async (ctx) => {
           const data = await ctx.http.json(
             `${opts.api}/pw_streets?pagination=false&city.id=${encodeURIComponent(city.id)}`,
             {
@@ -197,18 +215,18 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
           return hydraList<{ id: number; name: string }>(data, `${opts.label} pw_streets`, region)
             .filter((s) => s.name?.trim())
             .map((s) => ({ id: String(s.id), name: s.name.trim().replace(/\s+/g, ' '), cityId: city.id }))
-        })()
-        list.catch(() => streets.delete(city.id))
+        })
         streets.set(city.id, list)
       }
-      return list
+      return list(ctx)
     },
 
     async searchHouses(ctx, street, query) {
-      const cached = buildings.get(street.id)
+      const cached = kept(street)
       if (!cached?.complete && query && opts.findBuilding) {
-        const want = normalizeHouse(query)
-        const known = [...(cached?.byNumber.values() ?? [])].filter((b) => normalizeHouse(b.number) === want)
+        // "1/1" is not "11": compare what `houseKey` keeps apart
+        const want = houseKey(query)
+        const known = [...(cached?.byNumber.values() ?? [])].filter((b) => houseKey(b.number) === want)
         if (known.length) return known.map((b) => toHouse(street, b))
         const exact = await opts.findBuilding(ctx, street, query.trim())
         if (exact.length) {
@@ -224,14 +242,12 @@ export function powerOnAddressSearch(opts: PowerOnAddressOptions): AddressSearch
       let groups: GroupId[] | undefined
       const find = (e: { byNumber: Map<string, PowerOnBuilding> } | undefined) =>
         e?.byNumber.get(house.number) ??
-        [...(e?.byNumber.values() ?? [])].find(
-          (b) => normalizeHouse(b.number) === normalizeHouse(house.number),
-        )
+        [...(e?.byNumber.values() ?? [])].find((b) => houseKey(b.number) === houseKey(house.number))
       // the emergency queues come with the building lists; no extra request just for them
-      let emergency = find(buildings.get(street.id))?.emergency
+      let emergency = find(kept(street))?.emergency
       if (opts.buildingGroups) groups = await opts.buildingGroups(ctx, street, house)
       if (!groups?.length) {
-        let b = find(buildings.get(street.id))
+        let b = find(kept(street))
         if (!b && opts.findBuilding) b = (await opts.findBuilding(ctx, street, house.number))[0]
         if (!b) b = find(await loadStreet(ctx, street))
         if (!b)

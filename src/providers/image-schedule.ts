@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import { decodePng } from '../image/png.js'
-import { readScheduleTable, STANDARD_GROUPS, type TableLayout } from '../image/table.js'
+import { NoTableError, readScheduleTable, STANDARD_GROUPS, type TableLayout } from '../image/table.js'
 import { cellsToIntervals, compareGroups } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionId, RegionSchedule } from '../types.js'
@@ -19,11 +19,13 @@ export interface DatedDay {
 }
 
 /**
- * Reads operators' table images, one day per date. For each date the newest image that
- * actually contains the table wins: operators also post text announcements as images under the
- * same date, and those are skipped. A date where no image has a readable table is a `parse`
- * error, so a changed template shows up in the health check. The result is what
- * `SourceRead.days` takes.
+ * Reads operators' table images, one day per date. For each date the newest image decides.
+ * Operators also post text announcements as images under the same date: an image with no table
+ * in it at all is skipped for the next older one. An image that can't be decoded, or whose
+ * table can't be read, is a `parse` error for the whole read: it may be the version in force,
+ * and an older picture of the same date in its place would be a superseded schedule shown as
+ * current. A date where no image has a table is a `parse` error too, so a changed template shows
+ * up in the health check. The result is what `SourceRead.days` takes.
  */
 export async function readDatedImages(
   ctx: ProviderContext,
@@ -37,14 +39,20 @@ export async function readDatedImages(
     let lastError = ''
     for (const img of images) {
       ctx.signal?.throwIfAborted()
+      const bytes = await ctx.http.bytes(url(img.path), { region })
       let cells
       try {
-        cells = readScheduleTable(decodePng(await ctx.http.bytes(url(img.path), { region })), layout)
+        cells = readScheduleTable(decodePng(bytes), layout)
       } catch (e) {
-        // a cancelled call is not an unreadable image
-        ctx.signal?.throwIfAborted()
         if (e instanceof OutageError) throw e
-        lastError = `${img.path}: ${(e as Error).message}`
+        const message = `${img.path}: ${(e as Error).message}`
+        if (!(e instanceof NoTableError))
+          throw new OutageError('parse', `cannot read the newest schedule image for ${date} (${message})`, {
+            region,
+            url: url(img.path),
+            cause: e,
+          })
+        lastError = message
         continue
       }
       const schedules: Record<GroupId, DaySchedule> = {}

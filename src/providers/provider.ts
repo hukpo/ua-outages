@@ -9,6 +9,7 @@ import type {
   RegionSchedule,
   Street,
 } from '../types.js'
+import { SharedTask } from '../util.js'
 
 export interface ProviderContext {
   /** Already bound to `signal`: every request through it stops when the call is cancelled */
@@ -64,4 +65,29 @@ export interface Provider {
    * region has a source for it; nothing announced is `inactive`, never an error.
    */
   getEmergency?(ctx: ProviderContext, opts?: { previous?: EmergencyStatus }): Promise<EmergencyStatus>
+}
+
+/**
+ * A list several calls share (the settlements of a region, the streets of a city): loaded once,
+ * kept for `ttlMs`, loaded again after that or after a failure. The load runs on a signal of its
+ * own (`SharedTask`), bound to no single caller: one caller cancelling doesn't fail the others
+ * waiting for it, and it stops when all of them have left.
+ */
+export function sharedList<T>(
+  ttlMs: number,
+  load: (ctx: ProviderContext) => Promise<T>,
+): (ctx: ProviderContext) => Promise<T> {
+  let task: SharedTask<T> | null = null
+  let at = 0
+  return (ctx) => {
+    if (!task || task.aborted || Date.now() - at > ttlMs) {
+      at = Date.now()
+      const t = new SharedTask((signal) => load({ ...ctx, http: ctx.http.withSignal(signal), signal }))
+      task = t
+      t.promise.catch(() => {
+        if (task === t) task = null
+      })
+    }
+    return task.join(ctx.signal)
+  }
 }

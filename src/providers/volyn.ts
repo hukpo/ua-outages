@@ -53,19 +53,17 @@ export interface VolynRecord {
 export function volynProvider(): Provider {
   const region = INFO.id
   /** street id → its records from the last search that found it, so picking a house costs no request */
-  const found = new Map<string, VolynRecord[]>()
+  const found = new Map<string, { records: VolynRecord[]; at: number }>()
+  // the newest answer replaces what was kept: a street's queue can change
   const remember = (id: string, records: readonly VolynRecord[]) => {
-    if (found.has(id)) return
-    found.set(
-      id,
-      records.filter((r) => streetId(r) === id),
-    )
+    found.delete(id)
+    found.set(id, { records: records.filter((r) => streetId(r) === id), at: Date.now() })
     if (found.size > FOUND_MAX) found.delete(found.keys().next().value!)
   }
-  /** Records of a street from `searchStreets`; asked again when it isn't remembered (an id kept from earlier) */
+  /** Records of a street from `searchStreets`; asked again when they aren't kept (an id from earlier) or are old */
   const streetRecords = async (ctx: ProviderContext, street: Street): Promise<VolynRecord[]> => {
     const known = found.get(street.id)
-    if (known) return known
+    if (known && Date.now() - known.at <= FOUND_TTL_MS) return known.records
     const [, city, name] = street.id.split(SEP)
     const records =
       city && name ? (await search(ctx, city, name)).filter((r) => streetId(r) === street.id) : []
@@ -184,6 +182,8 @@ export function inSettlement(records: readonly VolynRecord[], city: string): Vol
 }
 
 const FOUND_MAX = 300
+/** How long a street's records answer without asking the form again */
+const FOUND_TTL_MS = 6 * 3_600_000
 
 /** The result page → records; [] for "Вибраної адреси у графіках не знайдено". Exported for tests. */
 export function parseQueueTable(html: string): VolynRecord[] {

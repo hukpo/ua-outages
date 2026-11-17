@@ -15,12 +15,24 @@ export interface TableLayout {
 }
 
 /**
+ * The picture has no table of the expected shape at all: a text announcement, a photo. Distinct
+ * from a table that is there and can't be read (other colours, another number of tables).
+ */
+export class NoTableError extends Error {
+  override readonly name = 'NoTableError'
+}
+
+/**
  * Reads a schedule table image into one row of cells per group, covering the whole day in
  * order: `null` = power on, `off`, `maybe`. Throws when the table isn't where the layout says
  * or a cell has a colour outside the palette, so a changed template is reported, not misread.
  */
 export function readScheduleTable(img: RgbaImage, layout: TableLayout): (IntervalKind | null)[][] {
   const grids = findGrids(img, layout.columns, layout.rows)
+  if (!grids.length)
+    throw new NoTableError(
+      `no ${layout.rows}×${layout.columns} table in the image (expected ${layout.tables})`,
+    )
   if (grids.length !== layout.tables)
     throw new Error(
       `expected ${layout.tables} table(s) of ${layout.rows}×${layout.columns}, found ${grids.length}`,
