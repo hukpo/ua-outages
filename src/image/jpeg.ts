@@ -1,4 +1,4 @@
-import type { RgbaImage } from './png.js'
+import { MAX_IMAGE_PIXELS, type RgbaImage } from './png.js'
 
 /**
  * Minimal baseline JPEG decoder (Huffman, 8-bit, greyscale or YCbCr, any chroma subsampling,
@@ -129,6 +129,14 @@ export function decodeJpeg(bytes: Uint8Array): RgbaImage {
       if (seg[0] !== 8) throw new Error(`unsupported JPEG precision ${seg[0]}`)
       height = (seg[1]! << 8) | seg[2]!
       width = (seg[3]! << 8) | seg[4]!
+      // the header is checked before any buffer is sized from it
+      if (!width || !height) throw new Error('JPEG without a size')
+      if (width * height > MAX_IMAGE_PIXELS)
+        throw new Error(`JPEG of ${width}×${height} is over the ${MAX_IMAGE_PIXELS / 1e6} MP limit`)
+      // every 8×8 block takes at least two bits (a DC code and an end-of-block)
+      if (width * height > bytes.length * 256)
+        throw new Error(`JPEG of ${width}×${height} cannot fit in ${bytes.length} bytes`)
+      if (seg[5] !== 1 && seg[5] !== 3) throw new Error(`unsupported JPEG with ${seg[5]} components`)
       components = []
       for (let i = 0; i < seg[5]!; i++) {
         const b = 6 + i * 3
@@ -145,6 +153,8 @@ export function decodeJpeg(bytes: Uint8Array): RgbaImage {
           pred: 0,
         })
       }
+      if (components.some((c) => c.h < 1 || c.h > 4 || c.v < 1 || c.v > 4))
+        throw new Error('JPEG with an invalid sampling factor')
       hmax = Math.max(...components.map((c) => c.h))
       vmax = Math.max(...components.map((c) => c.v))
       const mcusX = Math.ceil(width / (8 * hmax))

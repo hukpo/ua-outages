@@ -24,10 +24,28 @@ const HALF: Record<string, [IntervalKind, 'all' | 'first' | 'second'] | undefine
   msecond: ['maybe', 'second'],
 }
 
-/** One group's cells for a day → minute slots. Keys "1".."24" are hours; "1".."48" half-hours. */
-export function gpvCellsToSlots(cells: Record<string, string>): MinuteSlot[] {
+/**
+ * The grid of one group's day: 24 hourly cells keyed "1".."24", or 48 half-hourly ones keyed
+ * "1".."48". Anything else (a key missing, an extra one, a key outside the day) is not a grid
+ * this format has, and null: a cell that isn't there must not count as "power on".
+ */
+export function gpvGrid(cells: Record<string, unknown>): { keys: string[]; size: 30 | 60 } | null {
   const keys = Object.keys(cells).filter((k) => /^\d+$/.test(k))
-  const size = keys.length > 24 ? 30 : 60
+  if (keys.length !== 24 && keys.length !== 48) return null
+  const seen = new Set(keys.map(Number))
+  if (seen.size !== keys.length) return null
+  for (let i = 1; i <= keys.length; i++) if (!seen.has(i)) return null
+  return { keys, size: keys.length === 48 ? 30 : 60 }
+}
+
+/**
+ * One group's cells for a day → minute slots. Keys "1".."24" are hours; "1".."48" half-hours.
+ * Throws when the keys are not one of those two grids.
+ */
+export function gpvCellsToSlots(cells: Record<string, string>): MinuteSlot[] {
+  const grid = gpvGrid(cells)
+  if (!grid) throw new Error(`GPV: ${Object.keys(cells).length} cells are not a 24- or 48-cell day`)
+  const { keys, size } = grid
   const slots: MinuteSlot[] = []
   for (const k of keys) {
     const spec = HALF[String(cells[k]).toLowerCase()]
@@ -73,6 +91,13 @@ export function parseGpvDays(
       const odd = hours.map((k) => String(cells[k]).toLowerCase()).find((v) => v !== 'yes' && !HALF[v])
       if (odd !== undefined)
         throw new OutageError('parse', `GPV: unknown cell value "${odd}" in ${rawGroup}`, { region })
+      // a day that isn't a full grid is reported: its missing cells are not "on"
+      if (!gpvGrid(cells))
+        throw new OutageError(
+          'parse',
+          `GPV: ${rawGroup} has ${hours.length} cells (${hours.slice(0, 4).join(', ')}…), not a 24- or 48-cell day`,
+          { region },
+        )
       ;(out[group] ??= []).push(makeDay(date, gpvCellsToSlots(cells)))
     }
   }

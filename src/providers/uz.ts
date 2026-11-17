@@ -189,14 +189,14 @@ export function parseUzPage(
   if (!mine.length) throw fail(`no table for the ${branch} branch`)
 
   const today = kyivDate(now)
-  const days = new Map<string, Record<string, MinuteSlot[]>>()
+  const days = new Map<string, TableRead>()
   for (const table of mine) {
     const date = table.date ?? any
     // never "today" by default: an undated table may be any day's
     if (!date) throw fail('no date above the table')
     if (days.has(date)) throw fail(`two tables for ${date}`)
     const slots = parseTable(table.rows)
-    if (!slots) throw fail('unknown table layout')
+    if (typeof slots === 'string') throw fail(slots)
     days.set(date, slots)
   }
   // a page still on an earlier day says nothing about today
@@ -204,8 +204,10 @@ export function parseUzPage(
   const schedules: Record<string, DaySchedule[]> = {}
   for (const g of STANDARD_GROUPS)
     schedules[g] = dates.map((date) => {
-      const slots = days.get(date)
-      return slots ? makeDay(date, slots[g] ?? []) : { date, status: 'unknown', intervals: [] }
+      const day = days.get(date)
+      // no table for the date, or one that names this group in a way that can't be read
+      if (!day || day.unknown.has(g)) return { date, status: 'unknown', intervals: [] }
+      return makeDay(date, day.slots[g] ?? [])
     })
   return {
     region,
@@ -276,23 +278,57 @@ function mendSpans(cells: string[]): ([number, number] | null)[] {
   return spans
 }
 
-/** "1(1,2) 2(1) 3" → ["1.1", "1.2", "2.1", "3.1", "3.2"] */
-function groupsIn(cell: string): string[] {
-  const out: string[] = []
-  for (const m of cell.matchAll(/(?<![\d(,])([1-6])\s*(?:\(([\d,\s]+)\))?/g)) {
-    const subs = m[2]
-      ? m[2]
-          .split(',')
-          .map((s) => s.trim())
-          .filter((s) => s === '1' || s === '2')
-      : ['1', '2']
-    for (const s of subs) out.push(`${m[1]}.${s}`)
+/** A cell that says nobody is switched off: "Без ГПВ", "Без застосування ГПВ", a dash, nothing */
+const NOBODY = /^(?:без(?:\s+застосування)?\s+гпв\.?|[-–—]+)?$/i
+
+/**
+ * "1(1,2) 2(1) 3" → off: ["1.1", "1.2", "2.1", "3.1", "3.2"]; "Без ГПВ" → nothing off.
+ *
+ * The whole cell has to be queues written this way. A queue whose bracket can't be read
+ * ("1(,2)", "3(1.2)", "3(1;2)": the operator's typos) is `unclear`: it is named, but which of
+ * its subqueues is meant is a guess, and guessing switches off the wrong one. Anything else
+ * left over ("1.1, 2.1", a word) is null: the cell as a whole was not understood.
+ */
+function groupsIn(cell: string): { off: string[]; unclear: string[] } | null {
+  const s = cell.replace(/\s+/g, ' ').trim()
+  const out = { off: [] as string[], unclear: [] as string[] }
+  if (NOBODY.test(s)) return out
+  const token = /\s*([1-6])(?:\s*\(([^()]*)\))?(?=\s|$)/y
+  let at = 0
+  while (at < s.length) {
+    token.lastIndex = at
+    const m = token.exec(s)
+    if (!m) return null
+    at = token.lastIndex
+    const subs = m[2] === undefined ? ['1', '2'] : /^\s*([12])\s*(?:,\s*([12])\s*)?$/.exec(m[2])?.slice(1)
+    if (!subs) out.unclear.push(m[1]!)
+    else for (const sub of subs) if (sub) out.off.push(`${m[1]}.${sub}`)
   }
   return out
 }
 
-function parseTable(rows: string[][]): Record<string, MinuteSlot[]> | null {
+/** A times cell of the group-column layout: time ranges and nothing else, or nobody ("-", "") */
+function timesIn(cell: string): [number, number][] | null {
+  const s = cell.replace(/\s+/g, ' ').trim()
+  if (NOBODY.test(s)) return []
+  const ranges = findTimeRanges(s)
+  const rest = s.replace(/(?:з\s*)?\d{1,2}[:.]\d{2}\s*(?:[-–—−]|до|по)\s*\d{1,2}[:.]\d{2}/gi, '')
+  return ranges.length && !/[\p{L}\d]/u.test(rest) ? ranges : null
+}
+
+interface TableRead {
+  slots: Record<string, MinuteSlot[]>
+  /** Groups the table names in a way that can't be read: their day is not known */
+  unknown: Set<string>
+}
+
+/**
+ * The table → each group's off spans; a string says what could not be read. Every cell has to
+ * be understood: a guess here is a schedule somebody is notified from.
+ */
+function parseTable(rows: string[][]): TableRead | string {
   const out: Record<string, MinuteSlot[]> = {}
+  const unknown = new Set<string>()
   const add = (g: string, [start, end]: [number, number]) => (out[g] ??= []).push({ start, end, kind: 'off' })
 
   // time spans as columns
@@ -300,29 +336,42 @@ function parseTable(rows: string[][]): Record<string, MinuteSlot[]> | null {
   if (spansAt !== -1) {
     const spans = mendSpans(rows[spansAt]!.slice(1))
     const groupsRow = rows.slice(spansAt + 1).find((r) => /черг/i.test(r[0] ?? ''))
-    if (!groupsRow || spans.some((s) => !s)) return null
-    groupsRow.slice(1).forEach((cell, i) => {
-      const s = spans[i]
-      if (s) for (const g of groupsIn(cell)) add(g, s)
-    })
-    return out
+    if (!groupsRow) return 'no queue row under the hours'
+    if (!spans.length || spans.some((s) => !s)) return 'an hours cell that is not a time span'
+    const cells = groupsRow.slice(1)
+    if (cells.length !== spans.length) return `${cells.length} queue cells for ${spans.length} time spans`
+    for (const [i, cell] of cells.entries()) {
+      const groups = groupsIn(cell)
+      if (!groups) return `cannot read the queues in "${cell.replace(/\s+/g, ' ').slice(0, 40)}"`
+      for (const g of groups.off) add(g, spans[i]!)
+      for (const q of groups.unclear) unknown.add(`${q}.1`).add(`${q}.2`)
+    }
+    return { slots: out, unknown }
   }
 
   // groups as columns, their times in the next row
-  let found = false
-  rows.forEach((row, i) => {
+  let found = 0
+  let timed = 0
+  for (const [i, row] of rows.entries()) {
     const groups = row.map((c) => /([1-6])\s*:\s*([12])\s*:?\s*черга/i.exec(c))
-    if (!groups.some(Boolean)) return
-    found = true
-    const times = rows[i + 1] ?? []
-    groups.forEach((m, j) => {
-      if (!m) return
+    if (!groups.some(Boolean)) continue
+    const times = rows[i + 1]
+    if (!times) return 'a row of queues with no row of times under it'
+    for (const [j, m] of groups.entries()) {
+      if (!m) continue
+      found++
       const g = `${m[1]}.${m[2]}`
+      const ranges = times[j] === undefined ? null : timesIn(times[j])
+      if (!ranges)
+        return `cannot read the times of queue ${g} in "${(times[j] ?? '').replace(/\s+/g, ' ').slice(0, 40)}"`
       out[g] ??= []
-      for (const r of findTimeRanges(times[j] ?? '')) add(g, r)
-    })
-  })
-  return found ? out : null
+      if (ranges.length) timed++
+      for (const r of ranges) add(g, r)
+    }
+  }
+  if (!found) return 'unknown table layout'
+  // a table of queues without a single time is a table without its times row
+  return timed ? { slots: out, unknown } : 'a table of queues without any times'
 }
 
 /** Every uz.gov.ua page: [region id, oblast, page id, branch] */

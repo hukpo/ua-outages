@@ -144,6 +144,7 @@ The same option works for proxies, caching, logging and tests. When an operator 
 | `cacheTtlMs`   | `300000`                 | Reuse a region's schedule for this long. `0` turns caching off. Concurrent requests for one region share a single fetch (except calls with a `signal`, see Cancelling). |
 | `timeoutMs`    | `15000`                  | Per request.                                                                                                                                                            |
 | `retries`      | `1`                      | Extra attempts after a network error or a 5xx. A bot-check page is never retried, whatever its status.                                                                  |
+| `maxBodyBytes` | `67108864`               | The largest response body read (64 MB). A larger one is not buffered: the request ends with `too-large`.                                                                |
 | `fetch`        | `globalThis.fetch`       | Bring your own (proxy, logging, tests).                                                                                                                                 |
 | `userAgent`    | `ua-outages (+repo url)` |                                                                                                                                                                         |
 | `providers`    | built-in                 | Replace or extend the regions.                                                                                                                                          |
@@ -209,6 +210,14 @@ else showIntervals(day.intervals)
 - 0.4.4: `sumy` with E-Svitlo down, 00:00–00:59 Kyiv time: a grid last changed before midnight is not dated and today is `unknown` for every group (before: dated today); from 01:00 as before.
 - 0.4.4: `kyiv`, `dnipro`, `dnipro-cek`, in a client that has read the region before: a day whose hours didn't change keeps the publication time it first came with, although YASNO's `updatedOn` (or the DTEK site's update time) has moved on. `sources[].updatedAt` of `api` / `site` can therefore be older than the source's own stamp, and a correction the other channel published in between is no longer overridden. The first read of a new client is as before.
 - 0.4.4: `assessFreshness` and `healthCheck` count a day the operator called off as published: a region whose newest word is a cancellation of today is `fresh` / `ok` (before: `behind`, `stale`, and `healthCheck({ strict: true })` failed), with `coveredThrough` reaching that day and `today` still `missing`.
+- 0.4.4: input the SDK doesn't understand is a `parse` error where a schedule without those outages used to come back: a Poltava cell of an unknown state, a Mykolaiv row of an unknown type, a Rivne row whose date can't be read ("17.11.2026 (вт)" is read), a GPV day that isn't 24 or 48 cells keyed from 1 (the DTEK regions, Vinnytsia), a railway cell that isn't queues written "3(1,2)" or times, a railway table without its times. A railway queue whose bracket can't be read ("1(,2)", "3(1.2)") has that day `unknown` for both its subqueues (before: one of them switched off by guess).
+- 0.4.4: Poltava with no day table on the page and Rivne with only the table header return their 12 groups with today `unknown` (before: `groups: []`).
+- 0.4.4: schedule pictures (Volyn, Khmelnytskyi): when the newest picture of a date can't be decoded or its table can't be read, the read fails with `parse` instead of returning an older picture of that date. A picture with no table at all (a text announcement) is still skipped. A table whose header row or label column is exactly the size of its cells is refused as ambiguous.
+- 0.4.4: house numbers that differ only by a separator ("1/1" and "11") are two houses in Zaporizhzhia, Lviv, Ternopil and Zakarpattia; Zaporizhzhia's `House.id` keeps the separator ("…#1/1").
+- 0.4.4: a new option, `maxBodyBytes` (default 64 MB), and a new error code, `too-large`, for a response over it.
+- 0.4.4: `timeoutMs` ends a request also when a custom `fetch` ignores `init.signal`, for the headers and for the body.
+- 0.4.4: pictures over 25 megapixels, PDF streams that inflate to more than 64 MB and PDFs of more than 20 000 pages (or whose page tree repeats a node) are refused with `parse`.
+- 0.4.4: address lists are no longer kept for the life of the process: settlements and streets for 24 h, the groups of a street's houses for 6 h (Lviv, Ternopil, Zakarpattia, Poltava, Mykolaiv, Zhytomyr, Volyn). A long-running process sends a few more requests.
 - 0.4.3: `kyiv` and `dnipro` have a second source, DTEK's own site (`site`), next to YASNO (`api`): two entries in `sources`, and two more requests per read. A YASNO failure no longer fails these regions while the site answers.
 - 0.4.3: the DTEK regions ask `/ua/ajax` first and the schedule page second (0.4.2: only `kyiv-region` used `/ua/ajax`, and only it). Their `sources[0].url` is the route that answered, no longer always the page.
 - 0.4.2: a new region id, `vinnytsia`, with `capabilities.schedule` false unless the client is created with `unofficialSources: true` (see [Unofficial sources](#unofficial-sources)). Code that walks `regions()` sees one more entry.
@@ -431,14 +440,15 @@ if (s.stale) {
 
 Everything throws `OutageError` with a `code`:
 
-| code          | meaning                                                                                       |
-| ------------- | --------------------------------------------------------------------------------------------- |
-| `network`     | DNS, timeout, connection reset                                                                |
-| `http`        | non-2xx from the operator                                                                     |
-| `blocked`     | a firewall or bot check answered instead of the operator                                      |
-| `parse`       | the response arrived, but its format changed, or what was read from it isn't a valid schedule |
-| `unsupported` | unknown region, or the operator doesn't offer this                                            |
-| `not-found`   | unknown group, or the address couldn't be matched unambiguously                               |
+| code          | meaning                                                                                                    |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| `network`     | DNS, timeout, connection reset                                                                             |
+| `http`        | non-2xx from the operator                                                                                  |
+| `blocked`     | a firewall or bot check answered instead of the operator                                                   |
+| `parse`       | the response arrived, but its format changed, or what was read from it isn't a valid schedule              |
+| `too-large`   | the response body is over `maxBodyBytes` and was not read (not retried, and not covered by `staleIfError`) |
+| `unsupported` | unknown region, or the operator doesn't offer this                                                         |
+| `not-found`   | unknown group, or the address couldn't be matched unambiguously                                            |
 
 ## How it works and its limits
 

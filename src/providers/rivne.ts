@@ -1,5 +1,5 @@
 import { OutageError } from '../errors.js'
-import { compareGroups, makeDay, normalizeGroup } from '../schedule.js'
+import { compareGroups, makeDay, normalizeGroup, unpublished } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
 import type { Provider } from './provider.js'
@@ -59,10 +59,21 @@ export function parseDisconnections(html: string, now: Date): RegionSchedule {
     throw new OutageError('parse', 'Rivne: no "Підчерга" header row with group names', { region })
 
   const schedules: Record<GroupId, DaySchedule[]> = {}
-  for (const cells of rows) {
-    const m = /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(text(cells[0] ?? ''))
-    if (!m) continue
-    const date = `${m[3]}-${m[2]}-${m[1]}`
+  const headerAt = rows.indexOf(header!)
+  for (const [at, cells] of rows.entries()) {
+    if (cells === header) continue
+    const first = text(cells[0] ?? '')
+    // "17.11.2026", also with a weekday or a note after it: "17.11.2026 (вт)"
+    const m = /^(\d{1,2})\.(\d{2})\.(\d{4})(?!\d)/.exec(first)
+    if (!m) {
+      // a row as wide as the header that isn't dated is a day this reader can't place
+      if (at > headerAt && cells.length === groups.length + 1 && /\d/.test(first))
+        throw new OutageError('parse', `Rivne: cannot read the date "${first.slice(0, 40)}"`, { region })
+      continue
+    }
+    const date = `${m[3]}-${m[2]}-${m[1]!.padStart(2, '0')}`
+    if (!isRealDate(date))
+      throw new OutageError('parse', `Rivne: "${first.slice(0, 40)}" is not a date`, { region })
     if (cells.length - 1 !== groups.length)
       throw new OutageError(
         'parse',
@@ -70,6 +81,14 @@ export function parseDisconnections(html: string, now: Date): RegionSchedule {
         { region },
       )
     groups.forEach((g, i) => (schedules[g!] ??= []).push(parseCell(date, cells[i + 1]!)))
+  }
+
+  if (!Object.keys(schedules).length) {
+    // rows under the header as wide as it is, none of them dated: a changed table, not an empty one
+    if (rows.slice(headerAt + 1).some((cells) => cells.length === groups.length + 1))
+      throw new OutageError('parse', 'Rivne: no dated row under the "Підчерга" header', { region })
+    // the header alone: nothing is published, which is not `groups: []`
+    return unpublished(region, groups as GroupId[], now)
   }
 
   // "Оновлено: 17.11.2026 00:30" under the table (and the page's Last-Modified) moves every
@@ -97,6 +116,11 @@ function parseCell(date: string, html: string): DaySchedule {
   if (!content || /не\s*(?:має|заплановано)|відсутн|немає/i.test(content))
     return { date, status: 'no-outages', intervals: [] }
   return { date, status: 'unknown', intervals: [] }
+}
+
+const isRealDate = (date: string) => {
+  const t = new Date(`${date}T00:00:00Z`)
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === date
 }
 
 const text = (html: string) =>

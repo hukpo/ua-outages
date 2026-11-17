@@ -1,6 +1,7 @@
 import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
-import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
+import { STANDARD_GROUPS } from '../image/table.js'
+import { cellsToIntervals, compareGroups, normalizeGroup, unpublished } from '../schedule.js'
 import { kyivInstant, toKyivIso } from '../time.js'
 import type {
   City,
@@ -11,7 +12,7 @@ import type {
   ProviderInfo,
   RegionSchedule,
 } from '../types.js'
-import type { Provider, ProviderContext } from './provider.js'
+import { sharedList, type Provider, type ProviderContext } from './provider.js'
 import { findUaDate } from './ua-text.js'
 
 /**
@@ -30,7 +31,9 @@ const INFO: ProviderInfo = {
 }
 
 // gpv-s1 on, gpv-s2 off, gpv-s3 switching time ("електроенергії може не бути")
-const CELL: Record<string, IntervalKind | null> = { s1: null, s2: 'off', s3: 'maybe' }
+const CELL: Record<string, IntervalKind | null | undefined> = { s1: null, s2: 'off', s3: 'maybe' }
+
+const DIRECTORY_TTL_MS = 24 * 3_600_000
 
 interface Instance {
   instance_id: number
@@ -39,7 +42,6 @@ interface Instance {
 
 export function poltavaProvider(): Provider {
   const region = INFO.id
-  let cities: Promise<City[]> | null = null
 
   const search = async (ctx: ProviderContext, payload: Record<string, string | number>) => {
     // JSON arrives labelled text/html, so parse it ourselves
@@ -55,6 +57,28 @@ export function poltavaProvider(): Provider {
     return parseJsonList<Instance>(body, region)
   }
 
+  // static lists: kept for a day, and loaded on a signal of their own
+  const cities = sharedList(DIRECTORY_TTL_MS, async (ctx): Promise<City[]> => {
+    const home = await ctx.http.text(`${SITE}/`, { region })
+    const filials = parseFilials(home)
+    if (!filials.length) throw new OutageError('parse', 'Poltava: no districts on the home page', { region })
+    const lists = await Promise.all(
+      filials.map(async (f) =>
+        (await search(ctx, { operation_type: 'city', filial_id: f.id, city_id: '', street_id: '' })).map(
+          (c) => ({
+            id: String(c.instance_id),
+            name: c.instance_name.trim(),
+            district: f.name,
+          }),
+        ),
+      ),
+    )
+    // a settlement can be listed under several districts
+    const seen = new Map<string, City>()
+    for (const c of lists.flat()) if (!seen.has(c.id)) seen.set(c.id, c)
+    return [...seen.values()]
+  })
+
   return {
     info: INFO,
     sampleAddress: { city: 'Полтава', street: 'вул. Європейська', house: '10' },
@@ -64,32 +88,8 @@ export function poltavaProvider(): Provider {
       return parseGpvFragment(html, ctx.now())
     },
 
-    async searchCities(ctx, query) {
-      cities ??= (async () => {
-        const home = await ctx.http.text(`${SITE}/`, { region })
-        const filials = parseFilials(home)
-        if (!filials.length)
-          throw new OutageError('parse', 'Poltava: no districts on the home page', { region })
-        const lists = await Promise.all(
-          filials.map(async (f) =>
-            (await search(ctx, { operation_type: 'city', filial_id: f.id, city_id: '', street_id: '' })).map(
-              (c) => ({
-                id: String(c.instance_id),
-                name: c.instance_name.trim(),
-                district: f.name,
-              }),
-            ),
-          ),
-        )
-        // a settlement can be listed under several districts
-        const seen = new Map<string, City>()
-        for (const c of lists.flat()) if (!seen.has(c.id)) seen.set(c.id, c)
-        return [...seen.values()]
-      })().catch((e) => {
-        cities = null
-        throw e
-      })
-      return cities
+    async searchCities(ctx) {
+      return cities(ctx)
     },
 
     async searchStreets(ctx, query, city) {
@@ -180,15 +180,26 @@ export function parseGpvFragment(html: string, now: Date): RegionSchedule {
       const name = /<td class="gpv-q"[^>]*>([^<]+)<\/td>/.exec(row[1]!)?.[1]
       const group = name ? normalizeGroup(name) : null
       if (!group) continue
-      const cells = [...row[1]!.matchAll(/<td class="gpv-c ([^"]*)"/g)].map((c) => {
-        const s = /\bgpv-(s\d)\b/.exec(c[1]!)?.[1] ?? 's1'
-        return CELL[s] ?? null
+      const cells = [...row[1]!.matchAll(/<td class="gpv-c(?: ([^"]*))?"/g)].map((c) => {
+        // a state nobody has seen (or a cell without one) is reported, never read as "on"
+        const s = /(?<![\w-])gpv-(s\d+)(?![\w-])/.exec(c[1] ?? '')?.[1]
+        const kind = s === undefined ? undefined : CELL[s]
+        if (kind === undefined)
+          throw new OutageError(
+            'parse',
+            `Poltava: group ${group} has a cell of unknown state "${(c[1] ?? '').trim()}"`,
+            { region },
+          )
+        return kind
       })
       if (cells.length !== 48 && cells.length !== 24)
         throw new OutageError('parse', `Poltava: group ${group} has ${cells.length} cells`, { region })
       ;(schedules[group] ??= []).push({ date, status: 'scheduled', intervals: cellsToIntervals(date, cells) })
     }
   }
+  // a page without a day table publishes nothing: every group unknown, never `groups: []`,
+  // which a caller could read as "no schedule in force"
+  if (!Object.keys(schedules).length) return unpublished(region, STANDARD_GROUPS, now, updatedAt)
   return {
     region,
     groups: Object.keys(schedules).sort(compareGroups),

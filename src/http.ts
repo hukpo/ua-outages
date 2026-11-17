@@ -1,5 +1,5 @@
 import { OutageError } from './errors.js'
-import { httpsFetchWithCa } from './https-fetch.js'
+import { BodyTooLarge, httpsFetchWithCa } from './https-fetch.js'
 import type { RegionId } from './types.js'
 import { abortable } from './util.js'
 
@@ -12,6 +12,11 @@ export interface HttpOptions {
   userAgent?: string
   /** Extra attempts after a network error or 5xx, default 1 */
   retries?: number
+  /**
+   * The largest response body read, in bytes; default 64 MB. A larger one is not buffered: the
+   * request ends with `OutageError('too-large')`.
+   */
+  maxBodyBytes?: number
 }
 
 export interface RequestOptions {
@@ -32,6 +37,9 @@ export interface RequestOptions {
   /** For a large file: replaces the client's per-request timeout for this request */
   timeoutMs?: number
 }
+
+/** The largest files read are address lists of a few MB */
+export const DEFAULT_MAX_BODY_BYTES = 64 * 1024 * 1024
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
 
@@ -54,6 +62,7 @@ export class Http {
   private readonly timeoutMs: number
   private readonly userAgent: string
   private readonly retries: number
+  private readonly maxBodyBytes: number
   /** Set on copies made by `withSignal`: every request through them stops when it aborts */
   private signal?: AbortSignal
 
@@ -63,6 +72,7 @@ export class Http {
     this.timeoutMs = opts.timeoutMs ?? 15_000
     this.userAgent = opts.userAgent ?? DEFAULT_UA
     this.retries = opts.retries ?? 1
+    this.maxBodyBytes = opts.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
   }
 
   /**
@@ -85,10 +95,9 @@ export class Http {
     url: string,
     opts: RequestOptions = {},
   ): Promise<{ body: string; headers: Headers; status: number }> {
-    const res = await this.request(url, opts)
-    const body = opts.encoding
-      ? new TextDecoder(opts.encoding).decode(await this.body(() => res.arrayBuffer(), url, opts))
-      : await this.body(() => res.text(), url, opts)
+    const { res, deadline } = await this.request(url, opts)
+    // UTF-8 unless told otherwise, as `Response.text()` reads it
+    const body = new TextDecoder(opts.encoding ?? 'utf-8').decode(await this.body(res, deadline, url, opts))
     if (isChallenge(body))
       throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
         region: opts.region,
@@ -105,9 +114,8 @@ export class Http {
 
   /** Binary body with the response headers (e.g. Last-Modified of an image) */
   async file(url: string, opts: RequestOptions = {}): Promise<{ bytes: Uint8Array; headers: Headers }> {
-    const res = await this.request(url, opts)
-    const bytes = await this.body(() => res.arrayBuffer(), url, opts)
-    return { bytes: new Uint8Array(bytes), headers: res.headers }
+    const { res, deadline } = await this.request(url, opts)
+    return { bytes: await this.body(res, deadline, url, opts), headers: res.headers }
   }
 
   async json<T = unknown>(url: string, opts: RequestOptions = {}): Promise<T> {
@@ -124,16 +132,23 @@ export class Http {
   }
 
   /**
-   * Reads a response body. The per-request timeout and a dropped connection can still strike
-   * after the headers arrived: that is a `network` error like any other, not a bare
-   * `TimeoutError`. A cancelled call rejects with the signal's reason, as everywhere.
+   * Reads a response body, up to `maxBodyBytes`. The per-request timeout (`deadline`, the same
+   * one the request started under) and a dropped connection can still strike after the headers
+   * arrived: that is a `network` error like any other, not a bare `TimeoutError`. A cancelled
+   * call rejects with the signal's reason, as everywhere.
    */
-  private async body<T>(read: () => Promise<T>, url: string, opts: RequestOptions): Promise<T> {
+  private async body(
+    res: Response,
+    deadline: AbortSignal,
+    url: string,
+    opts: RequestOptions,
+  ): Promise<Uint8Array> {
     const signal = this.signal
     try {
-      return await abortable(read(), signal)
+      return await readCapped(res, this.maxBodyBytes, deadline)
     } catch (cause) {
       if (signal?.aborted) throw signal.reason
+      if (cause instanceof BodyTooLarge) throw this.tooLarge(url, opts, res.status)
       const timedOut = (cause as Error)?.name === 'TimeoutError'
       throw new OutageError(
         'network',
@@ -145,14 +160,25 @@ export class Http {
     }
   }
 
+  private tooLarge(url: string, opts: RequestOptions, status?: number): OutageError {
+    return new OutageError('too-large', `${host(url)} sent more than ${this.maxBodyBytes} bytes`, {
+      region: opts.region,
+      url,
+      ...(status === undefined ? {} : { status }),
+    })
+  }
+
   private fetchWithCa(ca: string[]): FetchLike {
     const key = ca.join('')
     let f = this.caFetch.get(key)
-    if (!f) this.caFetch.set(key, (f = httpsFetchWithCa(ca)))
+    if (!f) this.caFetch.set(key, (f = httpsFetchWithCa(ca, this.maxBodyBytes)))
     return f
   }
 
-  private async request(url: string, opts: RequestOptions): Promise<Response> {
+  private async request(
+    url: string,
+    opts: RequestOptions,
+  ): Promise<{ res: Response; deadline: AbortSignal }> {
     const signal = this.signal
     const headers: Record<string, string> = {
       'User-Agent': this.userAgent,
@@ -173,6 +199,9 @@ export class Http {
       signal?.throwIfAborted()
       const timeoutMs = opts.timeoutMs ?? this.timeoutMs
       const timeout = AbortSignal.timeout(timeoutMs)
+      // the timeout and the caller's signal end the wait themselves: a custom `fetch` that
+      // ignores `init.signal` must not be able to hold the call past either
+      const deadline = signal ? withTimeout(signal, timeout) : timeout
       let res: Response
       try {
         res = await abortable(
@@ -180,13 +209,15 @@ export class Http {
             method: opts.method ?? (body ? 'POST' : 'GET'),
             headers,
             body,
-            signal: signal ? withTimeout(signal, timeout) : timeout,
+            signal: deadline,
             redirect: 'follow',
           }),
-          signal,
+          deadline,
         )
       } catch (cause) {
         if (signal?.aborted) throw signal.reason
+        // asking again would only download it again
+        if (cause instanceof BodyTooLarge) throw this.tooLarge(url, opts)
         if (attempt < this.retries) continue
         const timedOut = (cause as Error)?.name === 'TimeoutError'
         throw new OutageError(
@@ -195,12 +226,15 @@ export class Http {
           { region: opts.region, url, cause },
         )
       }
-      if (res.ok || opts.acceptStatus?.includes(res.status)) return res
+      if (res.ok || opts.acceptStatus?.includes(res.status)) return { res, deadline }
       // a bot check often comes as a 503: look before retrying, and never ask it twice
-      const errorBody = await abortable(res.text(), signal).catch(() => {
-        if (signal?.aborted) throw signal.reason
-        return ''
-      })
+      const errorBody = await readCapped(res, this.maxBodyBytes, deadline).then(
+        (bytes) => new TextDecoder().decode(bytes),
+        () => {
+          if (signal?.aborted) throw signal.reason
+          return ''
+        },
+      )
       if (isChallenge(errorBody))
         throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
           region: opts.region,
@@ -239,6 +273,45 @@ function withTimeout(caller: AbortSignal, timeout: AbortSignal): AbortSignal {
     ctrl.signal.addEventListener('abort', cleanup, { once: true })
   }
   return ctrl.signal
+}
+
+/**
+ * The body as bytes, read chunk by chunk so that one over `limit` is never held: the stream is
+ * cancelled and `BodyTooLarge` thrown. Every wait is raced against `deadline`.
+ */
+async function readCapped(res: Response, limit: number, deadline: AbortSignal): Promise<Uint8Array> {
+  // the declared size (compressed, when the body is) is already more than may be read
+  if (Number(res.headers.get('content-length')) > limit) {
+    void res.body?.cancel().catch(() => {})
+    throw new BodyTooLarge(limit)
+  }
+  if (!res.body) {
+    const all = new Uint8Array(await abortable(res.arrayBuffer(), deadline))
+    if (all.length > limit) throw new BodyTooLarge(limit)
+    return all
+  }
+  const reader = res.body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await abortable(reader.read(), deadline)
+      if (done) break
+      total += value.length
+      if (total > limit) throw new BodyTooLarge(limit)
+      chunks.push(value)
+    }
+  } catch (e) {
+    void reader.cancel().catch(() => {})
+    throw e
+  }
+  const out = new Uint8Array(total)
+  let at = 0
+  for (const c of chunks) {
+    out.set(c, at)
+    at += c.length
+  }
+  return out
 }
 
 function host(url: string) {

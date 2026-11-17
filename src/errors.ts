@@ -9,6 +9,8 @@ export type OutageErrorCode =
   | 'blocked'
   /** The response arrived but its format changed or is invalid */
   | 'parse'
+  /** The response body is larger than `maxBodyBytes` and was not read */
+  | 'too-large'
   /** The region or feature isn't supported */
   | 'unsupported'
   /** Address search found nothing (or nothing unambiguous) */

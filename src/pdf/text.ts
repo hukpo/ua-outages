@@ -59,6 +59,11 @@ interface Font {
   map: Map<number, string> | null
 }
 
+/** The most one stream may inflate to. A page of an address list is well under 1 MB */
+export const MAX_STREAM_BYTES = 64 * 1024 * 1024
+/** The most pages a file may have. The longest list read so far has a few hundred */
+export const MAX_PAGES = 20_000
+
 const fail = (message: string, cause?: unknown): never => {
   throw new OutageError('parse', `PDF: ${message}`, cause === undefined ? {} : { cause })
 }
@@ -86,8 +91,10 @@ export function openPdf(bytes: Uint8Array): PdfDocument {
     if (!/^(\/FlateDecode|\[\s*\/FlateDecode\s*\])$/.test(filter) || dictValue(o.body, 'DecodeParms'))
       return fail(`object ${ref}: unsupported stream filter ${filter}`)
     try {
-      return inflateSync(raw)
+      return inflateSync(raw, { maxOutputLength: MAX_STREAM_BYTES })
     } catch (cause) {
+      if ((cause as { code?: string })?.code === 'ERR_BUFFER_TOO_LARGE')
+        return fail(`object ${ref}: stream inflates to more than ${MAX_STREAM_BYTES >> 20} MB`, cause)
       return fail(`object ${ref}: stream doesn't inflate`, cause)
     }
   }
@@ -101,8 +108,13 @@ export function openPdf(bytes: Uint8Array): PdfDocument {
     box: string | null
   }
   const pages: PageRef[] = []
+  // a tree: a node listed twice (a loop, or `/Kids` repeating a node) multiplies the pages
+  const visited = new Set<number>()
   const walk = (ref: number, resources: string | null, box: string | null, depth: number) => {
     if (depth > 32) fail('page tree too deep')
+    if (visited.has(ref)) fail(`page tree lists object ${ref} twice`)
+    visited.add(ref)
+    if (pages.length >= MAX_PAGES) fail(`more than ${MAX_PAGES} pages`)
     const body = object(ref).body
     // both are inherited down the tree
     resources = dictValue(body, 'Resources') ?? resources

@@ -78,37 +78,51 @@ export function regularSequences(
  * The `n` consecutive spans with the most even sizes. A detected run often picks up a
  * neighbour of similar size (the bottom of a header, blank space under the table); the real
  * cells are the most uniform window.
+ *
+ * Null when the run is too short, and when two windows are equally even (a header row exactly
+ * as tall as the group rows): the shape can't say which is the table, and taking the first
+ * would shift every group by one.
  */
 export function bestWindow(seq: Span[], n: number): Span[] | null {
   if (seq.length < n) return null
   let best: Span[] | null = null
   let bestScore = Infinity
+  let tied = false
   for (let off = 0; off + n <= seq.length; off++) {
     const w = seq.slice(off, off + n)
     const sizes = w.map((s) => s.end - s.start)
     const mean = sizes.reduce((a, b) => a + b, 0) / n
     const score = sizes.reduce((a, b) => a + (b - mean) ** 2, 0)
-    if (score < bestScore) {
+    if (Math.abs(score - bestScore) <= 1e-6) tied = true
+    else if (score < bestScore) {
       bestScore = score
       best = w
+      tied = false
     }
   }
-  return best
+  return tied ? null : best
 }
 
 /**
  * Finds tables with `columns` equal time cells and `rows` equal group rows. Probes many
  * horizontal lines, keeps the column layout seen most often, then probes down the middle of
  * the first time column for the rows. Returns one grid per table found (top to bottom).
+ *
+ * Throws when nothing was found because a run of equal cells is longer than the table and no
+ * window of it stands out (see `bestWindow`).
  */
 export function findGrids(img: RgbaImage, columns: number, rows: number): Grid[] {
   // 1) column layout: the most common run of `columns` equal cells across probe rows
   const layouts = new Map<string, { cols: Span[]; hits: number }>()
+  let ambiguous = ''
   const step = Math.max(2, Math.floor(img.height / 400))
   for (let y = 0; y < img.height; y += step) {
     for (const seq of regularSequences(uniformRuns(img, 'x', y))) {
       const cols = bestWindow(seq, columns)
-      if (!cols) continue
+      if (!cols) {
+        if (seq.length > columns) ambiguous = `${seq.length} equal columns where ${columns} are expected`
+        continue
+      }
       const key = cols.map((c) => `${c.start >> 2}`).join(',')
       const e = layouts.get(key) ?? { cols, hits: 0 }
       e.hits++
@@ -116,7 +130,10 @@ export function findGrids(img: RgbaImage, columns: number, rows: number): Grid[]
     }
   }
   const best = [...layouts.values()].sort((a, b) => b.hits - a.hits)[0]
-  if (!best) return []
+  if (!best) {
+    if (ambiguous) throw new Error(`ambiguous table: ${ambiguous}`)
+    return []
+  }
   const cols = best.cols
 
   // 2) rows: probe down two time columns, keep sequences of exactly `rows` equal cells
@@ -126,7 +143,9 @@ export function findGrids(img: RgbaImage, columns: number, rows: number): Grid[]
     for (const seq of regularSequences(uniformRuns(img, 'y', x, { minLen: 6 }), { sizeTolerance: 4 })) {
       const r = bestWindow(seq, rows)
       if (r) found.set(`${r[0]!.start >> 2}`, r)
+      else if (seq.length > rows) ambiguous = `${seq.length} equal rows where ${rows} are expected`
     }
+  if (!found.size && ambiguous) throw new Error(`ambiguous table: ${ambiguous}`)
   return [...found.values()]
     .sort((a, b) => a[0]!.start - b[0]!.start)
     .map((r) => ({ columns: cols, rows: r }))

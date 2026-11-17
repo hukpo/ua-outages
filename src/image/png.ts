@@ -12,6 +12,13 @@ export interface RgbaImage {
   data: Uint8Array
 }
 
+/**
+ * The largest picture the decoders read, in pixels (25 MP; an RGBA copy of it is 100 MB).
+ * Operators' tables are 1–5 MP. A header can claim any size in a few bytes, so the size is
+ * checked before anything is allocated or inflated.
+ */
+export const MAX_IMAGE_PIXELS = 25_000_000
+
 const SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
 
 export function isPng(bytes: Uint8Array): boolean {
@@ -55,9 +62,20 @@ export function decodePng(bytes: Uint8Array): RgbaImage {
   if (!channels) throw new Error(`PNG colour type ${colorType} is not supported`)
   if (colorType === 3 && !palette) throw new Error('PNG palette missing')
 
-  const raw = inflateSync(concat(idat))
+  if (width * height > MAX_IMAGE_PIXELS)
+    throw new Error(`PNG of ${width}×${height} is over the ${MAX_IMAGE_PIXELS / 1e6} MP limit`)
   const stride = width * channels
-  if (raw.length < (stride + 1) * height) throw new Error('PNG data is truncated')
+  const expected = (stride + 1) * height
+  let raw: Uint8Array
+  try {
+    // never inflate more than the header's size needs: a small file can hold gigabytes of zeros
+    raw = inflateSync(concat(idat), { maxOutputLength: expected + 65_536 })
+  } catch (cause) {
+    if ((cause as { code?: string })?.code === 'ERR_BUFFER_TOO_LARGE')
+      throw new Error(`PNG data inflates to more than its ${width}×${height} pixels need`)
+    throw cause
+  }
+  if (raw.length < expected) throw new Error('PNG data is truncated')
   const pixels = unfilter(raw, width, height, channels)
 
   const data = new Uint8Array(width * height * 4)

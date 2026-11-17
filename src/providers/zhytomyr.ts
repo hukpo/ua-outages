@@ -14,7 +14,7 @@ import type {
   Street,
 } from '../types.js'
 import { STANDARD_GROUPS } from './poweron.js'
-import type { Provider, ProviderContext } from './provider.js'
+import { sharedList, type Provider, type ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
 
@@ -72,11 +72,13 @@ interface HouseGroups {
   exempt: boolean
 }
 
+const DIRECTORY_TTL_MS = 24 * 3_600_000
+const HOUSES_TTL_MS = 6 * 3_600_000
+
 export function zhytomyrProvider(): Provider {
   const region = INFO.id
-  let settlements: Promise<City[]> | null = null
   // house id → groups, filled by searchHouses so groupOf needs no extra request
-  const houseGroups = new Map<string, HouseGroups>()
+  const houseGroups = new Map<string, { groups: HouseGroups; at: number }>()
 
   const page = (ctx: ProviderContext, fields?: Record<string, string>) =>
     ctx.http.text(PAGE, {
@@ -94,10 +96,28 @@ export function zhytomyrProvider(): Provider {
     if (houseGroups.size > 5000) houseGroups.clear()
     return merged.map((h): House => {
       const id = `${street.id}:${houseKey(h.number)}`
-      houseGroups.set(id, h)
+      houseGroups.set(id, { groups: h, at: Date.now() })
       return { id, number: h.number, streetId: street.id }
     })
   }
+
+  // The form has no settlement search: every РЕМ's settlements are listed once and kept a day
+  const settlements = sharedList(DIRECTORY_TTL_MS, async (ctx): Promise<City[]> => {
+    const rems = parseOptions(await page(ctx), 'rem_id')
+    if (!rems.length) throw new OutageError('parse', 'Zhytomyr: no РЕМ list on the search page', { region })
+    const lists = await mapLimit(
+      rems,
+      4,
+      async (rem) =>
+        parseOptions(await page(ctx, { rem_id: rem.id }), 'naspunkt_id').map((s): City => ({
+          id: `${rem.id}:${s.id}`,
+          name: s.name,
+          district: `${rem.name} РЕМ`,
+        })),
+      ctx.signal,
+    )
+    return lists.flat()
+  })
 
   return {
     info: INFO,
@@ -142,25 +162,8 @@ export function zhytomyrProvider(): Provider {
         { groups: STANDARD_GROUPS },
       ),
 
-    async searchCities(ctx, query) {
-      // The form has no settlement search: list every РЕМ's settlements once and keep them.
-      settlements ??= (async () => {
-        const rems = parseOptions(await page(ctx), 'rem_id')
-        if (!rems.length)
-          throw new OutageError('parse', 'Zhytomyr: no РЕМ list on the search page', { region })
-        const lists = await mapLimit(rems, 4, async (rem) =>
-          parseOptions(await page(ctx, { rem_id: rem.id }), 'naspunkt_id').map((s): City => ({
-            id: `${rem.id}:${s.id}`,
-            name: s.name,
-            district: `${rem.name} РЕМ`,
-          })),
-        )
-        return lists.flat()
-      })().catch((e) => {
-        settlements = null
-        throw e
-      })
-      return settlements
+    async searchCities(ctx) {
+      return settlements(ctx)
     },
 
     async searchStreets(ctx, query, city) {
@@ -175,10 +178,13 @@ export function zhytomyrProvider(): Provider {
     },
 
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
-      let h = houseGroups.get(house.id)
+      // a house's group can change: what searchHouses left is used while it is recent
+      const recent = houseGroups.get(house.id)
+      let h = recent && Date.now() - recent.at <= HOUSES_TTL_MS ? recent.groups : undefined
       if (!h) {
+        houseGroups.delete(house.id)
         await loadHouses(ctx, street)
-        h = houseGroups.get(house.id)
+        h = houseGroups.get(house.id)?.groups
       }
       if (!h)
         throw new OutageError('not-found', `House "${house.number}" not found on ${street.name}`, { region })
