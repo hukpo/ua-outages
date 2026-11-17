@@ -16,6 +16,7 @@ import type {
 } from '../types.js'
 import { asSource } from './as-source.js'
 import { cekTelegramSource } from './cek-telegram.js'
+import { dtekSiteSource } from './dtek.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceSpec } from './sources.js'
 
@@ -29,10 +30,17 @@ import { mergeSources, type SourceSpec } from './sources.js'
 const BASE = 'https://app.yasno.ua/api/blackout-service/public/shutdowns'
 
 /**
- * Operators whose own channel publishes earlier than YASNO does for them, by `dsoId`: it is
- * merged with the API, each day from whichever published it last. 303 is ЦЕК.
+ * The operator's own channel next to YASNO, by `dsoId`: it is merged with the API, each day from
+ * whichever published it last, and either one keeps the region up when the other fails.
+ * - 303, ЦЕК: its Telegram channel, which is ahead of YASNO (a cancellation by 90 minutes).
+ * - 902 and 301, DTEK's Kyiv and Dnipro grids: the operator's site. On 17.11.2026 both sites had
+ *   the same hours as YASNO in every queue (60 of 60, 12 of 12).
  */
-const OPERATOR_CHANNELS: Record<number, (() => SourceSpec) | undefined> = { 303: cekTelegramSource }
+const OPERATOR_CHANNELS: Record<number, (() => SourceSpec) | undefined> = {
+  303: cekTelegramSource,
+  902: () => dtekSiteSource('kyiv', 'ДТЕК Київські електромережі', 'kem'),
+  301: () => dtekSiteSource('dnipro', 'ДТЕК Дніпровські електромережі', 'dnem'),
+}
 
 interface YasnoDay {
   slots?: { start: number; end: number; type: string }[]

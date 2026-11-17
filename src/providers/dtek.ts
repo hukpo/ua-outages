@@ -1,11 +1,11 @@
 import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { normalizeGroup, unpublished } from '../schedule.js'
-import type { AddressQuery, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import type { AddressQuery, GroupMatch, ProviderInfo, RegionId, RegionSchedule } from '../types.js'
 import { asSource } from './as-source.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
-import { mergeSources } from './sources.js'
+import { mergeSources, type SourceSpec } from './sources.js'
 import { cookieHeader } from '../util.js'
 
 /**
@@ -16,12 +16,15 @@ import { cookieHeader } from '../util.js'
  * The sites sit behind Imperva. Some of them challenge non-browser clients on the page; that
  * surfaces as an `OutageError` with code `blocked`.
  *
- * `route: 'ajax'` skips the page: /ua/ajax alone gives the same three things (`checkDisconUpdate`
- * the schedule, `getStreets` the street list, `getHomeNum` the houses). A first POST without a
- * token is refused with 400 and sets the CSRF cookie; the token for the next ones is derived
- * from that cookie the way the page's own meta tag is. Kyiv region is read this way, because its
- * page is challenged and its /ua/ajax is not. Where /ua/ajax is challenged too (Donetsk), the
- * result is still `blocked`.
+ * /ua/ajax alone gives the same three things as the page (`checkDisconUpdate` the schedule,
+ * `getStreets` the street list, `getHomeNum` the houses) in a thirtieth of its size. A first
+ * POST without a token is refused with 400 and sets the CSRF cookie; the token for the next
+ * ones is derived from that cookie the way the page's own meta tag is.
+ *
+ * So /ua/ajax is read first, and the page only when that fails: a bot check put on one route
+ * doesn't take the region down while the other answers (Kyiv region's page is challenged and its
+ * /ua/ajax is not; Odesa's page was challenged for hours on 17.11.2026). Where both are
+ * challenged (Donetsk, from Ukraine) the result is `blocked`.
  */
 
 interface Session {
@@ -31,6 +34,8 @@ interface Session {
   /** null until asked for on the ajax route, where the list is a request of its own */
   streets: Record<string, string[]> | null
   schedule: RegionSchedule
+  /** the route that answered */
+  via: string
 }
 
 interface DisconUpdate {
@@ -49,8 +54,6 @@ export interface DtekOptions {
   info: Omit<ProviderInfo, 'capabilities'>
   /** Site code: kem, krem, dnem, dem, oem */
   code: string
-  /** Where the schedule and the street list come from; default `page` */
-  route?: 'page' | 'ajax'
   sampleAddress?: AddressQuery
 }
 
@@ -60,8 +63,6 @@ export function dtekProvider(o: DtekOptions): Provider {
   let session: Session | null = null
   let pending: Promise<Session> | null = null
   const houseCache = new Map<string, HomeNum['data']>()
-
-  const sourceUrl = o.route === 'ajax' ? `${base}/ua/ajax` : `${base}/ua/shutdowns`
 
   const post = <T>(
     ctx: ProviderContext,
@@ -115,6 +116,7 @@ export function dtekProvider(o: DtekOptions): Provider {
       ...auth,
       streets: null,
       schedule: read(res.fact, ctx.now()),
+      via: url,
     }
     session = s
     houseCache.clear()
@@ -142,13 +144,28 @@ export function dtekProvider(o: DtekOptions): Provider {
       csrf: /<meta name="csrf-token" content="([^"]+)"/.exec(body)?.[1] ?? null,
       streets: (vars.streets as Record<string, string[]>) ?? {},
       schedule: read(fact, ctx.now()),
+      via: `${base}/ua/shutdowns`,
     }
     session = s
     houseCache.clear()
     return s
   }
 
-  const load = o.route === 'ajax' ? loadAjax : loadPage
+  /** /ua/ajax, then the page. When both fail the error is the first one's: the route that is tried first */
+  const load = async (ctx: ProviderContext): Promise<Session> => {
+    try {
+      return await loadAjax(ctx)
+    } catch (first) {
+      // a cancelled call, or a bug: nothing a second route would mend
+      if (!(first instanceof OutageError)) throw first
+      try {
+        return await loadPage(ctx)
+      } catch (second) {
+        if (!(second instanceof OutageError)) throw second
+        throw first
+      }
+    }
+  }
 
   const ensure = async (ctx: ProviderContext) => {
     if (session && Date.now() - session.at < SESSION_TTL) return session
@@ -201,7 +218,14 @@ export function dtekProvider(o: DtekOptions): Provider {
       // the site is the only channel; days are dated by their own keys in `fact.data` and
       // published at `fact.update`, so a site that stopped moving shows up as old days
       return mergeSources(ctx, region, [
-        { id: 'site', url: sourceUrl, read: async () => asSource((await load(ctx)).schedule) },
+        {
+          id: 'site',
+          url: `${base}/ua/shutdowns`,
+          read: async () => {
+            const s = await load(ctx)
+            return { ...asSource(s.schedule), url: s.via }
+          },
+        },
       ])
     },
 
@@ -240,6 +264,25 @@ export function dtekProvider(o: DtekOptions): Provider {
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
         address: { city: city?.name ?? street.cityId, street: street.name, house: house.number },
       }
+    },
+  }
+}
+
+/**
+ * A DTEK site's schedule as one `mergeSources` channel, for a region whose main channel is
+ * another one: Kyiv and Dnipro are read from YASNO's API, and the grid operator's own site
+ * (dtek-kem, dtek-dnem) carries the same schedule. /ua/ajax first, then the page, as above.
+ */
+export function dtekSiteSource(region: RegionId, operator: string, code: string): SourceSpec {
+  const page = `https://www.dtek-${code}.com.ua/ua/shutdowns`
+  const site = dtekProvider({ info: { id: region, name: operator, operator, website: page }, code })
+  return {
+    id: 'site',
+    url: page,
+    read: async (ctx) => {
+      const s = await site.getSchedules!(ctx)
+      const via = s.sources?.[0]?.url
+      return { ...asSource(s), ...(via ? { url: via } : {}) }
     },
   }
 }

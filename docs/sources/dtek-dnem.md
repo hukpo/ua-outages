@@ -25,3 +25,13 @@ Not attempted here (out of scope: no WAF bypass).
 ## Alternative official source
 
 YASNO regionId=3 dsoId=301 (ДнЕМ; see ../yasno/NOTES.md) — WAF-free, oblast-wide cities/streets/houses/group.
+
+## Status 2026-11-17: second source of `dnipro`
+
+`/ua/ajax` answers plain requests here (15:40 Kyiv, a Ukrainian residential address): POST without a token → 400 with
+`Set-Cookie: _csrf-dtek-dnem`; with `X-CSRF-Token` built from it → 200. `checkDisconUpdate`: `fact.update` 17.11.2026 00:43, 12 queues; YASNO `updatedOn` 17.11 06:10:27.
+Every queue had the same intervals as YASNO for 17.11; neither had 18.11 yet.
+
+Since 0.4.3 the site is merged with YASNO for `dnipro` (`dtekSiteSource` in `src/providers/dtek.ts`): `/ua/ajax` first, the
+page if that fails. Address lookup stays on YASNO. Not measured: which of the two has a change first, and whether YASNO ever
+re-stamps old hours after the site has changed (the merge takes the newer stamp).

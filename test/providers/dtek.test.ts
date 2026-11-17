@@ -46,7 +46,9 @@ describe('GPV hourly format', () => {
   })
 })
 
-describe('DTEK sites', () => {
+// `setup()` answers /ua/ajax with a house list whatever is asked, so the first route fails
+// (no CSRF cookie) and these tests run on the second one, the page
+describe('DTEK sites: the page, read when /ua/ajax gives no schedule', () => {
   it('reads the embedded schedule', async () => {
     const s = await setup().client.getSchedule('odesa', '1.1')
     expect(s.updatedAt).toBe('2026-11-05T21:31:00+02:00')
@@ -68,7 +70,7 @@ describe('DTEK sites', () => {
     const { client, calls } = setup()
     const m = await client.findGroup('odesa', { city: 'Одеса', street: 'Варненська', house: '1' })
     expect(m.group).toBe('2.2')
-    const post = calls.find((c) => c.url === AJAX)!
+    const post = calls.find((c) => String(c.init?.body).includes('method=getHomeNum'))!
     const headers = post.init!.headers as Record<string, string>
     expect(headers.Cookie).toBe('_csrf-dtek-oem=abc')
     expect(headers['X-CSRF-Token']).toBeTruthy()
@@ -91,10 +93,13 @@ describe('DTEK sites', () => {
     expect(calls.filter((c) => c.url === PAGE)).toHaveLength(1)
   })
 
-  it('says when bot protection answered', async () => {
-    await expect(setup(fixture('dtek/blocked.html')).client.getSchedules('odesa')).rejects.toMatchObject({
-      code: 'blocked',
-    })
+  it('says when bot protection answered on both routes', async () => {
+    const { fetch } = mockFetch([
+      { match: PAGE, body: fixture('dtek/blocked.html') },
+      { match: AJAX, method: 'POST', body: fixture('dtek/blocked.html') },
+    ])
+    const client = new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0 })
+    await expect(client.getSchedules('odesa')).rejects.toMatchObject({ code: 'blocked' })
   })
 
   it('says so when the bot check answers the address request instead of the page', async () => {
@@ -192,12 +197,16 @@ describe('DTEK /ua/ajax route (Kyiv region)', () => {
     return out
   }
 
-  function krem(opts: { stub?: boolean; noCookie?: boolean } = {}) {
+  const KREM_PAGE = 'https://www.dtek-krem.com.ua/ua/shutdowns'
+
+  function krem(opts: { stub?: boolean; noCookie?: boolean; page?: string } = {}) {
     const calls: { url: string; headers: Record<string, string>; form: URLSearchParams }[] = []
     const fetch: FetchLike = async (url, init) => {
       const headers = (init?.headers ?? {}) as Record<string, string>
       const form = new URLSearchParams(String(init?.body ?? ''))
       calls.push({ url, headers, form })
+      if (url === KREM_PAGE && opts.page !== undefined)
+        return new Response(opts.page, { headers: { 'set-cookie': '_csrf-dtek-krem=abc; path=/' } })
       if (url !== KREM || init?.method !== 'POST') throw new Error(`unexpected request ${url}`)
       if (opts.stub) return new Response(fixture('dtek/blocked.html'))
       const masked = headers['X-CSRF-Token']
@@ -272,5 +281,46 @@ describe('DTEK /ua/ajax route (Kyiv region)', () => {
       code: 'parse',
       message: expect.stringMatching(/CSRF cookie/),
     })
+  })
+
+  it('falls back to the page when /ua/ajax is behind the bot check, and says which route answered', async () => {
+    const { client, calls } = krem({ stub: true, page: fixture('dtek/shutdowns.trimmed.html') })
+    const s = await client.getSchedules('kyiv-region')
+    expect(s.groups).toHaveLength(12)
+    expect(s.sources).toMatchObject([{ id: 'site', ok: true, url: KREM_PAGE }])
+    // one try of /ua/ajax, then the page: the bot check is never asked twice
+    expect(calls.map((c) => c.url)).toEqual([KREM, KREM_PAGE])
+  })
+
+  it('names /ua/ajax as the route when it answers', async () => {
+    const s = await krem({ page: fixture('dtek/shutdowns.trimmed.html') }).client.getSchedules('kyiv-region')
+    expect(s.sources).toMatchObject([{ id: 'site', ok: true, url: KREM }])
+  })
+
+  it("both routes failing: the error is the first route's", async () => {
+    // /ua/ajax changed its answer (no CSRF cookie), the page is behind the bot check
+    await expect(
+      krem({ noCookie: true, page: fixture('dtek/blocked.html') }).client.getSchedules('kyiv-region'),
+    ).rejects.toMatchObject({ code: 'parse', message: expect.stringMatching(/CSRF cookie/) })
+  })
+
+  it('Odesa reads /ua/ajax first too', async () => {
+    const calls: string[] = []
+    const fetch: FetchLike = async (url, init) => {
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      const headers = (init?.headers ?? {}) as Record<string, string>
+      if (!headers['X-CSRF-Token'])
+        return new Response('Bad Request (#400)', {
+          status: 400,
+          headers: {
+            'set-cookie': `_csrf-dtek-oem=${COOKIE_VALUE.replace('15%3A%22_csrf-dtek-krem', '14%3A%22_csrf-dtek-oem')}; path=/`,
+          },
+        })
+      return new Response(fixture('dtek/krem-ajax-checkDisconUpdate.trimmed.json'))
+    }
+    const s = await new OutageClient({ fetch, now: () => AT, cacheTtlMs: 0 }).getSchedules('odesa')
+    expect(s.groups).toHaveLength(12)
+    expect(calls).toEqual([`POST ${AJAX}`, `POST ${AJAX}`])
+    expect(s.sources).toMatchObject([{ url: AJAX }])
   })
 })
