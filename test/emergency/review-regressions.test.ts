@@ -97,6 +97,10 @@ describe('2. negations, conditions and the future are not cancellations', () => 
         '📢 Шановні споживачі м. ДНІПРО‼️\n\nПопереджаємо, що за командою диспетчерського центру НЕК "Укренерго" скасовуються ЕКСТРЕНІ ВІДКЛЮЧЕННЯ‼️ Повертаємося до ГРАФІКІВ ПОГОДИННИХ ВІДКЛЮЧЕНЬ‼️',
       ),
     ).toMatchObject({ action: 'cancel' })
+    // SvitloKropyvnytskyiMisto/1834, 17.11.2026: the noun, ГАВ stayed "in force" all afternoon
+    expect(read('kirovohrad', 'В 14:05 відміна дії графіку ГАВ')).toMatchObject({
+      action: 'cancel',
+    })
     // the future and the conditional still don't cancel
     expect(
       read('kharkiv', 'Аварійні відключення будуть скасовуватись після стабілізації ситуації.'),
