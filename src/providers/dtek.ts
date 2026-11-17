@@ -1,11 +1,23 @@
 import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { normalizeGroup, unpublished } from '../schedule.js'
-import type { AddressQuery, GroupMatch, ProviderInfo, RegionId, RegionSchedule } from '../types.js'
+import type {
+  AddressQuery,
+  City,
+  GroupMatch,
+  House,
+  HouseOutage,
+  HouseOutageKind,
+  ProviderInfo,
+  RegionId,
+  RegionSchedule,
+  Street,
+} from '../types.js'
 import { asSource, steadyStamps } from './as-source.js'
-import { gpvRegionSchedule, type GpvDays } from './gpv.js'
+import { gpvRegionSchedule, parseUaDateTime, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceSpec } from './sources.js'
+import { toKyivIso } from '../time.js'
 import { cookieHeader } from '../util.js'
 
 /**
@@ -43,12 +55,34 @@ interface DisconUpdate {
   fact?: { data?: GpvDays; update?: string }
 }
 
+/**
+ * One house of `getHomeNum`. Besides its groups, the site's record of an outage there now:
+ * `sub_type` the reason, `start_date` / `end_date` ("HH:MM DD.MM.YYYY", the end an estimate),
+ * `type` "1" for planned repairs and "2" for everything else. All three empty = no outage known.
+ * `cek` marks a house served by ЦЕК, which DTEK's site knows nothing about.
+ */
+export interface HomeRecord {
+  sub_type?: string
+  start_date?: string
+  end_date?: string
+  type?: string
+  sub_type_reason?: string[]
+  voluntarily?: unknown
+  cek?: unknown
+}
+
 interface HomeNum {
   result: boolean
-  data?: Record<string, { sub_type_reason?: string[] }>
+  data?: Record<string, HomeRecord>
+  updateTimestamp?: string
 }
 
 const SESSION_TTL = 10 * 60_000
+/** Per-street house records: groups barely change, but the outage in them does */
+const HOUSES_TTL = 5 * 60_000
+
+/** The site's own string; its JS hides the schedule table for it */
+const EMERGENCY_REASON = 'Екстренні відключення (Аварійне без застосування графіку погодинних відключень)'
 
 export interface DtekOptions {
   info: Omit<ProviderInfo, 'capabilities'>
@@ -67,7 +101,7 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
   const base = `https://www.dtek-${o.code}.com.ua`
   let session: Session | null = null
   let pending: Promise<Session> | null = null
-  const houseCache = new Map<string, HomeNum['data']>()
+  const houseCache = new Map<string, { at: number; value: HomeNum }>()
 
   const post = <T>(
     ctx: ProviderContext,
@@ -192,10 +226,11 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
     return (s.streets = res.streets)
   }
 
-  const homeNum = async (ctx: ProviderContext, city: string, street: string) => {
+  const homeNum = async (ctx: ProviderContext, city: string, street: string): Promise<HomeNum> => {
     const key = `${city}\u0000${street}`
     const hit = houseCache.get(key)
-    if (hit) return hit
+    // `fresh` still takes what this same lookup just read (its house list, then the house)
+    if (hit && Date.now() - hit.at < (ctx.fresh ? 15_000 : HOUSES_TTL)) return hit.value
     const s = await ensure(ctx)
     if (!s.csrf) throw new OutageError('parse', `${o.info.operator}: no CSRF token on the page`, { region })
     const res = await post<HomeNum>(
@@ -211,8 +246,17 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
     )
     if (!res.result || !res.data)
       throw new OutageError('not-found', `${o.info.operator}: no houses for ${city}, ${street}`, { region })
-    houseCache.set(key, res.data)
-    return res.data
+    if (houseCache.size > 500) houseCache.clear()
+    houseCache.set(key, { at: Date.now(), value: res })
+    return res
+  }
+
+  const record = async (ctx: ProviderContext, house: House, street: Street, city?: City) => {
+    const res = await homeNum(ctx, street.cityId ?? city?.id ?? '', street.id)
+    const r = res.data?.[house.id]
+    const groups = (r?.sub_type_reason ?? []).map((g) => normalizeGroup(g)).filter((g): g is string => !!g)
+    const address = { city: city?.name ?? street.cityId, street: street.name, house: house.number }
+    return { res, r, groups, address }
   }
 
   const provider: Provider = {
@@ -250,15 +294,12 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
     },
 
     async searchHouses(ctx, street) {
-      const data = await homeNum(ctx, street.cityId ?? '', street.id)
+      const { data } = await homeNum(ctx, street.cityId ?? '', street.id)
       return Object.keys(data ?? {}).map((number) => ({ id: number, number, streetId: street.id }))
     },
 
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
-      const data = await homeNum(ctx, street.cityId ?? city?.id ?? '', street.id)
-      const groups = (data?.[house.id]?.sub_type_reason ?? [])
-        .map((g) => normalizeGroup(g))
-        .filter((g): g is string => !!g)
+      const { groups, address } = await record(ctx, house, street, city)
       if (!groups.length)
         throw new OutageError('not-found', `${house.number}, ${street.name} is not in any outage group`, {
           region,
@@ -267,7 +308,34 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
         region,
         group: groups[0]!,
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
-        address: { city: city?.name ?? street.cityId, street: street.name, house: house.number },
+        address,
+      }
+    },
+
+    async outageOf(ctx, house, street, city): Promise<HouseOutage | null> {
+      const { res, r, groups, address } = await record(ctx, house, street, city)
+      if (!r)
+        throw new OutageError('not-found', `${house.number}, ${street.name}: no such house on the site`, {
+          region,
+        })
+      if (r.cek)
+        throw new OutageError(
+          'not-found',
+          `${house.number}, ${street.name} is served by ЦЕК, not ${o.info.operator}`,
+          {
+            region,
+          },
+        )
+      const outage = houseOutage(r)
+      if (!outage) return null
+      return {
+        region,
+        address,
+        ...outage,
+        groups,
+        updatedAt: parseUaDateTime(res.updateTimestamp),
+        url: `${base}/ua/shutdowns`,
+        fetchedAt: toKyivIso(ctx.now()),
       }
     },
   }
@@ -292,6 +360,33 @@ export function dtekSiteSource(region: RegionId, operator: string, code: string)
       const s = await site.load(ctx)
       return { ...steady(asSource(s.schedule)), url: s.via }
     },
+  }
+}
+
+/** The outage in a house record, the way the site's own page reads it; null = none */
+export function houseOutage(
+  r: HomeRecord,
+): Pick<HouseOutage, 'kind' | 'reason' | 'scheduleApplies' | 'from' | 'to'> | null {
+  const reason = (r.sub_type ?? '').trim()
+  const from = parseUaDateTime(r.start_date)
+  const to = parseUaDateTime(r.end_date)
+  if (!reason && !from && !to) return null
+  const kind: HouseOutageKind =
+    reason === EMERGENCY_REASON || /^екстрен/i.test(reason)
+      ? 'emergency'
+      : r.type === '1' || /планов/i.test(reason)
+        ? 'planned'
+        : /стабілізац|згідно\s+графік/i.test(reason)
+          ? 'scheduled'
+          : /аварійн/i.test(reason)
+            ? 'repair'
+            : 'other'
+  return {
+    kind,
+    reason: reason || (r.type === '1' ? 'Планові ремонтні роботи' : ''),
+    scheduleApplies: kind === 'emergency' ? false : kind === 'scheduled' ? true : null,
+    from,
+    to,
   }
 }
 
