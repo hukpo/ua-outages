@@ -5,7 +5,9 @@ import { createProviders } from './providers/index.js'
 import type { Provider, ProviderContext } from './providers/provider.js'
 import { normalizeGroup } from './schedule.js'
 import { fuzzyScore, rankByName, sameStreet, searchFragments, tokens, type NameKind } from './fuzzy.js'
+import { decideHouseStatus } from './house-status.js'
 import { houseKey } from './text.js'
+import { toKyivIso } from './time.js'
 import type {
   AddressQuery,
   City,
@@ -15,6 +17,8 @@ import type {
   GroupSchedule,
   House,
   HouseOutage,
+  HouseStatus,
+  HouseStatusGap,
   RegionHealth,
   RegionId,
   RegionInfo,
@@ -49,6 +53,12 @@ export interface HealthCheckOptions {
   regions?: RegionId[]
   /** Also run the address lookup with each region's sample address */
   address?: boolean
+  /**
+   * Also run `getHouseOutage` with the sample address, in the regions that support it: catches a
+   * per-house source that changed or went away. One or two more requests per region (DTEK's sites
+   * are behind a bot check, so don't run this every minute)
+   */
+  houseOutage?: boolean
   /** Passed to `assessFreshness`: `updatedAt` older than this with today not published is `stale`. Default 36 */
   staleAfterHours?: number
   /** Passed to `assessFreshness`: Kyiv "HH:MM" after which a missing tomorrow is listed as an issue */
@@ -63,7 +73,7 @@ export interface HealthCheckOptions {
 
 export interface HealthReport {
   checkedAt: string
-  /** No region is `error` and no address lookup failed; with `strict`, none is `stale` or `degraded` either */
+  /** No region is `error` and no address lookup or house outage check failed; with `strict`, none is `stale` or `degraded` either */
   ok: boolean
   /** Some region lost a channel but still gave a result */
   degraded: boolean
@@ -489,6 +499,87 @@ export class OutageClient {
     return abortable(p.outageOf(ctx, house, street, city), opts.signal)
   }
 
+  /**
+   * Is the power on at this house now, and why not: one answer from everything the SDK knows
+   * about the address, read together (`findGroup` for its groups and ГАВ queues, `getHouseOutage`,
+   * `getEmergency`, the group's schedule). See `HouseStatus` for the result and
+   * `decideHouseStatus` for the order: the operator's record of the house first, then a ГАВ in
+   * force, then the schedule.
+   *
+   * A part the region doesn't have, or that fails, is listed in `gaps` and the answer is made
+   * from the rest; `on` is said only when today's schedule is published and has no outage now.
+   * Throws only when the address itself can't be found (`not-found`, as `findGroup`), or when
+   * cancelled. Requests and caching as for the four calls it makes; `fresh` skips the caches.
+   */
+  async getHouseStatus(
+    region: RegionId,
+    address: AddressQuery,
+    opts: { signal?: AbortSignal; fresh?: boolean } = {},
+  ): Promise<HouseStatus> {
+    const { signal, fresh } = opts
+    const caps = this.region(region).capabilities
+    signal?.throwIfAborted()
+    const gaps: HouseStatusGap[] = []
+    const part = async <T>(name: HouseStatusGap['part'], run: () => Promise<T>): Promise<T | null> => {
+      try {
+        return await run()
+      } catch (e) {
+        if (signal?.aborted) throw signal.reason
+        if (!(e instanceof OutageError)) throw e
+        gaps.push({ part: name, code: e.code, message: e.message })
+        return null
+      }
+    }
+    const missing = (name: HouseStatusGap['part'], message: string) => {
+      gaps.push({ part: name, code: 'unsupported', message })
+      return null
+    }
+
+    // the address first, then the house record: the two often walk the same address chain, and
+    // one after the other the second finds the first's lists cached
+    const house = (async () => {
+      const match = await part('address', () =>
+        abortable(this.findGroupIn(this.context(signal), region, address), signal),
+      )
+      const outage = caps.houseOutage
+        ? await part('house-outage', () => this.getHouseOutage(region, address, { signal, fresh }))
+        : missing('house-outage', 'the operator publishes no per-house status')
+      return { match, outage }
+    })()
+    const [{ match, outage }, emergency, schedule] = await Promise.all([
+      house,
+      caps.emergency
+        ? part('emergency', () => this.getEmergency(region, { signal, fresh }))
+        : Promise.resolve(missing('emergency', 'no source of emergency (ГАВ) announcements')),
+      part('schedule', () => this.getSchedules(region, { signal, fresh })),
+    ])
+
+    // an address nobody could find is the caller's to fix, not an unknown state
+    const lookup = gaps.find((g) => g.part === 'address')
+    const houseGap = gaps.find((g) => g.part === 'house-outage')
+    if (lookup?.code === 'not-found' && (houseGap?.code === 'not-found' || houseGap?.code === 'unsupported'))
+      throw new OutageError('not-found', lookup.message, { region })
+
+    let days = null
+    if (match && schedule) {
+      days = schedule.schedules[match.group] ?? null
+      if (!days)
+        gaps.push({
+          part: 'schedule',
+          code: 'not-found',
+          message: `group ${match.group} is not in the region's schedule`,
+        })
+    }
+    const now = this.ctx.now()
+    // in a fixed order, not the order the parts happened to finish in
+    const order: HouseStatusGap['part'][] = ['address', 'house-outage', 'emergency', 'schedule']
+    gaps.sort((a, b) => order.indexOf(a.part) - order.indexOf(b.part))
+    return {
+      ...decideHouseStatus({ region, now, match, outage, emergency, days, gaps }),
+      fetchedAt: toKyivIso(now),
+    }
+  }
+
   /** An address down a provider's chain: settlement (if it has them), street, house. */
   private async resolveAddress(
     ctx: ProviderContext,
@@ -632,17 +723,31 @@ export class OutageClient {
       ids,
       opts.concurrency ?? 6,
       async (id): Promise<RegionHealth> => {
-        const health = await this.checkRegion(id, opts, signal)
+        let health = await this.checkRegion(id, opts, signal)
         const p = this.provider(id)
-        if (!opts.address || !p.sampleAddress || !p.info.capabilities.addressSearch) return health
-        signal?.throwIfAborted()
-        try {
-          const m = await abortable(this.findGroupIn(this.context(signal), id, p.sampleAddress), signal)
-          return { ...health, address: { ok: true, group: m.group } }
-        } catch (e) {
-          if (signal?.aborted) throw signal.reason
-          return { ...health, address: { ok: false, message: (e as Error).message } }
+        if (opts.address && p.sampleAddress && p.info.capabilities.addressSearch) {
+          signal?.throwIfAborted()
+          try {
+            const m = await abortable(this.findGroupIn(this.context(signal), id, p.sampleAddress), signal)
+            health = { ...health, address: { ok: true, group: m.group } }
+          } catch (e) {
+            if (signal?.aborted) throw signal.reason
+            health = { ...health, address: { ok: false, message: (e as Error).message } }
+          }
         }
+        // the sub-provider's own sample when it has one (its names can differ from the region's)
+        const sample = (p.houseOutages ?? p).sampleAddress ?? p.sampleAddress
+        if (opts.houseOutage && sample && this.describe(p).capabilities.houseOutage) {
+          signal?.throwIfAborted()
+          try {
+            const o = await this.getHouseOutage(id, sample, { signal, fresh: true })
+            health = { ...health, houseOutage: { ok: true, kind: o?.kind ?? null } }
+          } catch (e) {
+            if (signal?.aborted) throw signal.reason
+            health = { ...health, houseOutage: { ok: false, message: (e as Error).message } }
+          }
+        }
+        return health
       },
       signal,
     )
@@ -652,6 +757,7 @@ export class OutageClient {
         (r) =>
           r.status !== 'error' &&
           (r.address?.ok ?? true) &&
+          (r.houseOutage?.ok ?? true) &&
           !(opts.strict && (r.status === 'stale' || r.degraded)),
       ),
       degraded: results.some((r) => r.degraded),

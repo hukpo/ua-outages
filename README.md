@@ -203,6 +203,7 @@ else showIntervals(day.intervals)
 - YASNO (`kyiv`, `dnipro`, `dnipro-cek`): a `WaitingForSchedule` day is `unknown` with no intervals (its preliminary slots used to be returned), and `EmergencyShutdowns` on a date after today is `unknown`, not `emergency`.
 - More days: Kirovohrad returns tomorrow (from the operator's Telegram channel); Chernihiv returns tomorrow from the evening before; the railway pages return tomorrow's table when the page has one. Fewer where a source is behind: a railway table is filed under the date written above it, not under today, and Volyn's pictures dated before today are no longer read.
 - `updatedAt` is null where the old value was a stamp the page regenerates every half hour: Rivne always; Zhytomyr when its API's change time can't be read (the page's stamp is never used); Chernivtsi when the operator's channel has no post about the day (or can't be read).
+- 0.4.8: `getHouseStatus` (see [Is the power on at this house?](#is-the-power-on-at-this-house)) and `decideHouseStatus`; `healthCheck({ houseOutage: true })` and `npm run health -- --house-outage`. `report.ok` is now also false when a requested house outage check fails. Fixed: `getHouseOutage('kyiv', …)` failed with "specify a city": dtek-kem sends its street list without settlements, now read as the streets of м. Київ.
 - 0.4.7: `getHouseOutage` in `mykolaiv`, `sumy` and `poltava`; see [Is this house off now?](#is-this-house-off-now) for their limits. `capabilities.houseOutage` is `true` for them now.
 - 0.4.6: `getHouseOutage` in `lviv`, `ternopil`, `zakarpattia` and `zhytomyr`, from the operators' PowerOn lists; see [Is this house off now?](#is-this-house-off-now) for what each can tell. `capabilities.houseOutage` is `true` for them now.
 - 0.4.5: `getHouseOutage` (see [Is this house off now?](#is-this-house-off-now)) and `capabilities.houseOutage`. In the DTEK regions a street's house list is kept for at most 5 minutes (before: until the site's session was renewed), so `findGroup` may ask the site a little more often.
@@ -307,6 +308,23 @@ Regions, and what each one's record can tell:
 
 Not supported, and why: Volyn (its PowerOn list `pw_accidents` is empty, also when re-checked on 17.11.2026); Khmelnytskyi (its per-address list said "no registered outage" for a house during its group's ГПВ slot, and no outage has been seen in it to read); Kirovohrad (its per-house message says which schedule applies, "Застосування ГПВ", not whether the house is off, and gives no times); Chernihiv, Kharkiv and Vinnytsia (lookups behind a captcha or Cloudflare); Chernivtsi, Rivne, Zaporizhzhia, Kherson, the railway and ЦЕК (no per-address status); Cherkasy (looked up by accounts, not addresses, and ГАВ can't be told from аварійні).
 
+#### Is the power on at this house?
+
+`getHouseStatus` puts the address's group, the house's own record, the region's ГАВ status and the schedule together into one answer, the one a site or a bot shows:
+
+```ts
+const s = await outages.getHouseStatus('dnipro', { city: 'Дніпро', street: 'вул. Бетховена', house: '32' })
+// { state: 'off', basis: 'house-outage', until: '2026-11-18T00:25:00+02:00', groups: ['1.2'],
+//   scheduled: null, nextOutage: { from: '2026-11-18T08:00:00+02:00', … },
+//   houseOutage: { kind: 'emergency', … }, emergency: { state: 'inactive', … }, gaps: [], … }
+```
+
+- `state`: `off`, `maybe`, `on` or `unknown`; `basis` says what decided it: `house-outage`, `emergency`, `schedule` or `none`; `until` is when power is expected back (null when not known).
+- The order: the operator's record of the house wins (the Dnipro case: the region back on the schedule, the house still off). Then a ГАВ / СГАВ in force: `off` when the operator names the queues that are off and the house's queue (from `findGroup`) is among them; `maybe` when that can't be told, unless the schedule still applies alongside and has the house off. A ГАВ whose named queues leave the house out falls through to the schedule. Then the schedule of the house's first group: an outage now is `off` until the end of the run of outages (past midnight when tomorrow is published), a "possible" half hour `maybe`, a day the schedule marks as emergency `maybe`, today not published `unknown`.
+- `on` is said only when today's schedule is published and has no outage now, no ГАВ hits the house, and the house's record (where the region has one) is empty. A local outage in a region without per-house records can't be seen: such a region has a `house-outage` entry in `gaps` with code `unsupported`.
+- `gaps` lists every part that couldn't be used (`address`, `house-outage`, `emergency`, `schedule`) with its error code; the answer is made from the rest. It throws only when the address isn't found (`not-found`) or the call is cancelled.
+- It makes the calls `findGroup`, `getHouseOutage`, `getEmergency` and `getSchedules` make, with their caches (`fresh: true` skips them); `decideHouseStatus` is the decision alone, for callers that read the parts themselves.
+
 #### Autocomplete
 
 ```ts
@@ -388,10 +406,10 @@ fuzzyScore('Хрищатик', 'вул. Хрещатик') // 0..1, the matcher 
 ### Health check
 
 ```ts
-const report = await outages.healthCheck({ address: true })
+const report = await outages.healthCheck({ address: true, houseOutage: true })
 // { ok, degraded, stale, checkedAt,
 //   regions: [{ region, status: 'ok' | 'stale' | 'empty' | 'error', latencyMs, groups, updatedAt, message,
-//               freshness, sources, degraded, address }] }
+//               freshness, sources, degraded, address, houseOutage }] }
 ```
 
 - `empty`: the source works but publishes nothing right now (no groups, or every day `unknown` with no day cancelled by the operator). Often there are no outages then, but the SDK can't tell.
@@ -399,10 +417,11 @@ const report = await outages.healthCheck({ address: true })
 - `error`: a network failure, a bot check (`blocked`), or a format change (`parse`).
 - `degraded: true` next to any status but `error`: one of the region's channels failed and the others still gave a result. `message` names the channel; `sources` has the details.
 - `freshness` is `assessFreshness` of what was fetched; `sources` is the schedule's `sources`.
+- `houseOutage` (with `houseOutage: true`, in regions with `capabilities.houseOutage`): `getHouseOutage` of the sample address, `{ ok: true, kind }` (`kind: null` when nothing is listed there, which is fine) or `{ ok: false, message }`. It catches a per-house source that changed or went quiet. It asks one or two more requests per region, and DTEK's sites are behind a bot check: run it every few hours, not every few minutes.
 
-`report.ok` is false when a region is `error` or an address lookup failed. `report.stale` and `report.degraded` say whether any region is stale or degraded; with `healthCheck({ strict: true })` those make `ok` false too. Other options: `regions`, `staleAfterHours`, `tomorrowExpectedAt` (passed to `assessFreshness`), `concurrency` (default 6), `signal`. The health check always asks the operator: it uses neither the cache nor `staleIfError`.
+`report.ok` is false when a region is `error`, or an address lookup or house outage check failed. `report.stale` and `report.degraded` say whether any region is stale or degraded; with `healthCheck({ strict: true })` those make `ok` false too. Other options: `regions`, `staleAfterHours`, `tomorrowExpectedAt` (passed to `assessFreshness`), `concurrency` (default 6), `signal`. The health check always asks the operator: it uses neither the cache nor `staleIfError`.
 
-From the terminal: `npm run health` (`-- --address`, `-- --strict`, `-- --json`, `-- --skip a,b`, `-- kyiv lviv`). It prints one line per region with today's and tomorrow's coverage and the age of the data, and one line per entry of `sources`. Exit code 0: every source works; 1: a source or an address lookup is broken; 2 (only with `--strict`): nothing is broken, but something is stale or degraded.
+From the terminal: `npm run health` (`-- --address`, `-- --house-outage`, `-- --strict`, `-- --json`, `-- --skip a,b`, `-- kyiv lviv`). It prints one line per region with today's and tomorrow's coverage and the age of the data, and one line per entry of `sources`. Exit code 0: every source works; 1: a source, an address lookup or a house outage check is broken; 2 (only with `--strict`): nothing is broken, but something is stale or degraded.
 
 The `Source health` workflow (`.github/workflows/health.yml`) runs it every 30 minutes with `--address`, skipping `donetsk` (always `blocked`). Only broken sources and failed lookups open an issue; stale or degraded regions don't. A failing check is repeated after two minutes; if it still fails, the workflow opens an issue titled `Source health: <failing regions>` (the first five, then "+N more") with the failing part of the report, reuses that issue while the failure lasts (a comment when the set of failing regions changes), and closes it with a comment on the first green run. Its runners are outside Ukraine, so a source that blocks foreign addresses shows up as `blocked`.
 

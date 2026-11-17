@@ -181,7 +181,7 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
       at: Date.now(),
       cookie: cookieHeader(headers),
       csrf: /<meta name="csrf-token" content="([^"]+)"/.exec(body)?.[1] ?? null,
-      streets: (vars.streets as Record<string, string[]>) ?? {},
+      streets: vars.streets === undefined ? {} : streetsByCity(vars.streets, o.code),
       schedule: read(fact, ctx.now()),
       via: `${base}/ua/shutdowns`,
     }
@@ -216,14 +216,14 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
     const s = await ensure(ctx)
     if (s.streets) return s.streets
     if (!s.csrf) throw new OutageError('parse', `${o.info.operator}: no CSRF token`, { region })
-    const res = await post<{ result: boolean; streets?: Record<string, string[]> }>(
+    const res = await post<{ result: boolean; streets?: unknown }>(
       ctx,
       { cookie: s.cookie, csrf: s.csrf },
       { method: 'getStreets' },
     )
     if (!res.result || !res.streets)
       throw new OutageError('parse', `${o.info.operator}: /ua/ajax returned no street list`, { region })
-    return (s.streets = res.streets)
+    return (s.streets = streetsByCity(res.streets, o.code))
   }
 
   const homeNum = async (ctx: ProviderContext, city: string, street: string): Promise<HomeNum> => {
@@ -388,6 +388,25 @@ export function houseOutage(
     from,
     to,
   }
+}
+
+/**
+ * The one city of a site whose street list is flat: dtek-kem (Kyiv city) sends `streets` as an
+ * array of 2 500 street names, not a map of settlements (17.11.2026); its `getHomeNum` takes
+ * "м. Київ" as the city
+ */
+const ONE_CITY: Record<string, string> = { kem: 'м. Київ' }
+
+/** `streets` as settlement → street names, whichever form the site sent. Exported for tests. */
+export function streetsByCity(streets: unknown, code: string): Record<string, string[]> {
+  if (Array.isArray(streets)) {
+    const city = ONE_CITY[code]
+    if (!city)
+      throw new OutageError('parse', `DTEK ${code}: a street list without settlements (site changed?)`, {})
+    return { [city]: streets.filter((s): s is string => typeof s === 'string') }
+  }
+  if (streets && typeof streets === 'object') return streets as Record<string, string[]>
+  throw new OutageError('parse', `DTEK ${code}: unexpected street list`, {})
 }
 
 /** Asks for everything: any real `fact.update` is newer than this one */

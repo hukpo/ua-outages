@@ -340,6 +340,57 @@ export interface HouseOutage {
   fetchedAt: string
 }
 
+// --- is the power on at a house ---
+
+/**
+ * - `off`: the power is off there now, by what the operator says about the house, its emergency
+ *   queue or its schedule group;
+ * - `maybe`: it may be off: an emergency (ГАВ) is in force and the house's part in it isn't
+ *   known, or the schedule's "possible outage" half hour;
+ * - `on`: nothing the SDK can see has it off: the schedule is published for today with no
+ *   outage now, no emergency is in force, and the per-house record (where there is one) is empty;
+ * - `unknown`: not enough to tell (nothing published for today, sources failed).
+ */
+export type HouseState = 'off' | 'maybe' | 'on' | 'unknown'
+
+/** One part of `getHouseStatus` that couldn't be used, and why (`unsupported` where the region has no such source) */
+export interface HouseStatusGap {
+  part: 'address' | 'house-outage' | 'emergency' | 'schedule'
+  code: OutageErrorCode
+  message: string
+}
+
+/** What `getHouseStatus` concludes about one house now, and everything it concluded it from. */
+export interface HouseStatus {
+  region: RegionId
+  /** Address as the operator spells it; null when no lookup found it */
+  address: { city?: string; street: string; house: string } | null
+  state: HouseState
+  /**
+   * What decided `state`:
+   * - `house-outage`: the operator's own record of the house (`houseOutage`);
+   * - `emergency`: a ГАВ / СГАВ in force in the region (`emergency`), or a day the schedule marks as emergency;
+   * - `schedule`: the group's hourly schedule (`scheduled`, `nextOutage`);
+   * - `none`: nothing could decide (`unknown`).
+   */
+  basis: 'house-outage' | 'emergency' | 'schedule' | 'none'
+  /** For `off` / `maybe`: when power is expected back, the operator's estimate; null when not known */
+  until: string | null
+  /** Outage groups of the house (first = the one the schedule is read for); empty when the lookup failed */
+  groups: GroupId[]
+  /** The schedule's interval in force now for `groups[0]`, if any */
+  scheduled: Interval | null
+  /** The group's next scheduled outage after now (today or tomorrow), if published */
+  nextOutage: Interval | null
+  /** The operator's record of an outage at the house; null when none or not available (see `gaps`) */
+  houseOutage: HouseOutage | null
+  /** The region's emergency status; null when not available (see `gaps`) */
+  emergency: EmergencyStatus | null
+  /** Parts that couldn't be used: a region without per-house records, a source that failed */
+  gaps: HouseStatusGap[]
+  fetchedAt: string
+}
+
 // --- emergency status ---
 
 export type EmergencyState = 'active' | 'inactive' | 'unknown'
@@ -431,4 +482,9 @@ export interface RegionHealth {
   degraded?: boolean
   /** Result of the sample address lookup, when requested */
   address?: { ok: boolean; group?: GroupId; message?: string }
+  /**
+   * `getHouseOutage` of the sample address, when requested (`houseOutage: true`) and the region
+   * supports it: `kind` null = the operator lists no outage there, which is fine
+   */
+  houseOutage?: { ok: boolean; kind?: HouseOutageKind | null; message?: string }
 }
