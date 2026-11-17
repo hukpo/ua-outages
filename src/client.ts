@@ -1,10 +1,11 @@
-import { OutageError } from './errors.js'
+import { OutageError, type OutageErrorCode } from './errors.js'
+import { assessFreshness } from './freshness.js'
 import { Http, type HttpOptions } from './http.js'
 import { createProviders } from './providers/index.js'
 import type { Provider, ProviderContext } from './providers/provider.js'
 import { normalizeGroup } from './schedule.js'
-import { fuzzyScore, rankByName, searchFragments, type NameKind } from './fuzzy.js'
-import { normalizeHouse } from './text.js'
+import { fuzzyScore, rankByName, sameStreet, searchFragments, tokens, type NameKind } from './fuzzy.js'
+import { houseKey } from './text.js'
 import type {
   AddressQuery,
   City,
@@ -20,6 +21,7 @@ import type {
   Street,
 } from './types.js'
 import { abortable, mapLimit } from './util.js'
+import { validateSchedule } from './validate.js'
 
 export interface OutageClientOptions extends HttpOptions {
   /** How long fetched schedules are reused, default 5 min. 0 disables the cache. */
@@ -28,15 +30,24 @@ export interface OutageClientOptions extends HttpOptions {
   now?: () => Date
   /** Replace the built-in providers (tests, or your own sources) */
   providers?: readonly Provider[]
+  /** Default of `ScheduleOptions.staleIfError` for every `getSchedules` / `getSchedule` call. Off by default */
+  staleIfError?: StaleIfError
 }
+
+/** `true`, or how old the last good result may be (default 6 h) */
+export type StaleIfError = boolean | { maxAgeMs?: number }
 
 export interface HealthCheckOptions {
   /** Only these regions; default all */
   regions?: RegionId[]
   /** Also run the address lookup with each region's sample address */
   address?: boolean
-  /** A schedule not changed for longer than this is `stale`, default 72 h */
+  /** Passed to `assessFreshness`: `updatedAt` older than this with today not published is `stale`. Default 36 */
   staleAfterHours?: number
+  /** Passed to `assessFreshness`: Kyiv "HH:MM" after which a missing tomorrow is listed as an issue */
+  tomorrowExpectedAt?: string
+  /** `ok` is false for `stale` and `degraded` regions too, not only for broken ones */
+  strict?: boolean
   /** Parallel requests, default 6 */
   concurrency?: number
   /** Cancels the check: no further regions are fetched and the call rejects with the signal's reason */
@@ -45,7 +56,12 @@ export interface HealthCheckOptions {
 
 export interface HealthReport {
   checkedAt: string
+  /** No region is `error` and no address lookup failed; with `strict`, none is `stale` or `degraded` either */
   ok: boolean
+  /** Some region lost a channel but still gave a result */
+  degraded: boolean
+  /** Some region's data is out of date */
+  stale: boolean
   regions: RegionHealth[]
 }
 
@@ -63,9 +79,17 @@ export class OutageClient {
   private readonly ctx: ProviderContext
   private readonly providers: ReadonlyMap<RegionId, Provider>
   private readonly cacheTtlMs: number
-  private readonly cache = new Map<RegionId, { at: number; seq: number; value: Promise<RegionSchedule> }>()
+  private readonly cache = new Map<
+    RegionId,
+    { at: number; seq: number; value: Promise<RegionSchedule>; ok?: boolean }
+  >()
   /** Fetches started, so a slower older one never replaces a newer one in the cache */
   private seq = 0
+  private readonly staleIfError: StaleIfError
+  /** Each region's last successful result, for `staleIfError` */
+  private readonly lastGood = new Map<RegionId, RegionSchedule>()
+  /** Regions whose last fetch failed and was answered with the last good result, see `STALE_RETRY_MS` */
+  private readonly failed = new Map<RegionId, { at: number; error: OutageError }>()
   private readonly searchCache = new Map<string, { at: number; value: Promise<unknown[]> }>()
   private readonly emergencyCache = new Map<
     RegionId,
@@ -75,6 +99,7 @@ export class OutageClient {
   constructor(opts: OutageClientOptions = {}) {
     this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()) }
     this.cacheTtlMs = opts.cacheTtlMs ?? 5 * 60_000
+    this.staleIfError = opts.staleIfError ?? false
     this.providers = new Map((opts.providers ?? createProviders()).map((p) => [p.info.id, p]))
   }
 
@@ -105,16 +130,58 @@ export class OutageClient {
    *
    * `signal` cancels the call: it rejects with the signal's reason right away and sends no
    * further requests to the operator (the one in flight is aborted too).
+   *
+   * Every result is checked with `validateSchedule` first: a malformed one is a `parse` error.
+   *
+   * With `staleIfError`, a `network`, `http`, `blocked` or `parse` failure is answered with the
+   * region's last good result (marked `stale`) while that is recent enough; see `ScheduleOptions`.
    */
   async getSchedules(region: RegionId, opts: ScheduleOptions = {}): Promise<RegionSchedule> {
     const p = this.provider(region)
     const { signal } = opts
     signal?.throwIfAborted()
+    const staleIfError = opts.staleIfError ?? this.staleIfError
     const hit = this.cache.get(region)
     const now = Date.now()
-    if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return abortable(hit.value, signal)
-    const value = p.getSchedules(this.context(signal))
-    const entry = { at: now, seq: ++this.seq, value }
+    /** With `staleIfError`, a failure of `result` is answered with the last good result */
+    const orLastGood = (result: Promise<RegionSchedule>): Promise<RegionSchedule> =>
+      staleIfError
+        ? result.catch((e: unknown) => {
+            const good = signal?.aborted ? null : this.lastGoodFor(region, e, staleIfError, opts.previous)
+            if (!good) throw e
+            this.failed.set(region, { at: Date.now(), error: e as OutageError })
+            return good
+          })
+        : result
+    // a caller that joins a fetch still running gets the same fallback as the one that started it
+    if (!opts.fresh && hit && now - hit.at < this.cacheTtlMs) return orLastGood(abortable(hit.value, signal))
+    if (staleIfError && !opts.fresh) {
+      // the operator just failed: don't ask again on every call
+      const down = this.failed.get(region)
+      const good =
+        down && now - down.at < Math.min(this.cacheTtlMs, STALE_RETRY_MS)
+          ? this.lastGoodFor(region, down.error, staleIfError, opts.previous)
+          : null
+      if (good) return good
+    }
+    const value = p
+      .getSchedules({ ...this.context(signal), ...(opts.fresh ? { fresh: true } : {}) })
+      .then((s) => {
+        validateSchedule(s, region, this.latestNow())
+        const last = this.lastGood.get(region)
+        if (!last || Date.parse(last.fetchedAt) <= Date.parse(s.fetchedAt)) this.lastGood.set(region, s)
+        this.failed.delete(region)
+        return s
+      })
+    const entry: { at: number; seq: number; value: Promise<RegionSchedule>; ok?: boolean } = {
+      at: now,
+      seq: ++this.seq,
+      value,
+    }
+    value.then(
+      () => (entry.ok = true),
+      () => {},
+    )
     if (this.cacheTtlMs > 0) {
       if (signal) {
         // a cancellable call isn't shared while it runs, so another caller never inherits its
@@ -129,12 +196,55 @@ export class OutageClient {
       } else {
         this.cache.set(region, entry)
         value.catch(() => {
-          if (this.cache.get(region) === entry) this.cache.delete(region)
+          if (this.cache.get(region) !== entry) return
+          // a failed `fresh` fetch doesn't cost the good result it pushed out of the cache
+          if (hit?.ok && Date.now() - hit.at < this.cacheTtlMs) this.cache.set(region, hit)
+          else this.cache.delete(region)
         })
       }
     }
     // a provider may wait on work it shares with other calls: the caller still leaves at once
-    return abortable(value, signal)
+    return orLastGood(abortable(value, signal))
+  }
+
+  /**
+   * The later of the client's clock and the system's, for judging "in the future": a `now` set
+   * back to replay saved responses doesn't make them invalid.
+   */
+  private latestNow(): Date {
+    return new Date(Math.max(this.ctx.now().getTime(), Date.now()))
+  }
+
+  /**
+   * The last good result of a region as the answer to a failed fetch: a copy marked `stale`, or
+   * null when the failure isn't one to paper over (cancelled, `unsupported`, `not-found`, a bug)
+   * or nothing recent enough is known.
+   */
+  private lastGoodFor(
+    region: RegionId,
+    error: unknown,
+    staleIfError: true | { maxAgeMs?: number },
+    previous: RegionSchedule | undefined,
+  ): RegionSchedule | null {
+    if (!(error instanceof OutageError) || !STALE_CODES.has(error.code)) return null
+    let good = this.lastGood.get(region)
+    if (previous && this.usable(previous, region)) {
+      if (!good || Date.parse(previous.fetchedAt) > Date.parse(good.fetchedAt)) good = previous
+    }
+    if (!good) return null
+    const maxAgeMs = (staleIfError === true ? undefined : staleIfError.maxAgeMs) ?? 6 * 3600_000
+    if (this.ctx.now().getTime() - Date.parse(good.fetchedAt) > maxAgeMs) return null
+    return { ...good, stale: { since: good.fetchedAt, error: { code: error.code, message: error.message } } }
+  }
+
+  /** A `previous` the app handed in is somebody's stored JSON: used only when it is a sound schedule of this region */
+  private usable(previous: RegionSchedule, region: RegionId): boolean {
+    try {
+      validateSchedule(previous, region, this.latestNow())
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** One group. Accepts loose spellings: "3.1", "GPV3.1", "черга 3.1". */
@@ -148,7 +258,15 @@ export class OutageClient {
         `Group "${group}" not found in ${region}. Known groups: ${all.groups.join(', ') || 'none'}`,
         { region },
       )
-    return { region, group: id, days, updatedAt: all.updatedAt, fetchedAt: all.fetchedAt }
+    return {
+      region,
+      group: id,
+      days,
+      updatedAt: all.updatedAt,
+      fetchedAt: all.fetchedAt,
+      ...(all.sources ? { sources: all.sources } : {}),
+      ...(all.stale ? { stale: all.stale } : {}),
+    }
   }
 
   // --- emergency schedules ---
@@ -324,12 +442,24 @@ export class OutageClient {
       )
     }
 
-    const streets = await this.searchStreetsIn(ctx, region, address.street, { city, limit: 10 })
+    const ranked = await this.searchStreetsIn(ctx, region, address.street, { city, limit: 10 })
+    // a street with another number or of another type is a neighbour, however close the name
+    const streets = ranked.filter((s) => sameStreet(address.street, s.name))
+    if (ranked.length && !streets.length)
+      throw new OutageError(
+        'not-found',
+        `No street matches "${address.street}". Did you mean: ${ranked
+          .slice(0, 6)
+          .map((s) => s.name)
+          .join('; ')}?`,
+        { region },
+      )
     const street = choose(address.street, streets, 'street', region, (s) => s.name)
 
     const houses = await p.searchHouses!(ctx, street, address.house)
-    const want = normalizeHouse(address.house)
-    const house = houses.find((h) => normalizeHouse(h.number) === want)
+    // "2/3" is not "23": only a number that differs in spelling alone is the house asked for
+    const want = houseKey(address.house)
+    const house = houses.find((h) => houseKey(h.number) === want)
     if (!house)
       throw new OutageError(
         'not-found',
@@ -411,18 +541,18 @@ export class OutageClient {
   // --- health ---
 
   /**
-   * Fetches every region (bypassing the cache) and reports whether parsing still works.
-   * Use it in CI or a cron job to notice when an operator changes its site.
+   * Fetches every region (bypassing the cache and `staleIfError`) and reports whether parsing
+   * still works and how fresh the data is. Use it in CI or a cron job to notice when an operator
+   * changes its site, a channel goes down or a source stops updating.
    */
   async healthCheck(opts: HealthCheckOptions = {}): Promise<HealthReport> {
     const ids = opts.regions ?? [...this.providers.keys()]
-    const staleMs = (opts.staleAfterHours ?? 72) * 3600_000
     const { signal } = opts
     const results = await mapLimit(
       ids,
       opts.concurrency ?? 6,
       async (id): Promise<RegionHealth> => {
-        const health = await this.checkRegion(id, staleMs, signal)
+        const health = await this.checkRegion(id, opts, signal)
         const p = this.provider(id)
         if (!opts.address || !p.sampleAddress || !p.info.capabilities.addressSearch) return health
         signal?.throwIfAborted()
@@ -438,12 +568,23 @@ export class OutageClient {
     )
     return {
       checkedAt: this.ctx.now().toISOString(),
-      ok: results.every((r) => r.status !== 'error' && (r.address?.ok ?? true)),
+      ok: results.every(
+        (r) =>
+          r.status !== 'error' &&
+          (r.address?.ok ?? true) &&
+          !(opts.strict && (r.status === 'stale' || r.degraded)),
+      ),
+      degraded: results.some((r) => r.degraded),
+      stale: results.some((r) => r.status === 'stale'),
       regions: results,
     }
   }
 
-  private async checkRegion(region: RegionId, staleMs: number, signal?: AbortSignal): Promise<RegionHealth> {
+  private async checkRegion(
+    region: RegionId,
+    opts: HealthCheckOptions,
+    signal?: AbortSignal,
+  ): Promise<RegionHealth> {
     const info = this.provider(region).info
     // e.g. operators that publish the schedule only as an image: nothing to check
     if (!info.capabilities.schedule)
@@ -457,18 +598,34 @@ export class OutageClient {
       }
     const started = performance.now()
     try {
-      const s = await this.getSchedules(region, { fresh: true, signal })
+      // a last good result would hide exactly what this check is for
+      const s = await this.getSchedules(region, { fresh: true, signal, staleIfError: false })
       const latencyMs = Math.round(performance.now() - started)
-      const base = { region, latencyMs, groups: s.groups.length, updatedAt: s.updatedAt }
-      const hasData = Object.values(s.schedules).some((days) =>
-        // anything the operator published counts, a day without outages included
-        days.some((d) => d.status !== 'unknown'),
-      )
-      if (!s.groups.length || !hasData)
-        return { ...base, status: 'empty', message: 'No schedule published right now' }
-      if (s.updatedAt && this.ctx.now().getTime() - Date.parse(s.updatedAt) > staleMs)
-        return { ...base, status: 'stale', message: `Last updated ${s.updatedAt}` }
-      return { ...base, status: 'ok' }
+      const freshness = assessFreshness(s, {
+        now: this.ctx.now(),
+        staleAfterHours: opts.staleAfterHours,
+        tomorrowExpectedAt: opts.tomorrowExpectedAt,
+      })
+      const message = (code: string) => freshness.issues.find((i) => i.code === code)?.message
+      const failed = message('source-failed')
+      const base = {
+        region,
+        latencyMs,
+        groups: s.groups.length,
+        updatedAt: s.updatedAt,
+        freshness,
+        ...(s.sources ? { sources: s.sources } : {}),
+        ...(failed ? { degraded: true } : {}),
+      }
+      const and = failed ? `; ${failed}` : ''
+      // anything the operator published counts, a day without outages included
+      if (!s.groups.length || freshness.coveredThrough === null)
+        return { ...base, status: 'empty', message: `No schedule published right now${and}` }
+      if (freshness.state === 'stale') {
+        const why = ['behind', 'not-updated', 'last-good', 'fetched-long-ago'].map(message).filter(Boolean)
+        return { ...base, status: 'stale', message: why.join('; ') + and }
+      }
+      return { ...base, status: 'ok', ...(failed ? { message: failed } : {}) }
     } catch (e) {
       if (signal?.aborted) throw signal.reason
       // e.g. a region that publishes only an image the SDK can't read
@@ -539,6 +696,15 @@ function choose<T extends { score?: number }>(
   return top
 }
 
+/** Failures a last good result may stand in for: the operator couldn't be read. Not a wrong question, not a cancel */
+const STALE_CODES: ReadonlySet<OutageErrorCode> = new Set(['network', 'http', 'blocked', 'parse'])
+/**
+ * After a failure answered with the last good result, calls with `staleIfError` get that answer
+ * again without asking the operator for this long (or the cache TTL, when shorter): a source
+ * that is down isn't hit on every call, and its recovery is noticed within a minute.
+ */
+const STALE_RETRY_MS = 60_000
+
 /** Results per search unless the caller asks otherwise */
 const DEFAULT_LIMIT = 10
 const MAX_CANDIDATES = 200
@@ -552,9 +718,27 @@ export interface ScheduleOptions {
   fresh?: boolean
   /** Cancels the call: it rejects with the signal's reason and sends no further requests */
   signal?: AbortSignal
+  /**
+   * When the operator can't be read (`network`, `http`, `blocked` or `parse`; not `unsupported`,
+   * `not-found` or a cancelled call), return the region's last good result instead of throwing:
+   * a copy with `stale: { since, error }` set, `since` being its `fetchedAt`. The client
+   * remembers each region's last successful result; `previous` adds one from before a restart.
+   * Used only while it is at most `maxAgeMs` old (default 6 h); older, the error is thrown.
+   *
+   * The failure is never cached as a result: the operator is asked again on the next call once
+   * a minute has passed (or the cache TTL, when shorter), and at once with `fresh: true`. Calls
+   * without `staleIfError` are not affected. Overrides the client-wide default; default off.
+   */
+  staleIfError?: StaleIfError
+  /**
+   * A result of `getSchedules` the app kept (e.g. across a restart), for `staleIfError`: the
+   * fallback is this or the one the client remembers, whichever was fetched later. Ignored when
+   * it isn't a valid schedule of this region.
+   */
+  previous?: RegionSchedule
 }
 
-export interface EmergencyOptions extends ScheduleOptions {
+export interface EmergencyOptions extends Pick<ScheduleOptions, 'fresh' | 'signal'> {
   /**
    * The status this call returned last time, if the app kept it (e.g. across a restart). The
    * client remembers on its own which emergencies YASNO showed, so that it can tell when YASNO

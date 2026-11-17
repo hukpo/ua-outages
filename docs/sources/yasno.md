@@ -19,7 +19,7 @@ This makes YASNO the practical, WAF-free route for **dtek-kem** and **dtek-dnem*
 `https://app.yasno.ua/api/blackout-service/public/shutdowns`
 
 Responses: `application/json; charset=utf-8`, `cache-control: max-age=300, public`, `etag` present
-(so `If-None-Match` should work — UNVERIFIED). Behind Imperva (`x-cdn: Imperva`, sets `visid_incap_*`/`incap_ses_*`
+(`If-None-Match` gives 304; the SDK asks past the cache instead, see "Freshness"). Behind Imperva (`x-cdn: Imperva`, sets `visid_incap_*`/`incap_ses_*`
 cookies) but no challenge was served to curl or Node 22 `fetch` with default headers. No rate limit observed (~30 requests).
 Errors are RFC 9110 problem-details JSON (`error-404-*.json`).
 
@@ -105,11 +105,57 @@ Gotcha: for Dnipro, `/group` **without `cityId` returns 404** `"Street 1587 not 
 (`error-404-street-not-found.json`) even though `/houses` without cityId works. Unknown house → 404 `EntryNotFound`.
 Street names contain prefixes (`вул.`, `просп.`, `пров.`, `ріг ...`) and duplicates/variants — show all to user.
 
+## Freshness
+
+Measured 2026-11-17 (`research/freshness/CHANNELS-B.md`).
+
+- **CDN cache.** `cache-control: max-age=300, public`, served from Imperva's cache (`x-iinfo: … 0CNN …`): an answer can be 5 minutes old. Any extra query parameter reaches the origin (`cache-control: private,max-age=120`, `x-iinfo: … 2NNN …`), so every `planned-outages` request carries `?_=<unix seconds>`. The client's own cache (5 minutes by default) keeps the volume the same.
+- **`updatedOn` → `updatedAt`.** A real publication time, one value for all groups of a DSO: Kyiv's stayed `15.11 21:00:01` through the midnight of 15→16.11 and became `17.11 00:00:01` when the 17.11 slots replaced `WaitingForSchedule`.
+- **Dates.** A day is dated by its own `date`, not by the `today`/`tomorrow` key it sits under, so a copy from before midnight read after it is yesterday + today. A feed that stopped moving shows up as old days (`assessFreshness`: `behind`).
+- **Statuses.** Slots are taken only under `ScheduleApplies`. `WaitingForSchedule` is "not published": the day is `unknown` with no intervals (every sample has `slots: []` there; slots that might come with it would be a preliminary list, not the schedule, and are dropped). `EmergencyShutdowns` for today is `emergency`; YASNO copies it to tomorrow as well, where it says nothing, so a later day under it is `unknown`. `NoOutages` is `no-outages`. An unknown status is `unknown`.
+- **Tomorrow** appears when the operator publishes it: Kyiv 21:00:01 the evening before (16.11's) or 00:00:01 on the day itself (17.11's); Dnipro/ДнЕМ 23:51:37 for 17.11. No earlier official channel exists for 902 and 301 (@dtek_ua has no group times; the DTEK sites are behind the bot check).
+- kyiv and dnipro report the API as their one entry in `sources`.
+
+## ЦЕК (3/303): merged with the operator's Telegram channel
+
+YASNO lags ЦЕК itself. On 16–17.11.2026 @cek_info cancelled the emergency at 22:56 and posted the list for 17.11 at 00:18; at
+00:28 YASNO still had `EmergencyShutdowns`, no slots, `updatedOn` 16.11 18:12:37 for both days. On 15–16.11 it had
+`WaitingForSchedule` for both days while the channel carried full lists. The channel posts tomorrow at 21:00–23:10 the evening
+before (9 of 10 days; 17.11's came at 00:18 after an emergency) and every change during the day.
+
+`dnipro-cek` therefore reads both (`mergeSources`): `api` (YASNO, also the only address lookup) and `telegram:@cek_info`
+(`src/providers/cek-telegram.ts`). Each day comes from whichever stated it last: `updatedOn` against the time of the newest post
+about that day's ГПВ. `updatedAt` is the winner's time.
+
+What the channel reader takes from `t.me/s/cek_info` (dates have no year: `16 ЛИСТОПАДА`, once `11.11`):
+
+| post                                                                                                                                                                                                                | effect                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `… 16 ЛИСТОПАДА з 00:00 до 24:00 застосовуватимуться відключення наступних черг:` + `🔹 Черга 1.1` / `00:30-04:00` blocks (also `діятимуть наступні черги:` with bare `1.1` lines, `✅ 01:30-04:00`, `20:00-00:00`) | the whole day; a group left out has no outages                                                                     |
+| `зміни у ГПВ на 16 ЛИСТОПАДА за розпорядженням …:` + blocks                                                                                                                                                         | the whole day again                                                                                                |
+| `зміни у ГПВ на 12 ЛИСТОПАДА з 16:00 до 24:00, …:` or `… 16 ЛИСТОПАДА з 04:00 …` + blocks                                                                                                                           | that part of the day again; the hours before it stay; a group left out has no outage in it                         |
+| `зміни в ГПВ 13 ЛИСТОПАДА, … з 00:00 до 06:00 додатково застосовуються відлючення черги 3.1, 3.2` (one window)                                                                                                      | those groups are off then, added to the list                                                                       |
+| a change in a sentence that isn't one window: `з 02:30 додатково … 6.1, 6.2` (no end), two windows in a sentence                                                                                                    | the groups it names are `unknown` for that day until the next list; the others stay (`assessFreshness`: `partial`) |
+| `скасування ЕКСТРЕНИХ ВІДКЛЮЧЕНЬ ‼️ Повертаємося до ГРАФІКІВ ПОГОДИННИХ ВІДКЛЮЧЕНЬ`                                                                                                                                 | the day's list stands again as of this post: this is what beats a YASNO feed still showing the emergency           |
+| `м. ПАВЛОГРАД … 📌 2.2 черга:` (a town's separate list with its own numbering), notices to other towns, planned works, `застосовуються ЕКСТРЕНІ ВІДКЛЮЧЕННЯ`                                                        | skipped: not the region's schedule (`getEmergency` reads the emergencies)                                          |
+
+Consequences:
+
+- While YASNO says `EmergencyShutdowns` with an `updatedOn` newer than the channel's last word on the day, the day is `emergency`; after the channel's "Повертаємося до ГПВ" or a new list it is the list, and `sources[0].disagrees` is set until YASNO catches up.
+- After a change that restates only the rest of the day for a group that was `unknown`, the hours before the change are not known and come back as "on" (they are past by then: such changes are posted around their start hour).
+- A list posted since yesterday that can't be read exactly (a line that is neither a group nor hours, a group outside 1.1–6.2, a group without hours, a date that isn't the post's day or the two after, a list under an unknown heading) fails the channel with `parse`; YASNO then stands alone and `sources[1].ok` is false. Either source failing leaves the other; both failing is YASNO's error.
+- The emergency notices of ЦЕК are per town ("м. ДНІПРО") and don't turn the region's day into `emergency` here; `getEmergency('dnipro-cek')` reports them with their area.
+
+Not verified: how long YASNO takes to catch up in general (one incident); whether a sentence like `з 09:30 до 13:00 відключаються черги: …` also means the other groups are on in that window (it is added, nothing is removed).
+
+Sample address for the health check: `{ city: 'Вільногірськ', street: 'бульвар Миру', house: '15' }` → 4.2 (checked live 2026-11-17).
+
 ## Failure modes
 
 - Wrong path → 404 problem JSON (`error-404-bad-path.json`).
 - Network/5xx: none observed. Imperva could start challenging at any time (it is in front) — detect non-JSON / `_Incapsula_Resource` body.
-- `WaitingForSchedule` for `tomorrow` before it's published (typically evening).
+- `WaitingForSchedule` for `tomorrow` before it's published (typically evening; for Kyiv on 16.11.2026 until 00:00:01 of the day itself).
+- The feed can lag the operator (ЦЕК, above) and keeps `EmergencyShutdowns` without slots for both days.
 
 ## Reference
 

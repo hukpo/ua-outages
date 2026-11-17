@@ -1,7 +1,7 @@
 import { OutageError } from '../errors.js'
-import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
+import { cellsToIntervals, normalizeGroup } from '../schedule.js'
 import { normalizeHouse } from '../text.js'
-import { kyivDate, toKyivIso } from '../time.js'
+import { addDays, kyivDate, kyivMinuteOfDay } from '../time.js'
 import type {
   City,
   DaySchedule,
@@ -10,10 +10,18 @@ import type {
   House,
   IntervalKind,
   ProviderInfo,
-  RegionSchedule,
   Street,
 } from '../types.js'
+import {
+  KIROVOHRAD_CHANNEL,
+  KIROVOHRAD_GROUPS,
+  gpvVersionsToSource,
+  readGpvChannel,
+  standingVersions,
+  type GpvVersion,
+} from './kirovohrad-telegram.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mergeSources, type SourceRead } from './sources.js'
 import { SharedTask, cookieHeader, mapLimit } from '../util.js'
 
 /**
@@ -27,12 +35,23 @@ import { SharedTask, cookieHeader, mapLimit } from '../util.js'
  * A missing or expired session is not an error on the server side: it answers
  * `200 {"success":true,"data":[]}`, which looks exactly like "no outages". So an empty answer is
  * retried with a new session and then checked against an ОТГ that always has settlements.
+ *
+ * The grid is today only, and carries neither a date nor a change time. Tomorrow, and the time
+ * of every change, come from the operator's Telegram channel (`kirovohrad-telegram.ts`), which
+ * posts each day's list the evening before. The two are merged per day by publication time; the
+ * grid gets the date and time of the channel's list it shows (`dateGrid`).
  */
 const BASE = 'https://kiroe.com.ua/electricity-blackout'
 /** Кропивницька ОТГ: always has settlements, so an empty list there means a rejected session. */
 const CANARY = '/city/86'
 /** The token lifetime isn't documented; renew well before PHP's usual 24 min session timeout. */
 const SESSION_TTL_MS = 10 * 60_000
+/**
+ * After midnight the grid may still be yesterday's (it had flipped by 00:25 on 17.11.2026; the
+ * exact minute isn't known). Until this long past midnight a grid the channel can't confirm
+ * isn't given a date.
+ */
+const MIDNIGHT_DOUBT_MIN = 60
 
 const INFO: ProviderInfo = {
   id: 'kirovohrad',
@@ -166,7 +185,38 @@ export function kirovohradProvider(): Provider {
     sampleAddress: { city: 'Кропивницький', street: 'вул. Велика Перспективна', house: '2' },
 
     async getSchedules(ctx) {
-      return parseGraphs(await api(ctx, '/actual-gpv-graphs'), ctx.now())
+      // read once, used twice: as a source of its own, and to date the site's grid
+      let channel: Promise<GpvVersion[]> | undefined
+      const versions = () => (channel ??= readGpvChannel(ctx))
+      let sameList = false
+      const s = await mergeSources(
+        ctx,
+        region,
+        [
+          {
+            id: 'site',
+            url: BASE,
+            read: async () => {
+              const grid = parseGrid(await api(ctx, '/actual-gpv-graphs'))
+              // the channel being down is its own failure; the grid then stands undated by it
+              const known = await versions().catch(() => null)
+              const now = ctx.now()
+              sameList = !!grid && !!known && showsStandingList(grid, known, now)
+              return gridToSource(grid, known, now)
+            },
+          },
+          {
+            id: `telegram:@${KIROVOHRAD_CHANNEL}`,
+            url: `https://t.me/s/${KIROVOHRAD_CHANNEL}`,
+            read: async () => gpvVersionsToSource(await versions(), ctx.now()),
+          },
+        ],
+        { groups: KIROVOHRAD_GROUPS },
+      )
+      // `mergeSources` compares "possible" half hours too, which only the grid has: the same
+      // list on both isn't a disagreement
+      if (sameList) for (const source of s.sources ?? []) delete source.disagrees
+      return s
     },
 
     async searchCities(ctx, query) {
@@ -238,59 +288,126 @@ export function kirovohradProvider(): Provider {
   }
 }
 
+/** A group's 48 half-hour cells of the day; `null` = power on */
+export type Grid = Record<GroupId, (IntervalKind | null)[]>
+
 /**
- * `{ "1.1": { "times": { "00:00": "0", …, "23:30": "1" } }, … }` → today's schedule.
- * The answer carries no date: it is always the current Kyiv day. Exported for tests.
+ * `{ "1.1": { "times": { "00:00": "0", …, "23:30": "1" } }, … }` → cells per group; null when
+ * the answer is empty. The answer carries no date. Exported for tests.
  */
-export function parseGraphs(data: unknown, now: Date): RegionSchedule {
+export function parseGrid(data: unknown): Grid | null {
   const region = INFO.id
-  const date = kyivDate(now)
-  const schedules: Record<string, DaySchedule[]> = {}
-  if (!isEmpty(data)) {
-    if (typeof data !== 'object' || Array.isArray(data))
-      throw new OutageError('parse', `${INFO.operator}: schedule is not an object of groups`, { region })
-    for (const [rawGroup, value] of Object.entries(
-      data as Record<string, { times?: Record<string, string> }>,
-    )) {
-      const group = normalizeGroup(rawGroup)
-      const times = value?.times
-      if (!group || !times || typeof times !== 'object')
-        throw new OutageError('parse', `${INFO.operator}: unexpected schedule entry "${rawGroup}"`, {
+  if (isEmpty(data)) return null
+  if (typeof data !== 'object' || Array.isArray(data))
+    throw new OutageError('parse', `${INFO.operator}: schedule is not an object of groups`, { region })
+  const grid: Grid = {}
+  for (const [rawGroup, value] of Object.entries(
+    data as Record<string, { times?: Record<string, string> }>,
+  )) {
+    const group = normalizeGroup(rawGroup)
+    const times = value?.times
+    if (!group || !times || typeof times !== 'object')
+      throw new OutageError('parse', `${INFO.operator}: unexpected schedule entry "${rawGroup}"`, {
+        region,
+      })
+    const cells: (IntervalKind | null | undefined)[] = new Array(48).fill(undefined)
+    for (const [clock, state] of Object.entries(times)) {
+      const m = /^(\d{2}):(00|30)$/.exec(clock)
+      const kind = CELL[String(state)]
+      if (!m || kind === undefined || Number(m[1]) > 23)
+        throw new OutageError('parse', `${INFO.operator}: unexpected cell ${clock}="${state}" for ${group}`, {
           region,
         })
-      const cells: (IntervalKind | null | undefined)[] = new Array(48).fill(undefined)
-      for (const [clock, state] of Object.entries(times)) {
-        const m = /^(\d{2}):(00|30)$/.exec(clock)
-        const kind = CELL[String(state)]
-        if (!m || kind === undefined || Number(m[1]) > 23)
-          throw new OutageError(
-            'parse',
-            `${INFO.operator}: unexpected cell ${clock}="${state}" for ${group}`,
-            { region },
-          )
-        cells[Number(m[1]) * 2 + (m[2] === '30' ? 1 : 0)] = kind
-      }
-      if (cells.includes(undefined))
-        throw new OutageError(
-          'parse',
-          `${INFO.operator}: group ${group} has ${Object.keys(times).length} cells, expected 48`,
-          {
-            region,
-          },
-        )
-      schedules[group] = [
-        { date, status: 'scheduled', intervals: cellsToIntervals(date, cells as (IntervalKind | null)[]) },
-      ]
+      cells[Number(m[1]) * 2 + (m[2] === '30' ? 1 : 0)] = kind
+    }
+    if (cells.includes(undefined))
+      throw new OutageError(
+        'parse',
+        `${INFO.operator}: group ${group} has ${Object.keys(times).length} cells, expected 48`,
+        {
+          region,
+        },
+      )
+    grid[group] = cells as (IntervalKind | null)[]
+  }
+  return grid
+}
+
+/** Which half hours are `off`, group by group: what a grid and a channel list can be compared by */
+const gridOff = (grid: Grid) =>
+  KIROVOHRAD_GROUPS.map((g) => (grid[g] ?? []).map((c) => (c === 'off' ? '1' : '0')).join('')).join('|')
+
+/** The same for a channel list; null when it has times a half-hour grid can't show */
+function versionOff(v: GpvVersion): string | null {
+  const rows: string[] = []
+  for (const g of KIROVOHRAD_GROUPS) {
+    const cells = new Array<string>(48).fill('0')
+    for (const s of v.slots[g] ?? []) {
+      if (s.start % 30 || s.end % 30) return null
+      cells.fill('1', s.start / 30, s.end / 30)
+    }
+    rows.push(cells.join(''))
+  }
+  return rows.join('|')
+}
+
+/**
+ * Which day the grid shows and when the operator published it, told from the channel's lists:
+ * the grid's `off` half hours equal those of the list it was drawn from (checked on 17.11.2026:
+ * grid = post 1828 plus a "possible" half hour on each side of a block).
+ *
+ * - It equals a list for today: today, published when that list was. The newest such list is
+ *   taken, so a grid showing the current list ties with the channel and, being the first
+ *   source, wins the day (it has the "possible" half hours the text lacks). A grid still showing
+ *   a list the channel has since replaced or cancelled is older than the channel's day and loses.
+ * - Else it equals a list for yesterday: the site hasn't moved to the new day yet. Yesterday.
+ * - Else nothing confirms it. In the first hour after midnight it gets no date at all (null);
+ *   later it is today's with no publication time, so any dated list of the channel wins the day
+ *   and the grid is reported as disagreeing.
+ *
+ * `versions` is null when the channel couldn't be read. Exported for tests.
+ */
+export function dateGrid(
+  grid: Grid,
+  versions: readonly GpvVersion[] | null,
+  now: Date,
+): { date: string; publishedAt: string | null } | null {
+  const today = kyivDate(now)
+  const off = gridOff(grid)
+  for (const date of [today, addDays(today, -1)]) {
+    // newest first
+    for (let i = (versions?.length ?? 0) - 1; i >= 0; i--) {
+      const v = versions![i]!
+      if (v.date === date && versionOff(v) === off) return { date, publishedAt: v.at }
     }
   }
-  return {
-    region,
-    groups: Object.keys(schedules).sort(compareGroups),
-    schedules,
-    // the operator publishes no change time for the schedule
-    updatedAt: null,
-    fetchedAt: toKyivIso(now),
-  }
+  return kyivMinuteOfDay(now) < MIDNIGHT_DOUBT_MIN ? null : { date: today, publishedAt: null }
+}
+
+/** The grid shows the list that stands in the channel for the day it is dated: one publication, seen twice */
+function showsStandingList(grid: Grid, versions: readonly GpvVersion[], now: Date): boolean {
+  const date = dateGrid(grid, versions, now)?.date
+  const standing = date === undefined ? undefined : standingVersions(versions).get(date)
+  return !!standing && versionOff(standing) === gridOff(grid)
+}
+
+/** The site as a schedule source: its one day, dated by `dateGrid`. Exported for tests. */
+export function gridToSource(
+  grid: Grid | null,
+  versions: readonly GpvVersion[] | null,
+  now: Date,
+): SourceRead {
+  const groups = [...KIROVOHRAD_GROUPS]
+  const dated = grid && dateGrid(grid, versions, now)
+  if (!grid || !dated) return { days: {}, groups }
+  const schedules: Record<GroupId, DaySchedule> = {}
+  for (const [group, cells] of Object.entries(grid))
+    schedules[group] = {
+      date: dated.date,
+      status: 'scheduled',
+      intervals: cellsToIntervals(dated.date, cells),
+    }
+  return { days: { [dated.date]: { schedules, publishedAt: dated.publishedAt } }, groups }
 }
 
 /** `<select id="fn_office">` on the page. Exported for tests. */

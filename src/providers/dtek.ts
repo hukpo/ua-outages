@@ -1,8 +1,10 @@
 import { OutageError } from '../errors.js'
 import { normalizeGroup } from '../schedule.js'
 import type { AddressQuery, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import { asSource } from './as-source.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mergeSources } from './sources.js'
 import { cookieHeader } from '../util.js'
 
 /**
@@ -10,16 +12,29 @@ import { cookieHeader } from '../util.js'
  * schedule and the region's whole street list as JS assignments; house → group needs a
  * POST to /ua/ajax with the session cookie and CSRF token from that page.
  *
- * The sites sit behind Imperva. Some of them challenge non-browser clients; that surfaces
- * as an `OutageError` with code `blocked`. This SDK does not try to get around it.
+ * The sites sit behind Imperva. Some of them challenge non-browser clients on the page; that
+ * surfaces as an `OutageError` with code `blocked`.
+ *
+ * `route: 'ajax'` skips the page: /ua/ajax alone gives the same three things (`checkDisconUpdate`
+ * the schedule, `getStreets` the street list, `getHomeNum` the houses). A first POST without a
+ * token is refused with 400 and sets the CSRF cookie; the token for the next ones is derived
+ * from that cookie the way the page's own meta tag is. Kyiv region is read this way, because its
+ * page is challenged and its /ua/ajax is not. Where /ua/ajax is challenged too (Donetsk), the
+ * result is still `blocked`.
  */
 
 interface Session {
   at: number
   cookie: string
   csrf: string | null
-  streets: Record<string, string[]>
+  /** null until asked for on the ajax route, where the list is a request of its own */
+  streets: Record<string, string[]> | null
   schedule: RegionSchedule
+}
+
+interface DisconUpdate {
+  result: boolean
+  fact?: { data?: GpvDays; update?: string }
 }
 
 interface HomeNum {
@@ -33,6 +48,8 @@ export interface DtekOptions {
   info: Omit<ProviderInfo, 'capabilities'>
   /** Site code: kem, krem, dnem, dem, oem */
   code: string
+  /** Where the schedule and the street list come from; default `page` */
+  route?: 'page' | 'ajax'
   sampleAddress?: AddressQuery
 }
 
@@ -43,7 +60,57 @@ export function dtekProvider(o: DtekOptions): Provider {
   let pending: Promise<Session> | null = null
   const houseCache = new Map<string, HomeNum['data']>()
 
-  const load = async (ctx: ProviderContext): Promise<Session> => {
+  const sourceUrl = o.route === 'ajax' ? `${base}/ua/ajax` : `${base}/ua/shutdowns`
+
+  const post = <T>(
+    ctx: ProviderContext,
+    auth: { cookie: string; csrf: string },
+    form: Record<string, string>,
+  ) =>
+    ctx.http.json<T>(`${base}/ua/ajax`, {
+      region,
+      method: 'POST',
+      body: new URLSearchParams(form),
+      headers: { ...xhrHeaders(base), 'X-CSRF-Token': auth.csrf, Cookie: auth.cookie },
+    })
+
+  const loadAjax = async (ctx: ProviderContext): Promise<Session> => {
+    const url = `${base}/ua/ajax`
+    // refused for the missing token (400), but the refusal carries the CSRF cookie
+    const first = await ctx.http.raw(url, {
+      region,
+      method: 'POST',
+      body: new URLSearchParams(CHECK_ALL),
+      headers: xhrHeaders(base),
+      acceptStatus: [400],
+    })
+    const cookie = cookieHeader(first.headers)
+    const token = csrfFromCookie(cookie, o.code)
+    if (!token)
+      throw new OutageError('parse', `${o.info.operator}: no CSRF cookie from /ua/ajax (site changed?)`, {
+        region,
+        url,
+        status: first.status,
+      })
+    const auth = { cookie, csrf: maskCsrfToken(token) }
+    const res = await post<DisconUpdate>(ctx, auth, CHECK_ALL)
+    if (!res.result || !res.fact)
+      throw new OutageError('parse', `${o.info.operator}: /ua/ajax returned no schedule (site changed?)`, {
+        region,
+        url,
+      })
+    const s: Session = {
+      at: Date.now(),
+      ...auth,
+      streets: null,
+      schedule: gpvRegionSchedule(region, res.fact.data, res.fact.update, ctx.now()),
+    }
+    session = s
+    houseCache.clear()
+    return s
+  }
+
+  const loadPage = async (ctx: ProviderContext): Promise<Session> => {
     const { body, headers } = await ctx.http.raw(`${base}/ua/shutdowns`, {
       region,
       headers: { Accept: 'text/html,application/xhtml+xml' },
@@ -70,10 +137,26 @@ export function dtekProvider(o: DtekOptions): Provider {
     return s
   }
 
+  const load = o.route === 'ajax' ? loadAjax : loadPage
+
   const ensure = async (ctx: ProviderContext) => {
     if (session && Date.now() - session.at < SESSION_TTL) return session
     pending ??= load(ctx).finally(() => (pending = null))
     return pending
+  }
+
+  const streetsOf = async (ctx: ProviderContext): Promise<Record<string, string[]>> => {
+    const s = await ensure(ctx)
+    if (s.streets) return s.streets
+    if (!s.csrf) throw new OutageError('parse', `${o.info.operator}: no CSRF token`, { region })
+    const res = await post<{ result: boolean; streets?: Record<string, string[]> }>(
+      ctx,
+      { cookie: s.cookie, csrf: s.csrf },
+      { method: 'getStreets' },
+    )
+    if (!res.result || !res.streets)
+      throw new OutageError('parse', `${o.info.operator}: /ua/ajax returned no street list`, { region })
+    return (s.streets = res.streets)
   }
 
   const homeNum = async (ctx: ProviderContext, city: string, street: string) => {
@@ -82,25 +165,17 @@ export function dtekProvider(o: DtekOptions): Provider {
     if (hit) return hit
     const s = await ensure(ctx)
     if (!s.csrf) throw new OutageError('parse', `${o.info.operator}: no CSRF token on the page`, { region })
-    const form = new URLSearchParams({
-      method: 'getHomeNum',
-      'data[0][name]': 'city',
-      'data[0][value]': city,
-      'data[1][name]': 'street',
-      'data[1][value]': street,
-    })
-    const res = await ctx.http.json<HomeNum>(`${base}/ua/ajax`, {
-      region,
-      method: 'POST',
-      body: form,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'X-CSRF-Token': s.csrf,
-        'X-Requested-With': 'XMLHttpRequest',
-        Referer: `${base}/ua/shutdowns`,
-        Cookie: s.cookie,
+    const res = await post<HomeNum>(
+      ctx,
+      { cookie: s.cookie, csrf: s.csrf },
+      {
+        method: 'getHomeNum',
+        'data[0][name]': 'city',
+        'data[0][value]': city,
+        'data[1][name]': 'street',
+        'data[1][value]': street,
       },
-    })
+    )
     if (!res.result || !res.data)
       throw new OutageError('not-found', `${o.info.operator}: no houses for ${city}, ${street}`, { region })
     houseCache.set(key, res.data)
@@ -111,19 +186,23 @@ export function dtekProvider(o: DtekOptions): Provider {
     info: { ...o.info, capabilities: { schedule: true, addressSearch: true } },
     sampleAddress: o.sampleAddress,
 
-    async getSchedules(ctx) {
-      return (await load(ctx)).schedule
+    getSchedules(ctx) {
+      // the site is the only channel; days are dated by their own keys in `fact.data` and
+      // published at `fact.update`, so a site that stopped moving shows up as old days
+      return mergeSources(ctx, region, [
+        { id: 'site', url: sourceUrl, read: async () => asSource((await load(ctx)).schedule) },
+      ])
     },
 
     async searchCities(ctx, query) {
-      const s = await ensure(ctx)
-      return Object.keys(s.streets).map((name) => ({ id: name, name }))
+      const streets = await streetsOf(ctx)
+      return Object.keys(streets).map((name) => ({ id: name, name }))
     },
 
     async searchStreets(ctx, query, city) {
       if (!city) throw new OutageError('not-found', `${o.info.name}: pick a city first`, { region })
-      const s = await ensure(ctx)
-      return (s.streets[city.id] ?? []).map((name) => ({
+      const streets = await streetsOf(ctx)
+      return (streets[city.id] ?? []).map((name) => ({
         id: name,
         name,
         cityId: city.id,
@@ -152,6 +231,45 @@ export function dtekProvider(o: DtekOptions): Provider {
       }
     },
   }
+}
+
+/** Asks for everything: any real `fact.update` is newer than this one */
+const CHECK_ALL = { method: 'checkDisconUpdate', update: '01.01.2000 00:00' }
+
+const xhrHeaders = (base: string) => ({
+  'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+  'X-Requested-With': 'XMLHttpRequest',
+  Origin: base,
+  Referer: `${base}/ua/shutdowns`,
+})
+
+/**
+ * The CSRF token inside the site's `_csrf-dtek-<code>` cookie (Yii2: a signature followed by
+ * the PHP-serialized pair of cookie name and token). Exported for tests.
+ */
+export function csrfFromCookie(cookie: string, code: string): string | null {
+  const raw = new RegExp(`(?:^|;\\s*)_csrf-dtek-${code}=([^;]+)`).exec(cookie)?.[1]
+  if (!raw) return null
+  let value: string
+  try {
+    value = decodeURIComponent(raw)
+  } catch {
+    return null
+  }
+  return /i:1;s:\d+:"([^"]+)";\}$/.exec(value)?.[1] ?? null
+}
+
+/**
+ * The form of the token the site accepts in `X-CSRF-Token`, the same one it prints in the
+ * page's meta tag: base64url of a random mask followed by mask XOR token. Exported for tests.
+ */
+export function maskCsrfToken(token: string, mask?: Uint8Array): string {
+  const bytes = new TextEncoder().encode(token)
+  const m = mask ?? globalThis.crypto.getRandomValues(new Uint8Array(bytes.length))
+  let bin = ''
+  for (const b of m) bin += String.fromCharCode(b)
+  bytes.forEach((b, i) => (bin += String.fromCharCode(b ^ m[i]!)))
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_')
 }
 
 /** Extracts `DisconSchedule.<name> = <json>` assignments (one per line). Exported for tests. */

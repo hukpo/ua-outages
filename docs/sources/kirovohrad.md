@@ -4,7 +4,7 @@ Researched 2026-11-05. Domain: **kiroe.com.ua**, behind Cloudflare. GPV was acti
 
 ## TL;DR
 
-- **Schedule:** an official JSON endpoint gives a per-queue half-hour grid for the **current day only**: `POST /electricity-blackout/actual-gpv-graphs`.
+- **Schedule:** an official JSON endpoint gives a per-queue half-hour grid for the **current day only**: `POST /electricity-blackout/actual-gpv-graphs`. Tomorrow and the change times come from the operator's Telegram channel; see "Two channels" below.
 - **Address → queue:** official JSON endpoints: office (ОТГ) → city → street → house. The house list already includes `chergGpv` (e.g. `"5.1"`).
 - **Plain fetch works.** You need:
   1. a `Referer: https://kiroe.com.ua/electricity-blackout` header on the AJAX POSTs (without it Cloudflare returns 403 "Just a moment...");
@@ -73,13 +73,80 @@ Map `1` to `off` and `10` to `maybe`. Merge adjacent slots of the same kind. The
 
 The official renderer collapses each hour into one cell, treating `0+10` as on and `1+10` as off. Keep the half-hour resolution instead.
 
-**Date:** the response has **no date or timestamp field**. It is "today" in Europe/Kyiv at fetch time. UNVERIFIED: whether it flips at midnight, and whether it is ever pre-filled for tomorrow. The JS has no tomorrow endpoint. The fixture was fetched 2026-11-05 at about 23:37 Kyiv time and matches the 5 Nov forecast (2→3→2 queues).
+**Date:** the response has **no date or timestamp field**. It flips to the new day at or shortly after midnight (still 16.11 at 23:45, already 17.11 at 00:25 on 17.11.2026) and is never pre-filled for tomorrow (`?date=`, a `date` field and guessed paths all return today's grid). The SDK dates it by the Telegram list it shows, see "Two channels". The JS has no tomorrow endpoint. The fixture was fetched 2026-11-05 at about 23:37 Kyiv time and matches the 5 Nov forecast (2→3→2 queues).
 
 When GPV is not active, the frontend expects `data` to be empty/falsy and shows "Відключень не заплановано", but we have no sample yet (UNVERIFIED). The `data:[]` empty shape (wrong or missing token) looks the same, so the SDK must tell the two apart by validating the session first, e.g. check that `/city/{id}` returns rows.
 
 **Freshness:** `last_modify` on city/street/house rows (e.g. `2026-11-05 22:48:22`, Kyiv) shows when the address DB was synced. There's no freshness field for the schedule.
 
 **Groups:** `1.1`..`6.2`.
+
+## Two channels: the site for today, Telegram for tomorrow and for every change time
+
+Measured 2026-11-17 (`research/freshness/CHANNELS-B.md`), implemented in `src/providers/kirovohrad.ts` and
+`src/providers/kirovohrad-telegram.ts`.
+
+| channel                                    | has                                                                                                | lacks                                                       |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| site grid (`/actual-gpv-graphs`)           | today, with the "possible" half hours                                                              | tomorrow (never before midnight), any date, any change time |
+| Telegram `t.me/s/SvitloKropyvnytskyiMisto` | the list for tomorrow 20:38–23:35 the evening before (13 of 13 days), every change, a time on each | the "possible" half hours                                   |
+
+### The channel's posts
+
+Posted by the dispatcher's system, as text (plus a picture of the same table):
+
+- first publication: `17.11.2026 за розпорядженням НЕК "Укренерго" буде діяти наступний графік погодинних відключень (ГПВ):`, then `Черга 1.1: 08-10, 16-18, 20-22` per group. The change time is the post time.
+- change: `На 17.11.2026 за розпорядженням НЕК "Укренерго" внесено зміни до графіка погодинних відключень (ГПВ) станом на 23:56 16.11.2026:` and the list. The change time is the `станом на` stamp (the post follows within a minute; a stamp more than an hour from the post is ignored in favour of the post time).
+- cancellation: `15.11.2026 за наказом НЕК "Укренерго" ГПВ та ГОП скасовано до окремого розпорядження.` Nobody is off from then on; lists already posted for later days are void until a new one comes (16.11's came 17 minutes later).
+- emptied list, seen only in a district channel (`t.me/SvitloHolovanivskohoRayonu/1792`): `На 15.11.2026 за розпорядженням НЕК "Укренерго" скасовано графік погодинних відключень (ГПВ) станом на 20:00 15.11.2026:`. Read as a cancellation of that day.
+- until the morning of 05.11.2026 the wording was `05.11.2026 - Графік погодинних відключень` / `Зміни на 08:56 05.11.2026 до графіка погодинних відключень`, with the date after `"Укренерго"`. Both are read.
+
+Rules, read off 92 lists of 26.10–16.11.2026:
+
+- every list states the whole day as ordered at that moment and replaces the one before. A group it leaves out has no outages (post 1816 lists ten groups, 1820 six). Past hours may be gone from a later list.
+- hours without minutes (`14-16`), half hours as `00-01:30`, `22-23`.
+- no "possible" half hours: tomorrow, read from the channel, has `off` intervals only; they appear when the day becomes today on the site.
+- СГАВ notices (`16.11.26 в 16:27 застосовано СГАВ`), forecasts and ГОП orders are not lists and are skipped (the emergency reader has the first).
+- a list or cancellation posted since yesterday that can't be read exactly (odd hours, a group outside 1.1–6.2, a date that isn't the post's day or the two after, a ГПВ cancellation in unknown words) fails the whole channel with `parse`; the site then stands alone.
+
+### Does one channel stand for the oblast?
+
+The site lists 21 district channels and says the lists go to all of them automatically. Checked on 2026-11-17 for six of them
+(`SvitloOleksandriyskohoRaionu`, `SvitloSvitlovodskohoRaionu`, `znamelektro`, `rem_ng`, `novomyrhorod1`, `SvitloHolovanivskohoRayonu`):
+every ГПВ list on their newest preview page (15–18 each, 14.11 08:38 – 16.11 23:56) is identical, group by group, to the city
+channel's list of the same moment, posted within 2 minutes of it. One difference: the Holovanivsk channel has the emptied list of
+15.11 20:00 (post 1792, 20:07) that the city channel lacks; the city got the cancellation at 20:24 only. The other 14 channels
+were not read. The site's grid is one grid for the whole company and equalled the channel's list both times it was saved.
+
+So the region result is the company-wide ГПВ by group, read from the city channel. A district channel would do as well; none is
+read as a fallback yet.
+
+### Merge
+
+Both are read on every call (`mergeSources`); each day comes from the one that published it last.
+
+The grid has no date or time of its own, so it is given the date and time of the channel's list it shows: its `off` half hours
+equal the list's hours exactly (05.11.2026 23:37 grid = post 1755; 17.11.2026 00:43 grid = post 1828; the grid only adds a
+"possible" half hour on each side of a block).
+
+| the grid's `off` half hours equal                         | the grid is                                       | who supplies the day                                                                           |
+| --------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| the channel's current list for today                      | today, published when that list was               | the site (a tie goes to it): same outages, plus the "possible" half hours                      |
+| an earlier list for today, since replaced or cancelled    | today, published when that earlier list was       | the channel: it is newer. The site is marked `disagrees`                                       |
+| a list for yesterday (and none for today)                 | yesterday's: the site hasn't moved to the new day | the channel for today; the site's day is returned as yesterday                                 |
+| none of them, 01:00 or later                              | today, no publication time                        | the channel when it has today (a dated list beats an undated grid; `disagrees`), else the site |
+| none of them, 00:00–00:59 (also when the channel is down) | not dated: it may be yesterday's                  | the channel when it has today, else nobody (`unknown`)                                         |
+
+Why the channel wins when they differ: its list carries a date and the operator's time; a grid that matches no list can't be
+shown to be today's or current. The price is the "possible" half hours for that day.
+
+- Tomorrow is always the channel's.
+- `updatedAt` is the change time of the newest list in the result: the `станом на` stamp or the post time.
+- A cancellation newer than the list the grid shows wins: every group gets `no-outages` for that day.
+- Channel down: today from the site with `updatedAt: null`, no tomorrow, `sources[1].ok = false`. Site down or its session rejected: the channel's lists, `sources[0].ok = false`. Both down: the site's error.
+- The 12 groups are always listed; an empty grid with nothing in the channel leaves them `unknown`.
+
+Not verified: the minute the grid moves to the new day (it had by 00:25 on 17.11 and hadn't at 23:45 on 16.11), hence the hour of doubt; what the grid shows after a cancellation; a grid for a list with odd minutes.
 
 ## Address search flow
 
@@ -101,6 +168,8 @@ office (ОТГ id from the page `<select>`, or a hardcoded list of 51) → `/cit
 - `blackout-get-house-info-96451.json`, `blackout-get-house-message.json`
 - `blackout-page-offices.html`: excerpt of the office `<select>` and the config block (token redacted).
 - `warning-outage-forecast-november-{5,6}-2026.excerpt.html`: forecast posts that give only the number of queues.
+- `blackout-actual-gpv-graphs.2026-11-17T0043.json`: the grid 43 minutes after midnight (= post 1828).
+- `telegram-SvitloKropyvnytskyiMisto-1813-1828.trimmed.html`, `…-1747-1755.trimmed.html`, `telegram-SvitloHolovanivskohoRayonu-1791-1793.trimmed.html`: channel preview pages cut down to the posts named (test fixtures).
 
 ## Reference repos
 

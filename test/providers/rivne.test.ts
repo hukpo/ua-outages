@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import { parseDisconnections, rivneProvider } from '../../src/providers/rivne.js'
 import { fixture, mockFetch } from '../helpers.js'
 
@@ -31,7 +32,8 @@ describe('Rivneoblenergo', () => {
       '6.2',
     ])
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-02-10', '2026-02-11'])
-    expect(s.updatedAt).toBe('2026-02-10T22:00:00+02:00')
+    // "Оновлено: 10.02.2026 22:00" is a half-hourly job's stamp, not a change time
+    expect(s.updatedAt).toBeNull()
   })
 
   it('maps "23:59" to midnight', () => {
@@ -56,7 +58,29 @@ describe('Rivneoblenergo', () => {
     })
     const now = parseDisconnections(CURRENT, NOW)
     expect(Object.values(now.schedules).every((days) => days.every((d) => d.status === 'unknown'))).toBe(true)
-    expect(now.updatedAt).toBe('2026-11-05T23:30:00+02:00')
+    expect(now.updatedAt).toBeNull()
+  })
+
+  it('never presents an old page as today: rows are dated by their own cell', () => {
+    // the February page (two full days) read in November
+    const later = new Date('2026-11-17T09:00:00+02:00')
+    const old = parseDisconnections(FEB, later)
+    expect(old.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-02-10', '2026-02-11'])
+    expect(assessFreshness(old, { now: later })).toMatchObject({
+      state: 'stale',
+      today: 'missing',
+      coveredThrough: '2026-02-11',
+      ageMinutes: null,
+    })
+  })
+
+  it('keeps yesterday\'s row yesterday after midnight, whatever "Оновлено:" says', () => {
+    // 17.11 00:28: the only row is still 16.11 ("Очікується"), under "Оновлено: 17.11.2026 00:00"
+    const at = new Date('2026-11-17T00:28:00+02:00')
+    const s = parseDisconnections(fixture('rivne/disconnections.current-2026-11-17.fragment.html'), at)
+    expect(s.schedules['1.1']).toEqual([{ date: '2026-11-16', status: 'unknown', intervals: [] }])
+    expect(s.updatedAt).toBeNull()
+    expect(assessFreshness(s, { now: at })).toMatchObject({ state: 'unpublished', today: 'missing' })
   })
 
   it('rejects a changed format', () => {
@@ -66,11 +90,8 @@ describe('Rivneoblenergo', () => {
     )
   })
 
-  it('has no address search', async () => {
+  it('offers the address search (test/providers/rivne-addresses.test.ts)', () => {
     const c = new OutageClient({ fetch: mockFetch([]).fetch, providers: [rivneProvider()] })
-    expect(c.region('rivne').capabilities.addressSearch).toBe(false)
-    await expect(c.findGroup('rivne', { street: 'Соборна', house: '1' })).rejects.toMatchObject({
-      code: 'unsupported',
-    })
+    expect(c.region('rivne').capabilities.addressSearch).toBe(true)
   })
 })

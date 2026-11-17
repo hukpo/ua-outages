@@ -1,16 +1,36 @@
 name: Source health
 
-# Grid operators change their sites without notice. This hits every live source daily and
-# fails (so GitHub emails the maintainers) when a parser or lookup breaks.
-# Note: runners are outside Ukraine; a source that blocks foreign IPs shows up as `blocked`.
+# Grid operators change their sites without notice. This hits every live source every 30 minutes
+# and, when a parser or lookup breaks, opens an issue "Source health: <failing regions>" (label
+# `source-health`; the title names at most five and counts the rest). While it stays broken the
+# same issue is reused: it gets the new title and body and a comment whenever the set of failing
+# regions changes, and the first green run closes it. The run itself stays green once the issue
+# is filed, so nobody gets an email every half hour; it is red only when the check couldn't run
+# at all.
+# Note: runners are outside Ukraine; a source that blocks foreign IPs shows up as `blocked`
+# (and belongs in the skip list below, or the issue never closes).
 on:
   schedule:
-    - cron: '17 6 * * *'
+    - cron: '17,47 * * * *'
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: source-health
+  cancel-in-progress: false
 
 jobs:
   health:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      # DTEK's Donetsk site answers non-browser clients with a bot check; drop it from the skip
+      # list once that changes
+      HEALTH_ARGS: --address --json --skip donetsk
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,6 +38,69 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # DTEK's Kyiv-region and Donetsk sites answer non-browser clients with a bot check;
-      # drop them from the skip list once that changes
-      - run: npm run health -- --address --skip kyiv-region,donetsk
+
+      # Exit 0 = all work, 1 = something is broken (scripts/health.ts). One failed request
+      # shouldn't open an issue: a failing check is repeated after two minutes, and only the
+      # second result counts.
+      - name: Check every source
+        run: |
+          check() { npx tsx scripts/health.ts $HEALTH_ARGS > report.json; }
+          if ! check; then
+            sleep 120
+            check || true
+          fi
+          # no report at all: the script crashed, which is a failure of this workflow
+          jq -e '.regions | length > 0' report.json > /dev/null
+          jq -r '.regions[] | "\(.status)\t\(.region)\t\(.message // "")"' report.json
+
+      - name: Open, update or close the issue
+        run: |
+          # broken = what makes the check exit 1: an `error` region or a failed address lookup
+          jq '[.regions[] | select(.status == "error" or .address.ok == false)]' report.json > failing.json
+          regions=$(jq -r 'map(.region) | join(", ")' failing.json)
+          gh label create source-health --color B60205 --description "A source stopped working" --force
+          open=$(gh issue list --label source-health --state open --json number --jq '.[0].number // empty')
+          # an issue title holds 256 characters, and 26 uz-* regions fail together when their one
+          # site does: name five, count the rest
+          title="Source health: $(jq -r '(map(.region)) as $r | ($r[:5] | join(", ")) + (if ($r | length) > 5 then " +\(($r | length) - 5) more" else "" end)' failing.json)"
+          # what tells one set of failing regions from another, kept in the issue body
+          marker="<!-- source-health: $(jq -r 'map(.region) | sort | join(",")' failing.json) -->"
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          if [ -z "$regions" ]; then
+            if [ -n "$open" ]; then
+              gh issue close "$open" --comment "All sources work again ([run]($run))."
+            fi
+            exit 0
+          fi
+
+          {
+            echo "The source health check ([run]($run)) found broken sources: **$regions**"
+            echo
+            jq -r '.[] | "- `\(.region)`: \(if .status == "error" then .message else "address lookup: \(.address.message)" end)"' failing.json
+            echo
+            echo "Runners are outside Ukraine: \`blocked\` may mean the operator blocks foreign addresses."
+            echo
+            echo "<details><summary>Report (failing regions)</summary>"
+            echo
+            echo '```json'
+            # an issue body holds 65536 characters
+            head -c 40000 failing.json
+            echo
+            echo '```'
+            echo
+            echo "</details>"
+            echo
+            echo "$marker"
+          } > body.md
+
+          if [ -z "$open" ]; then
+            gh issue create --title "$title" --label source-health --body-file body.md
+          elif body=$(gh issue view "$open" --json body --jq .body) && [ "${body#*"$marker"}" = "$body" ]; then
+            # the set of failing regions changed: say so once, not every half hour. The issue
+            # takes the new marker first, so a comment that fails isn't repeated on every run
+            gh issue edit "$open" --title "$title" --body-file body.md
+            gh issue comment "$open" --body-file body.md
+          else
+            echo "Still broken, already reported in #$open: $regions"
+          fi

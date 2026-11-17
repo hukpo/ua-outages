@@ -9,6 +9,7 @@ import {
   hydraList,
   powerOnAddressSearch,
   rankGroups,
+  uncachedJson,
   type PowerOnBuilding,
 } from './poweron.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -19,7 +20,8 @@ import { findUaDate, parseGroupLines } from './ua-text.js'
  *
  * - `api.loe.lviv.ua` serves the schedule as a menu with "Today" and "Tomorrow" items whose
  *   `rawHtml` is prose: "Група 1.1. Електроенергії немає з 08:00 до 12:00." The response also
- *   inlines the whole archive, so it is 2–3 MB; there is no smaller endpoint.
+ *   inlines the whole archive, so it is 2–3 MB; there is no smaller endpoint. Cloudflare caches
+ *   it (`s-maxage=7200`), so it is requested with a cache-busting parameter (`uncachedJson`).
  * - `power-api.loe.lviv.ua` serves the address directory; its `pw_accounts` has one row per
  *   customer account, so buildings are deduplicated here.
  */
@@ -66,7 +68,8 @@ export function lvivProvider(): Provider {
     sampleAddress: { city: 'Львів', street: 'вул. Городоцька', house: '171' },
 
     async getSchedules(ctx) {
-      return parseLvivMenu(await ctx.http.json(SCHEDULE_URL, { region }), ctx.now())
+      // past Cloudflare, which otherwise serves this for up to two hours
+      return parseLvivMenu(await uncachedJson(ctx, SCHEDULE_URL, { region }), ctx.now())
     },
 
     ...powerOnAddressSearch({

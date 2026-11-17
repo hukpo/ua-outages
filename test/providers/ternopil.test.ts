@@ -64,6 +64,27 @@ describe('Ternopiloblenergo', () => {
     expect(decodeKey(h['X-debug-key']!)).toBe(`${r22.cityId}/${r22.streetId}/2-В`)
   })
 
+  it('keeps the groups apart in the URL and goes past the CDN cache', async () => {
+    const { client: c, calls } = client()
+    await c.getSchedules('ternopil')
+    const urls = calls.filter((x) => x.url.includes('/a_gpv_g?')).map((x) => new URL(x.url))
+    // Cloudflare's cache key ignores X-debug-key (the address): without `group[]` and `time`
+    // in the URL all twelve requests would be one cache entry, i.e. one group's schedule
+    const withoutBuster = urls.map((u) => {
+      const q = new URLSearchParams(u.search)
+      q.delete('_')
+      return q.toString()
+    })
+    expect(new Set(withoutBuster).size).toBe(12)
+    for (const u of urls) {
+      const g = u.searchParams.get('group[]')!
+      const r = REPRESENTATIVES[g]!
+      expect(u.searchParams.get('time')).toBe(`${r.cityId}${r.streetId}${r.house}`)
+      // `s-maxage=7200`: a new key per call is what makes a change visible at once
+      expect(u.searchParams.get('_')).toBe(String(Math.floor(NOW.getTime() / 1000)))
+    }
+  })
+
   it('reads half-hour slots with possible-outage edges', async () => {
     const s = await client().client.getSchedules('ternopil')
     expect(s.groups).toEqual([

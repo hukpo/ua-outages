@@ -48,6 +48,7 @@ function foldAt(region: RegionId, channel: string, ids: number[], now: string) {
       at: toKyivIso(new Date(p.at)),
       text: p.text,
       edited: false,
+      photos: [],
     }
   })
   return foldEvents(

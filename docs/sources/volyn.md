@@ -64,3 +64,49 @@ curl --compressed -X POST https://energy.volyn.ua/spozhyvacham/perervy-u-elektro
 ## Emergency schedules (ГАВ)
 
 The `cherga` table has a 6th column "Черга у ГАВ", returned in `emergency`. No operator channel announces ГАВ; live status falls back to @Ukrenergo. See [emergency.md](emergency.md).
+
+## What the SDK reads (updated 2026-11-17)
+
+One channel, `site`: the archive API. There is no second official channel to merge with
+(`@volynoblenergo` on Telegram has no post since 11.09.2023; Facebook and Viber aren't fetchable),
+so `sources` has one entry.
+
+- `GET /api/archive_gpv_graphs?page=1` lists the pictures per `dateGraph`, newest first. For
+  every date from today on (up to two days ahead) the newest picture is read by colour. Tomorrow's
+  picture is in the archive the evening before (for 18.10 at 17.10 22:12, for 19.10 at 18.10
+  22:32, for 20.10 at 19.10 22:26), so today and tomorrow come in one result from then on.
+- A picture for a past date is never today: with nothing dated today or later the twelve groups
+  are `unknown` (`updatedAt: null`, `assessFreshness` → `unpublished`).
+- `updatedAt` / `publishedAt` = `imageUrl.uploadTimestamp` of the picture read, which is true UTC
+  (17.10 18:47:23 Kyiv for the last of that day's seven versions). `dateCreate` is the same moment
+  as Kyiv wall time labelled `+00:00` (the picture says "станом на 22:26" for
+  `22:26:04+00:00`); it is used only for an entry without the upload time.
+- A date whose newest picture holds no readable table → `parse` (the source is `ok: false`; it
+  is the only one, so the call fails).
+
+### Autocomplete
+
+The `cherga` form answers nothing without a street fragment, so there is no settlement
+directory and no `searchCities`: the settlement is free text. The provider declares
+`remoteSearch: { streets: true }`, like a provider whose server does the searching:
+
+```ts
+const streets = await client.searchStreets('volyn', 'Вин', { city: { id: '', name: 'Луцьк' } })
+// Винокурна; Винниченка
+const houses = await client.searchHouses('volyn', streets[1])
+const match = await client.groupOf('volyn', houses[0], streets[1])
+```
+
+- `searchStreets` posts `formCity=Луцьк&formStreet=Вин` (bare names, no "м."/"вул.") and keeps
+  the records of the settlement named exactly so: the form matches substrings, and "Луцьк" also
+  brings "Прилуцьке". A fragment under three letters returns `[]` without a request ("а" in
+  Lutsk matches 2,987 records). Two settlements of one name in different districts are told
+  apart in the street name ("… (Ковельський район)"); the street id is `district|city|street`.
+- `findGroup` (`matchRecords`) keeps such namesakes apart too: when the records of the settlement
+  and street asked for come from several districts it needs `district` ("Луцький", "Луцький
+  район") and otherwise answers `not-found` naming the districts, never the other village's
+  group. House numbers are compared without their spelling ("67-А" = "67а") but with what
+  separates two numbers: "2/3" is not "23".
+- `searchHouses` and `groupOf` use the records of that answer (no more requests); a street id
+  kept from an earlier session is asked for again.
+- `findGroup` with a full address still works through `lookupAddress` (one request).

@@ -181,3 +181,34 @@ export function searchFragments(query: string, kind: NameKind, count = 3): strin
   }
   return [...out]
 }
+
+/** The type a street name states: its first or last word. null when it has none or it isn't clear */
+function statedType(name: string): string | null {
+  const words = name.toLowerCase().replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean)
+  if (words.length < 2) return null
+  // "пр." is a проспект in one town and a провулок in the next
+  const of = (w: string) => (w === 'пр' ? null : streetType(w))
+  const first = of(words[0]!)
+  const last = of(words.at(-1)!)
+  // "вул. Набережна": a name that is itself a type word says nothing certain
+  if (first && last) return null
+  return first ?? last
+}
+
+/**
+ * Whether a ranked street can be the one asked for. The ranking forgives a missing word, so
+ * "2-й провулок Миру" scores well against "Миру" and "вул. Миру" against "просп. Миру": other
+ * streets. An address lookup takes a candidate only when both names carry the same numbers and don't
+ * state different types; a name without a type (many operators list none) fits any.
+ */
+export function sameStreet(query: string, candidate: string): boolean {
+  const qt = statedType(query)
+  const ct = statedType(candidate)
+  if (qt && ct && qt !== ct) return false
+  const numbers = (s: string) =>
+    tokens(s, 'street')
+      .filter((t) => /\d/.test(t))
+      .sort()
+      .join(' ')
+  return numbers(query) === numbers(candidate)
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import { parseActive } from '../../src/providers/mykolaiv.js'
 import { fixture, mockFetch, expectUnpublished } from '../helpers.js'
 
@@ -52,6 +53,39 @@ describe('Mykolaivoblenergo', () => {
       '6.2',
     ])
     expect(s.updatedAt).toMatch(/^2026-11-05T/)
+  })
+
+  it('reports the API as its one source, published when the rows last changed', async () => {
+    const s = await client().client.getSchedules('mykolaiv')
+    // the newest `series[].updated_at` (UTC in the API)
+    expect(s.updatedAt).toBe('2026-11-05T21:32:43+02:00')
+    expect(s.sources).toEqual([
+      {
+        id: 'api',
+        url: 'https://off.energy.mk.ua/',
+        ok: true,
+        dates: ['2026-11-05', '2026-11-06'],
+        updatedAt: '2026-11-05T21:32:43+02:00',
+      },
+    ])
+    expect(assessFreshness(s, { now: NOW })).toMatchObject({
+      state: 'fresh',
+      tomorrow: 'published',
+      issues: [],
+    })
+  })
+
+  it('is stale when no day of the answer covers now', () => {
+    const slots = JSON.parse(fixture('mykolaiv/time-series.json'))
+    const queues = JSON.parse(fixture('mykolaiv/outage-queue-by-type-3.json'))
+    const active = JSON.parse(fixture('mykolaiv/schedule-active-2026-11-05.json'))
+    // the answer of 05.11 (days 05.11 and 06.11) still served on 07.11: days keep their own dates
+    const now = new Date('2026-11-07T10:00:00+02:00')
+    const s = parseActive(slots, queues, active, now)
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05', '2026-11-06'])
+    const f = assessFreshness(s, { now })
+    expect(f).toMatchObject({ state: 'stale', today: 'missing', coveredThrough: '2026-11-06' })
+    expect(f.issues.map((i) => i.code)).toContain('behind')
   })
 
   it('treats an empty active list as nothing published: groups unknown, not "no outages"', () => {

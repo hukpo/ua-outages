@@ -60,6 +60,7 @@ export function createProviders(): Provider[] {
       regionId: 3,
       dsoId: 303,
       hasCities: true,
+      sampleAddress: { city: 'Вільногірськ', street: 'бульвар Миру', house: '15' },
     }),
     dtekProvider({
       info: {
@@ -79,6 +80,8 @@ export function createProviders(): Provider[] {
         website: 'https://www.dtek-krem.com.ua/ua/shutdowns',
       },
       code: 'krem',
+      route: 'ajax',
+      sampleAddress: { city: 'Ірпінь', street: 'вул. Західна', house: '2' },
     }),
     dtekProvider({
       info: {

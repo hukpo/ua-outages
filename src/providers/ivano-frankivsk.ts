@@ -138,7 +138,9 @@ export function ivanoFrankivskProvider(): Provider {
 
 /**
  * Merges the per-group responses. Each is a list of days; a day may list only the requested
- * group or all of them, so every group found in any response is used. Exported for tests.
+ * group or all of them, so every group found in any response is used. Every day is dated by its
+ * own `eventDate`, so a day the backend keeps serving after it has passed stays that day (and
+ * `assessFreshness` calls the result `behind`), never today. Exported for tests.
  */
 export function parseQueueSchedules(responses: readonly unknown[], now: Date): RegionSchedule {
   const region = INFO.id
@@ -164,7 +166,8 @@ export function parseQueueSchedules(responses: readonly unknown[], now: Date): R
         if (!group) continue
         groups.set(group, toDay(date, intervals ?? []))
       }
-      const stamp = parseUaDateTime(day.scheduleApprovedSince ?? day.createdAt)
+      // when this version of the day was approved; `createdAt` when that one can't be read
+      const stamp = parseUaDateTime(day.scheduleApprovedSince) ?? parseUaDateTime(day.createdAt)
       if (stamp && (!updated || Date.parse(stamp) > Date.parse(updated))) updated = stamp
     }
   }

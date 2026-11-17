@@ -2,6 +2,22 @@
 
 Researched 2026-11-05. GPV was active on 4, 5 and 6 Nov 2026, so the samples are live and populated.
 
+## What the SDK reads (since 2026-11-17)
+
+Measured 17.11.2026, see `research/freshness/CHANNELS-A.md` and `ADDRESS-COVERAGE.md`.
+
+| Source id                         | Channel                                                                          | Role    |
+| --------------------------------- | -------------------------------------------------------------------------------- | ------- |
+| `site`                            | CMS API: `posts/search?q=ГПВ&size=20`, then the posts for today and later (≤ 10) | primary |
+| `telegram:@pat_cherkasyoblenergo` | `https://t.me/s/pat_cherkasyoblenergo`, posts since yesterday noon (≤ 2 pages)   | second  |
+
+- **Which is first.** They are published together: Telegram a median 3 min after the site's `publishedAt` (−1…+9, 22 pairs). But for 17.11 the site had no post at all from 16.11 23:45 (the Telegram post) to at least 05:30 the next morning.
+- **Merge** (`mergeSources`): per date the newer of `publishedAt` and the Telegram post time wins; `updatedAt` is that time. So Telegram usually wins a date by minutes, with the same text.
+- An update posted during its own day lists only the hours still ahead (an outage in progress is listed from its start; a group with nothing more is left out). The SDK therefore layers a day's posts oldest first (`layerPublications` in `src/providers/posts.ts`): a post published before the day is the whole day; a later one keeps the earlier outages before the minute it takes effect and replaces the rest. Verified on 07.11 (five versions) and 15.11. For each day the site reader fetches the updates back to the first post published before the day began.
+- Only today and later is read: yesterday rebuilt from its last update alone would be half a day.
+- ГАВ notices, ГОП (industry) notices and district notices ("в Уманському районі … тимчасово не діють") have no group lines and are skipped.
+- **Address lookup** (`src/providers/cherkasy-addresses.ts`): the cabinet API below, with the Sectigo intermediate from `src/certs.ts`. Branches → settlements (one request per branch, cached for a day) → `street_list` → `house_list` → `ls_list_by_addr` → `disconn_by_ls&disconn_selector=2` for up to 8 accounts spread over the list, one request at a time. The most common group is `group`, the others `otherGroups` (вул. Хрещатик, 200 is half 1.1, half 5.1). `house_list` files one building under several spellings ("412- А", "412-А", "412 А"; "218/220", "218-220"), each with its own accounts: they are one entry here and the accounts of all of them are sampled together. A number that differs by a separator is another house (the same street has "2/3" and "23", "4/1" and "41") and is never taken for it. A house without household accounts → `not-found`. Account numbers never leave `groupOf`: not returned, not cached, and an error of a request carrying one is rebuilt without its URL. A town is also listed, further down, by other branches ("м. Черкаси" under Уманські…); only the entry that is first in its branch's list is kept. Health sample: Черкаси, б-р. Шевченка, 100 → 4.1.
+
 ## TL;DR
 
 - **Schedule:** free-text HTML inside CMS news posts, delivered through a clean JSON CMS API (`www.cherkasyoblenergo.com/api/v1/...`). You parse `HH:MM - HH:MM` ranges per queue line. There is no structured per-group JSON.

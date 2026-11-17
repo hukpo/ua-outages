@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import { parsePlanned } from '../../src/providers/yasno.js'
 import { fixture, mockFetch } from '../helpers.js'
 
@@ -70,6 +71,91 @@ describe('YASNO', () => {
     )
     expect(s.schedules['1.1']![0]!.status).toBe('emergency')
     expect(s.schedules['1.1']![1]!.intervals[0]!.kind).toBe('maybe')
+  })
+
+  it('asks past the CDN cache and reports the API as its one source', async () => {
+    const { client: c, calls } = client()
+    const s = await c.getSchedules('kyiv')
+    // the CDN keeps an answer for 5 minutes; an extra parameter reaches the origin
+    expect(calls[0]!.url).toMatch(/\/regions\/25\/dsos\/902\/planned-outages\?_=\d{10}$/)
+    expect(s.sources).toEqual([
+      {
+        id: 'api',
+        url: 'https://static.yasno.ua/kyiv/outages',
+        ok: true,
+        dates: ['2026-11-05', '2026-11-06'],
+        // `updatedOn`, the same for every group
+        updatedAt: '2026-11-05T21:15:03+02:00',
+      },
+    ])
+  })
+
+  it('dates days by their own date: a copy from before midnight is not relabelled', async () => {
+    // the 05.11 answer (today 05.11, tomorrow 06.11) read at 00:02 on 06.11
+    const now = new Date('2026-11-06T00:02:00+02:00')
+    const s = parsePlanned('kyiv', JSON.parse(fixture('yasno/planned-outages-25-902.json')), now)
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05', '2026-11-06'])
+    expect(assessFreshness(s, { now })).toMatchObject({
+      state: 'fresh',
+      today: 'published',
+      tomorrow: 'missing',
+    })
+    // and one that stopped moving is behind, not today's
+    const stuck = new Date('2026-11-08T12:00:00+02:00')
+    expect(assessFreshness({ ...s, fetchedAt: '2026-11-08T12:00:00+02:00' }, { now: stuck })).toMatchObject({
+      state: 'stale',
+      today: 'missing',
+      coveredThrough: '2026-11-06',
+    })
+  })
+
+  it('leaves tomorrow unknown while YASNO waits for the schedule', async () => {
+    // live, 17.11.2026 00:43: today ScheduleApplies, tomorrow WaitingForSchedule with no slots
+    const now = new Date('2026-11-17T00:45:00+02:00')
+    const { fetch } = mockFetch([
+      {
+        match: `${API}/regions/25/dsos/902/planned-outages`,
+        body: fixture('yasno/planned-outages-25-902-2026-11-17T0043.json'),
+      },
+    ])
+    const s = await new OutageClient({ fetch, now: () => now, cacheTtlMs: 0 }).getSchedules('kyiv')
+    expect(s.groups).toHaveLength(60)
+    expect(s.schedules['1.1']!.map((d) => [d.date, d.status])).toEqual([
+      ['2026-11-17', 'scheduled'],
+      ['2026-11-18', 'unknown'],
+    ])
+    // published at 00:00:01 on the day itself
+    expect(s.updatedAt).toBe('2026-11-17T00:00:01+02:00')
+    expect(s.sources![0]).toMatchObject({ dates: ['2026-11-17'], updatedAt: '2026-11-17T00:00:01+02:00' })
+    expect(assessFreshness(s, { now })).toMatchObject({ state: 'fresh', tomorrow: 'missing', issues: [] })
+  })
+
+  it('takes slots only from a schedule that applies', () => {
+    const day = (date: string, status: string) => ({
+      date: `${date}T00:00:00+02:00`,
+      status,
+      slots: [{ start: 60, end: 120, type: 'Definite' }],
+    })
+    const read = (today: string, tomorrow: string) =>
+      parsePlanned(
+        'kyiv',
+        { '1.1': { today: day('2026-11-05', today), tomorrow: day('2026-11-06', tomorrow) } },
+        NOW,
+      ).schedules['1.1']!.map((d) => [d.status, d.intervals.length])
+    // a preliminary list under WaitingForSchedule isn't the schedule: unknown, without intervals
+    expect(read('ScheduleApplies', 'WaitingForSchedule')).toEqual([
+      ['scheduled', 1],
+      ['unknown', 0],
+    ])
+    // an emergency today says nothing about tomorrow, though YASNO copies the status there
+    expect(read('EmergencyShutdowns', 'EmergencyShutdowns')).toEqual([
+      ['emergency', 0],
+      ['unknown', 0],
+    ])
+    expect(read('NoOutages', 'SomethingNew')).toEqual([
+      ['no-outages', 0],
+      ['unknown', 0],
+    ])
   })
 
   it('rejects a changed format', () => {

@@ -50,7 +50,7 @@ All `POST` form-urlencoded, field `disconn` = JSON string, base `https://www.poe
 
 ## Freshness / limits
 
-No explicit updated-at in the fragment (only "Зараз HH:MM" render time). No rate limiting observed; JS timeout 9 s on search → backend can be slow.
+Each day box ends with `<div style="text-align: end;font-size: 10px;">Оновлено: 16 листопада 2026 22:40</div>`: the operator's change time ("Зараз HH:MM" is only the render time). No rate limiting observed; JS timeout 9 s on search → backend can be slow.
 
 ## Reference repos
 
@@ -60,3 +60,11 @@ No explicit updated-at in the fragment (only "Зараз HH:MM" render time). No
 ## Emergency schedules (ГАВ)
 
 `gav_message` names the ГАВ queue ("залучено до ГАВ (черга 10)"), returned in `emergency`; "черга 0" counts as none. Live ГАВ status: @poltavaOE ("О 9:44 … ввести ГАВ (1-5 черга)", "ГАВ скасовано!"). See [emergency.md](emergency.md).
+
+## Freshness (measured 2026-11-17)
+
+- **One channel: the page fragment.** It is first and complete: the 17.11 block was stamped 16.11 22:40, the @poltavaOE post about it came at 22:43 and carries only the number of queues plus a picture.
+- **`updatedAt`**: the newest "Оновлено: D <month> YYYY HH:MM" of the day blocks (each block has its own; the fixture has 21:22 for 05.11 and 20:18 for 06.11). Before 17.11 the provider returned null although the stamp was there.
+- No caching headers on the fragment (`server: nginx`, no `Cache-Control`/`ETag`).
+- **Day**: the date in each block's header ("5 листопада 2026 року"), never the clock.
+- **Stale rule**: no block dated today ⇒ `behind` (or `unpublished` when there is no block at all). Tomorrow's block is on the page before midnight.

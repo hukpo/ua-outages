@@ -107,6 +107,22 @@ From the site JS: if a city has streets `[""]` (no streets) the page calls getHo
 `maybe` → maybe [h:00,h+1:00) · `mfirst` → maybe [h:00,h:30) · `msecond` → maybe [h:30,h+1:00) · `yes` → nothing.
 Merge adjacent same-kind intervals. Use `fact` for concrete dates; `preset` only as a weekly "possible" fallback.
 
+## Freshness
+
+Measured 2026-11-17 (`research/freshness/CHANNELS-B.md`).
+
+- `fact.update` ("16.11.2026 23:19", Kyiv time) is the operator's change time and becomes `updatedAt`; `preset.updateFact` repeats it.
+- The page is not cached (`cache-control: no-store, no-cache, must-revalidate`).
+- `fact.data` is keyed by the unix time of each day's Kyiv midnight, and every key becomes a day: tomorrow is in the result whenever the page has it (it had 17.11 before midnight on 16.11, last changed 23:19; when it first appears is not known).
+- Stale rule: days are dated by those keys, never by position, so a page whose `fact.today` is not today can't be shown as today. A page that stopped moving gives old days only (`assessFreshness`: `behind`, health `stale`).
+- No earlier official channel: @dtek_ua has no group times, the page links only a bot and a Viber community.
+- The region reports the page as its one entry in `sources`.
+
+Bot check: every response the provider reads (the page and each `/ua/ajax` POST) goes through the same test: a body under 20 KB
+containing `_Incapsula_Resource` is `blocked` (the stubs are 212–956 bytes, HTTP 200). A real page embeds the same script and is
+~930 KB, so the marker alone is not the signal. A small page without `DisconSchedule.fact` and without the marker is `blocked`
+too; a large one without it is `parse`.
+
 ## Address search flow
 
 1. GET page → keep cookies + csrf token + `DisconSchedule.streets` (city list & street list are local — no request per keystroke).

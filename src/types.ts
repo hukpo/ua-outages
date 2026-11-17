@@ -1,3 +1,5 @@
+import type { OutageErrorCode } from './errors.js'
+
 /**
  * Region ids, one per grid operator area. Not covered: Vinnytsia (data behind a bot check),
  * Kherson (no public schedule), Luhansk and Crimea.
@@ -123,6 +125,41 @@ export interface GroupSchedule {
   updatedAt: string | null
   /** When this SDK fetched it, ISO */
   fetchedAt: string
+  /** The region's `sources`, see `RegionSchedule.sources` */
+  sources?: SourceStatus[]
+  /** Set when this is the last good result served instead of a failed fetch, see `RegionSchedule.stale` */
+  stale?: StaleInfo
+}
+
+/**
+ * One channel a provider consulted for a result (the operator's site, its API, its official
+ * Telegram channel). Regions that read several channels list each, the failed ones too.
+ */
+export interface SourceStatus {
+  /** Which channel: 'site', 'api', 'telegram:@chernigivoblenergo', … Stable per region */
+  id: string
+  /** Where a person can see the same data; null when there is no such page */
+  url: string | null
+  /** False when reading this channel failed; `error` then says why */
+  ok: boolean
+  /** Days ("YYYY-MM-DD", sorted) this channel supplied to the result: the ones it had the newest data for */
+  dates: string[]
+  /** When the operator last published on this channel what the SDK read from it, ISO; null if it doesn't say */
+  updatedAt: string | null
+  error?: { code: OutageErrorCode; message: string }
+  /**
+   * Another channel won a day this one also has published data for, and their outage times
+   * differ. Usually this channel is simply behind; if the newer one is wrong, this is the trace.
+   */
+  disagrees?: boolean
+}
+
+/** Why a result is the last good one instead of a new one (`staleIfError`). */
+export interface StaleInfo {
+  /** When the data was fetched, ISO: its `fetchedAt` */
+  since: string
+  /** The failure of the fetch this result stands in for */
+  error: { code: OutageErrorCode; message: string }
 }
 
 /**
@@ -138,6 +175,61 @@ export interface RegionSchedule {
   schedules: Record<GroupId, DaySchedule[]>
   updatedAt: string | null
   fetchedAt: string
+  /**
+   * One entry per channel the provider consulted, in the provider's order (the primary first).
+   * Absent for regions that read a single channel and don't report it.
+   */
+  sources?: SourceStatus[]
+  /**
+   * Set only by `getSchedules(…, { staleIfError })`: the operator couldn't be read, and this is
+   * the last good result (fetched at `stale.since`) instead of an error. Never set on new data.
+   */
+  stale?: StaleInfo
+}
+
+// --- freshness ---
+
+export type FreshnessIssueCode =
+  /** No day of any group has published data. Not stale: silence is not staleness */
+  | 'nothing-published'
+  /** There is published data, but none for today or later: the source is stuck on a past day */
+  | 'behind'
+  /** `updatedAt` is older than `staleAfterHours`, and today isn't published */
+  | 'not-updated'
+  /** A channel of the region failed; the result comes from the others */
+  | 'source-failed'
+  /** Two channels have different outage times for the same day */
+  | 'sources-disagree'
+  /** The result is the last good one served instead of a failed fetch (`stale` is set) */
+  | 'last-good'
+  /** `fetchedAt` is older than `fetchedStaleAfterMinutes`: the caller holds an old object */
+  | 'fetched-long-ago'
+  /** Tomorrow isn't published although Kyiv time is past `tomorrowExpectedAt` */
+  | 'tomorrow-missing'
+  /** Today is published for some groups and `unknown` for others */
+  | 'partial'
+
+/** What `assessFreshness` says about a schedule. */
+export interface Freshness {
+  /**
+   * - `fresh`: nothing suggests the data is out of date (check `today` before telling a user
+   *   about today: `fresh` with `today: 'missing'` happens when only a later day is published);
+   * - `stale`: don't present it as current. One of `behind`, `not-updated`, `last-good`,
+   *   `fetched-long-ago` is in `issues`;
+   * - `unpublished`: the source answered and publishes nothing (`nothing-published`).
+   */
+  state: 'fresh' | 'stale' | 'unpublished'
+  /** Whether any group has published data (status other than `unknown`) for the Kyiv day of `now` */
+  today: 'published' | 'missing'
+  tomorrow: 'published' | 'missing'
+  /** Newest date with anything published (status other than `unknown`) in any group, or null */
+  coveredThrough: string | null
+  /** Minutes since the operator last changed it; null when the source doesn't say */
+  ageMinutes: number | null
+  /** Minutes since the SDK fetched it */
+  fetchedMinutesAgo: number
+  /** Everything found, stale-making or not; empty when all is well */
+  issues: { code: FreshnessIssueCode; message: string }[]
 }
 
 // --- address search ---
@@ -266,7 +358,7 @@ export interface EmergencyStatus {
 export type HealthStatus =
   /** Fetched and parsed, data looks current */
   | 'ok'
-  /** Fetched and parsed, but the operator hasn't updated it for a while */
+  /** Fetched and parsed, but the data is out of date: its freshness state is `stale` */
   | 'stale'
   /** Fetched fine, but there is no schedule (often simply means no outages now) */
   | 'empty'
@@ -279,8 +371,14 @@ export interface RegionHealth {
   latencyMs: number
   groups: number
   updatedAt: string | null
-  /** Human-readable reason for anything that isn't `ok` */
+  /** Human-readable reason for anything that isn't `ok`, and for an `ok` that is `degraded` */
   message?: string
+  /** `assessFreshness` of the fetched schedule; absent when nothing was fetched (`error`, no schedule source) */
+  freshness?: Freshness
+  /** The schedule's `sources`, when the region reports them */
+  sources?: SourceStatus[]
+  /** True when a channel of the region failed but the others still gave a result (any status but `error`) */
+  degraded?: boolean
   /** Result of the sample address lookup, when requested */
   address?: { ok: boolean; group?: GroupId; message?: string }
 }

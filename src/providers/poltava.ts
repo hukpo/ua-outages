@@ -1,7 +1,7 @@
 import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
 import { cellsToIntervals, compareGroups, normalizeGroup } from '../schedule.js'
-import { toKyivIso } from '../time.js'
+import { kyivInstant, toKyivIso } from '../time.js'
 import type {
   City,
   DaySchedule,
@@ -154,10 +154,16 @@ export function poltavaProvider(): Provider {
   }
 }
 
-/** Exported for tests. */
+/**
+ * The fragment → schedule. Every day block carries its own date ("5 листопада 2026 року"), so a
+ * fragment left over from another day is dated that day, never today. Each block ends with the
+ * operator's change time ("Оновлено: 16 листопада 2026 22:40", minutes before the Telegram
+ * announcement of the same schedule); the newest one is `updatedAt`. Exported for tests.
+ */
 export function parseGpvFragment(html: string, now: Date): RegionSchedule {
   const region = INFO.id
   const schedules: Record<string, DaySchedule[]> = {}
+  let updatedAt: string | null = null
   const blocks = html.split(/<div class="gpvinfodetail"/).slice(1)
   if (!blocks.length && /gpv-table|turnoff-scheduleui-table/.test(html))
     throw new OutageError('parse', 'Poltava: schedule table without day blocks (format changed?)', { region })
@@ -168,6 +174,8 @@ export function parseGpvFragment(html: string, now: Date): RegionSchedule {
     if (!date) throw new OutageError('parse', 'Poltava: no date in a schedule block', { region })
     const table = /<table[^>]*class="gpv-table"[^>]*>([\s\S]*?)<\/table>/.exec(block)?.[1]
     if (!table) continue
+    const stamp = parseUpdated(block, now)
+    if (stamp && (!updatedAt || Date.parse(stamp) > Date.parse(updatedAt))) updatedAt = stamp
     for (const row of table.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
       const name = /<td class="gpv-q"[^>]*>([^<]+)<\/td>/.exec(row[1]!)?.[1]
       const group = name ? normalizeGroup(name) : null
@@ -185,9 +193,18 @@ export function parseGpvFragment(html: string, now: Date): RegionSchedule {
     region,
     groups: Object.keys(schedules).sort(compareGroups),
     schedules,
-    updatedAt: null,
+    updatedAt,
     fetchedAt: toKyivIso(now),
   }
+}
+
+/** "Оновлено: 16 листопада 2026 22:40" (Kyiv time) → ISO; null when the block has no such line. */
+function parseUpdated(block: string, now: Date): string | null {
+  const m = /Оновлено:\s*([^<]*?\d{4})\s+(\d{1,2}):(\d{2})\s*</.exec(block)
+  const date = m ? findUaDate(m[1]!, now) : null
+  if (!m || !date) return null
+  const minutes = Number(m[2]) * 60 + Number(m[3])
+  return minutes < 1440 ? toKyivIso(kyivInstant(date, minutes)) : null
 }
 
 /**

@@ -3,7 +3,9 @@ import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import { asSource } from './as-source.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mergeSources } from './sources.js'
 
 /**
  * Mykolaivoblenergo (off.energy.mk.ua): a JSON API with 48 half-hour slots per day and a full
@@ -58,13 +60,22 @@ export function mykolaivProvider(): Provider {
     info: INFO,
     sampleAddress: { city: 'Миколаїв', street: 'вул. Соборна', house: '1' },
 
-    async getSchedules(ctx) {
-      const [slots, queues, active] = await Promise.all([
-        list<Slot>(ctx, '/schedule/time-series'),
-        list<Queue>(ctx, `/outage-queue/by-type/${GPV_TYPE}`),
-        list<ActiveDay>(ctx, '/v2/schedule/active'),
+    getSchedules(ctx) {
+      // the API is the only channel (the operator's Telegram has the same list 2 minutes earlier)
+      return mergeSources(ctx, region, [
+        {
+          id: 'api',
+          url: INFO.website,
+          read: async () => {
+            const [slots, queues, active] = await Promise.all([
+              list<Slot>(ctx, '/schedule/time-series'),
+              list<Queue>(ctx, `/outage-queue/by-type/${GPV_TYPE}`),
+              list<ActiveDay>(ctx, '/v2/schedule/active'),
+            ])
+            return asSource(parseActive(slots, queues, active, ctx.now()))
+          },
+        },
       ])
-      return parseActive(slots, queues, active, ctx.now())
     },
 
     async searchCities(ctx, query) {

@@ -69,7 +69,7 @@ Base `https://power-api.loe.lviv.ua/api`, all GET, no auth. Some endpoints retur
 
 ## Failure modes
 
-- Big payload; CF edge caching means up to 1–2 h staleness (UNVERIFIED how often origin updates).
+- Big payload. Cloudflare caches it for up to 2 h (`s-maxage=7200`); the provider goes past that cache, see "Freshness" below.
 - Hydra vs array shape flips.
 - Image-only publications (pre-10.2025) — if LOE regresses to images, text parsing yields nothing; detect `imageUrl != "" && rawHtml == ""` and surface "image-only".
 
@@ -87,3 +87,13 @@ Base `https://power-api.loe.lviv.ua/api`, all GET, no auth. Some endpoints retur
 ## Emergency schedules (ГАВ)
 
 `pw_accounts` rows also carry `chergGav`, `chergSgav`, `chergAchr` ("Не входить", "6", "20", "10 (48.2Гц)"): `findGroup` returns their distinct values in `emergency`. Live ГАВ status: @lvivoblenergo, whose cancels are edits of the apply post ("UPD. … скасовані"). See [emergency.md](emergency.md).
+
+## Freshness (measured 2026-11-17)
+
+- **One channel: the API.** It is first and complete: on 17.10.2026 its "станом на" times were 0–6 min ahead of the picture posts in @lvivoblenergo, which carry no text. Tomorrow is in the API the evening before (archive: "на <next day>" published 19:05–21:40).
+- **CDN cache.** `cache-control: public, max-age=3600, s-maxage=7200`. Without a query parameter the answer was `cf-cache-status: HIT`, `age: 764` (17.11 00:21) and `age: 123` (00:43): a change can stay hidden for up to 2 hours. With `&_=<unix seconds>` it is `cf-cache-status: MISS`, no `age` header, a different `etag`, same content (checked 17.11 00:43 and again through the SDK at 00:58). The provider adds that parameter to every schedule request (`uncachedJson` in `src/providers/poweron.ts`).
+- **`Age` > 600 s** on the answer means Cloudflare served an old copy despite the parameter. The provider then asks once more under another key (`_=<seconds>r`) and uses what comes back. The SDK has no field to report the age in; if this ever happens twice in a row the data can be up to 2 h old without any marker. Not seen so far.
+- The cached and the uncached answers differ in shape (plain array vs JSON-LD, depending on which `Accept` filled the cache); `hydraList` reads both.
+- **`updatedAt`**: "Інформація станом на HH:MM DD.MM.YYYY" in the slot's text, the operator's own time (the archive item's name, "Графік передано 18:06", can be up to an hour off; not used).
+- **Day**: taken from the text ("Графік погодинних відключень на 17.10.2026"), never from the slot name or the clock. A "Today" slot nobody cleared keeps its old date, and `assessFreshness` then says `behind`. A cancellation notice is dated by its own text too.
+- **Stale rule**: `behind` (newest date in the text < today). Both slots empty = nothing published (`unpublished`), which is the state since 17.10.2026.

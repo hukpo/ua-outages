@@ -86,6 +86,24 @@ export function normalizeHouse(s: string): string {
     .replace(/[\s\-/.]+/g, '')
 }
 
+/**
+ * A house number for telling two houses apart: `normalizeHouse` ("12-А" = "12 а" = "12a",
+ * "корп." = "к"), but what separates two numbers stays. "2/3", "2-3" and "2\\3" are one house
+ * and "23" another; "5 1" and "2.3" are neither "51" nor "23".
+ */
+export function houseKey(s: string): string {
+  return normalizeHouse(
+    s
+      .replace(/\s*[/\\]\s*/g, '\u0001')
+      .replace(/(\d)\s*[-–—]\s*(?=\d)/g, '$1\u0001')
+      .replace(/(\d)\.(?=\d)/g, '$1\u0002')
+      .replace(/(\d)[\s,;]+(?=\d)/g, '$1\u0003'),
+  )
+    .replace(/\u0001/g, '/')
+    .replace(/\u0002/g, '.')
+    .replace(/\u0003/g, ' ')
+}
+
 /** Canonical street type of a name ("просп. X" → "просп"), or null when it has none. */
 export function streetType(s: string): string | null {
   const words = normalizeText(s).replace(/\./g, ' ').split(' ')

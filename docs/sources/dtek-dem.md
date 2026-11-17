@@ -25,3 +25,10 @@ Not attempted here (out of scope: no WAF bypass).
 ## Alternative official source
 
 none found.
+
+## Status 2026-11-17
+
+Still blocked from a Ukrainian residential address: `/ua/shutdowns` answers HTTP 200 with a ~950-byte page whose only content is
+`<script src="/_Incapsula_Resource?SWJIYLWA=…">`. The SDK reports `blocked` and never `empty`. Kyiv oblast is read through `POST /ua/ajax` alone
+(see dtek-krem.md); Donetsk's `/ua/ajax` answers with the same stub, so that route does not exist here. No other official source was found (YASNO lists only Kyiv city
+and Dnipro; no public Telegram channel with group times).

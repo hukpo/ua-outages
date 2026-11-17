@@ -1,15 +1,28 @@
 import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
-import { compareGroups, makeDay, normalizeGroup, type MinuteSlot } from '../schedule.js'
+import { compareGroups, makeDay, normalizeGroup, slotsToIntervals, type MinuteSlot } from '../schedule.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
-import { kyivDate, parseClock, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import { addDays, kyivDate, parseClock, toKyivIso } from '../time.js'
+import type { City, DaySchedule, GroupId, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import { mapLimit } from '../util.js'
 import { parseUaDateTime } from './gpv.js'
+import { STANDARD_GROUPS } from './poweron.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mergeSources, type SourceRead } from './sources.js'
 
 /**
- * Sumyoblenergo (www.soe.com.ua): a JSON API behind the site's shutdowns page with today's
- * outage windows per group and a full address chain city → street → house → group.
+ * Sumyoblenergo. Two channels of the operator, merged per day:
+ *
+ * - `site` (www.soe.com.ua): the JSON API behind the site's shutdowns page: the outage windows
+ *   of all groups in one request, with the operator's change time and WITHOUT a date. It serves
+ *   one day and switches to the next one at midnight, although the operator has tomorrow's
+ *   schedule from the evening. Also the address chain city → street → house → group;
+ * - `e-svitlo` (sm.e-svitlo.com.ua, the customer cabinet the site's header links to): a
+ *   schedule endpoint that answers without a login, one group per request, with the same
+ *   windows and change time, the date they are for (`date_today`) and a slot for tomorrow.
+ *
+ * So E-Svitlo is what dates the site's grid and what can have tomorrow before midnight; see
+ * `getSchedules` for how few requests that takes.
  *
  * Always use `www.`: the bare domain sits behind a Cloudflare challenge. The API answers 403
  * without a `Referer` (any value) or with a runtime-default User-Agent; the SDK's own UA passes.
@@ -41,6 +54,14 @@ const HEADERS = {
  */
 const PAYLOAD_KEY = 'qasdw-enjenf-twfeft!!d451qwqw!-2'
 const IV_BYTES = 12
+
+const CABINET = 'https://sm.e-svitlo.com.ua'
+/** `POST cherga=<group>&mobile_v=true`, no cookies. Without `cherga` it answers `no_data`: there is no all-groups call */
+const CABINET_API = `${CABINET}/ip_cabinet/restfull_api/improvise/api_main/get_user_disconnections_image_api.json`
+/** The group asked first; the other eleven only when needed */
+const PROBE_GROUP = '1.1'
+/** Parallel E-Svitlo requests when all groups are needed */
+const CABINET_CONCURRENCY = 3
 
 /** Index of the hourly schedule (ГПВ) queue in `queues-by-street` rows: ГАВ, АЧР, СГАВ, ГПВ, САВН, ГОП, ГОЕ */
 const GPV_QUEUE_INDEX = 3
@@ -86,8 +107,78 @@ export function sumyProvider(): Provider {
     remoteSearch: { cities: true, streets: true },
     sampleAddress: { city: 'Шостка', street: 'вул. Шевченка', house: '14' },
 
+    /**
+     * The site's grid (one request) and E-Svitlo's answer for one group are read together. The
+     * other eleven groups are asked from E-Svitlo only when that pays: its tomorrow slot is
+     * filled, the site failed, or the two differ (so E-Svitlo's dated days stand on their own).
+     * Otherwise E-Svitlo only dates the site's grid and supplies no day itself.
+     */
     async getSchedules(ctx) {
-      return parseSumySchedules(await get(ctx, 'schedules'), ctx.now())
+      const now = ctx.now()
+      const ask = async (group: GroupId) =>
+        parseCabinetAnswer(
+          await ctx.http.json(CABINET_API, {
+            region,
+            method: 'POST',
+            body: new URLSearchParams({ cherga: group, mobile_v: 'true' }),
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+          }),
+          group,
+          now,
+        )
+      const [site, probe] = await Promise.allSettled([
+        get<{ data?: ScheduleEntry[] }>(ctx, 'schedules').then(parseSumyGrid),
+        ask(PROBE_GROUP),
+      ])
+      ctx.signal?.throwIfAborted()
+
+      let cabinet: PromiseSettledResult<CabinetGroup[]> =
+        probe.status === 'fulfilled' ? { status: 'fulfilled', value: [probe.value] } : probe
+      const needAll =
+        probe.status === 'fulfilled' &&
+        (site.status === 'rejected' ||
+          probe.value.tomorrowAnnounced ||
+          dateOfGrid(site.value, [probe.value]) === null)
+      if (needAll) {
+        const rest = STANDARD_GROUPS.filter((g) => g !== PROBE_GROUP)
+        const [all] = await Promise.allSettled([mapLimit(rest, CABINET_CONCURRENCY, ask, ctx.signal)])
+        ctx.signal?.throwIfAborted()
+        cabinet =
+          all.status === 'fulfilled'
+            ? {
+                status: 'fulfilled',
+                value: [(probe as PromiseFulfilledResult<CabinetGroup>).value, ...all.value],
+              }
+            : all
+      }
+      // when the other groups couldn't be read, the first answer still dates the grid
+      const dated =
+        cabinet.status === 'fulfilled' ? cabinet.value : probe.status === 'fulfilled' ? [probe.value] : null
+
+      return mergeSources(
+        ctx,
+        region,
+        [
+          {
+            id: 'site',
+            url: INFO.website,
+            async read() {
+              if (site.status === 'rejected') throw site.reason
+              return gridToRead(site.value, dated, now)
+            },
+          },
+          {
+            id: 'e-svitlo',
+            url: `${CABINET}/`,
+            async read() {
+              if (cabinet.status === 'rejected') throw cabinet.reason
+              // one group alone is not a day of the region: it only dated the site's grid
+              return needAll ? cabinetToRead(cabinet.value) : { days: {}, groups: [PROBE_GROUP] }
+            },
+          },
+        ],
+        { groups: STANDARD_GROUPS },
+      )
     },
 
     async searchCities(ctx, query) {
@@ -203,17 +294,37 @@ export async function decryptSumyResponse<T>(
   }
 }
 
-/**
- * Decrypted `/schedules` → schedule. The response has no date: the site shows it as today,
- * so it is dated today in Kyiv. Windows may repeat or overlap; they're merged. Exported for tests.
- */
-export function parseSumySchedules(res: { data?: ScheduleEntry[] }, now: Date): RegionSchedule {
+/** The site's grid: per group its outage windows (null = "no data"), undated. */
+export interface SumyGrid {
+  groups: Record<GroupId, MinuteSlot[] | null>
+  /** Newest `last_update` of the groups, ISO */
+  updatedAt: string | null
+}
+
+/** "08:00"–"12:00" windows → slots; "00:00" as an end is midnight. */
+function windowSlots(
+  list: readonly { start_time?: string; end_time?: string }[],
+  what: string,
+): MinuteSlot[] {
+  return list.map((t) => {
+    const start = parseClock(t?.start_time ?? '')
+    let end = parseClock(t?.end_time ?? '')
+    if (start === null || end === null)
+      throw new OutageError('parse', `${what}: bad time "${t?.start_time}–${t?.end_time}"`, {
+        region: INFO.id,
+      })
+    // "00:00" ends at midnight; nothing runs past it since a slot covers one day
+    if (end <= start) end = 1440
+    return { start, end, kind: 'off' }
+  })
+}
+
+/** Decrypted `/schedules` → the undated grid. Windows may repeat or overlap. Exported for tests. */
+export function parseSumyGrid(res: { data?: ScheduleEntry[] }): SumyGrid {
   const region = INFO.id
   if (!Array.isArray(res?.data)) throw new OutageError('parse', 'Sumy schedules: no "data" list', { region })
-  const today = kyivDate(now)
-  const schedules: Record<string, DaySchedule[]> = {}
-  let updated: string | null = null
-
+  const groups: SumyGrid['groups'] = {}
+  let updatedAt: string | null = null
   for (const e of res.data) {
     const group = e.cherga_n ? normalizeGroup(e.cherga_n) : null
     if (!group || !Array.isArray(e.lst_time_disc))
@@ -221,32 +332,225 @@ export function parseSumySchedules(res: { data?: ScheduleEntry[] }, now: Date): 
         region,
       })
     if (e.no_data) {
-      schedules[group] = [{ date: today, status: 'unknown', intervals: [] }]
+      groups[group] = null
       continue
     }
-    const slots: MinuteSlot[] = e.lst_time_disc.map((t) => {
-      const start = parseClock(t.start_time ?? '')
-      let end = parseClock(t.end_time ?? '')
-      if (start === null || end === null)
-        throw new OutageError('parse', `Sumy schedules: bad time "${t.start_time}–${t.end_time}"`, { region })
-      // "00:00" ends at midnight; nothing runs past it since the feed covers one day
-      if (end <= start) end = 1440
-      return { start, end, kind: 'off' }
-    })
-    schedules[group] = [makeDay(today, slots)]
+    groups[group] = windowSlots(e.lst_time_disc, 'Sumy schedules')
     const at = parseUaDateTime(e.last_update)
-    if (at && (!updated || Date.parse(at) > Date.parse(updated))) updated = at
+    if (at && (!updatedAt || Date.parse(at) > Date.parse(updatedAt))) updatedAt = at
   }
+  return { groups, updatedAt }
+}
 
-  // a group marked "no data" stays listed with an `unknown` day, even when every group is: that
-  // means nothing is published, which must not read as "no outages"
+/**
+ * Decrypted `/schedules` → schedule for `date`. The response itself has no date: the provider
+ * takes it from E-Svitlo (`dateOfGrid`); the default here is the Kyiv day of `now`, which is what
+ * the site shows it as. A group marked "no data" stays listed with an `unknown` day, even when
+ * every group is: nothing published must not read as "no outages". Exported for tests.
+ */
+export function parseSumySchedules(
+  res: { data?: ScheduleEntry[] },
+  now: Date,
+  date: string = kyivDate(now),
+): RegionSchedule {
+  const grid = parseSumyGrid(res)
+  const schedules: Record<string, DaySchedule[]> = {}
+  for (const [g, slots] of Object.entries(grid.groups))
+    schedules[g] = [slots ? makeDay(date, slots) : { date, status: 'unknown', intervals: [] }]
   return {
-    region,
+    region: INFO.id,
     groups: Object.keys(schedules).sort(compareGroups),
     schedules,
-    updatedAt: updated,
+    updatedAt: grid.updatedAt,
     fetchedAt: toKyivIso(now),
   }
+}
+
+/** One slot (today's or tomorrow's) of an E-Svitlo answer. */
+interface CabinetSlot {
+  /** "YYYY-MM-DD", from `date_today` */
+  date: string
+  /** null: "no data" for the group that day */
+  slots: MinuteSlot[] | null
+  publishedAt: string | null
+}
+
+/** What E-Svitlo says about one group. */
+export interface CabinetGroup {
+  group: GroupId
+  today: CabinetSlot
+  /** Tomorrow's slot when it has the shape of a published day, else null */
+  tomorrow: CabinetSlot | null
+  /** The tomorrow slot shows any sign of data, readable or not: worth asking the other groups */
+  tomorrowAnnounced: boolean
+}
+
+interface CabinetData {
+  no_data?: unknown
+  /** "17.11.2026" */
+  date_today?: unknown
+  /** "Оновлено: 16.11.2026 22:49" */
+  last_update?: unknown
+  cherga_n?: unknown
+  lst_time_disc?: unknown
+  dict_tom?: unknown
+}
+
+const cabinetDate = (text: unknown): string | null => {
+  const m = typeof text === 'string' ? /^(\d{2})\.(\d{2})\.(\d{4})$/.exec(text.trim()) : null
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null
+}
+
+/**
+ * One E-Svitlo answer for `group`. Today's slot is read strictly: a missing date, a date more
+ * than a day from the clock, another group's data or a bad time is a `parse` error. The
+ * tomorrow slot (`dict_tom`) has only been seen empty (`no_data: true`), so it is read
+ * defensively: it counts when it has exactly the shape of today's slot with outage windows and
+ * the date after today's; anything else is "not published", never an error. The half-hour
+ * `gpv_schedule` rows are ignored: their `status` describes passed/current/coming, not on/off.
+ * Exported for tests.
+ */
+export function parseCabinetAnswer(res: unknown, group: GroupId, now: Date): CabinetGroup {
+  const region = INFO.id
+  const data = (res as { data?: CabinetData } | null)?.data
+  if (!data || typeof data !== 'object')
+    throw new OutageError('parse', 'Sumy E-Svitlo: no "data" object', { region })
+  const date = cabinetDate(data.date_today)
+  const clock = kyivDate(now)
+  if (!date || date < addDays(clock, -1) || date > addDays(clock, 1))
+    throw new OutageError(
+      'parse',
+      `Sumy E-Svitlo: unexpected date_today ${JSON.stringify(data.date_today)}`,
+      { region },
+    )
+  const stamp = (d: CabinetData) => parseUaDateTime(typeof d.last_update === 'string' ? d.last_update : null)
+  const mine = (d: CabinetData) => typeof d.cherga_n === 'string' && normalizeGroup(d.cherga_n) === group
+
+  let today: CabinetSlot
+  if (data.no_data === true) today = { date, slots: null, publishedAt: null }
+  else {
+    if (data.no_data !== false || !mine(data) || !Array.isArray(data.lst_time_disc))
+      throw new OutageError(
+        'parse',
+        `Sumy E-Svitlo: asked for group ${group}, got ${JSON.stringify({ cherga_n: data.cherga_n, no_data: data.no_data })}`,
+        { region },
+      )
+    today = { date, slots: windowSlots(data.lst_time_disc, 'Sumy E-Svitlo'), publishedAt: stamp(data) }
+  }
+
+  const tom = data.dict_tom && typeof data.dict_tom === 'object' ? (data.dict_tom as CabinetData) : null
+  const windows = tom && Array.isArray(tom.lst_time_disc) ? tom.lst_time_disc : []
+  let tomorrow: CabinetSlot | null = null
+  if (
+    tom &&
+    tom.no_data === false &&
+    mine(tom) &&
+    windows.length &&
+    cabinetDate(tom.date_today) === addDays(date, 1)
+  ) {
+    try {
+      tomorrow = {
+        date: addDays(date, 1),
+        slots: windowSlots(windows, 'Sumy E-Svitlo'),
+        publishedAt: stamp(tom),
+      }
+    } catch {
+      // an unreadable tomorrow is not published yet as far as this reader can tell
+    }
+  }
+  return {
+    group,
+    today,
+    tomorrow,
+    tomorrowAnnounced: !!tom && (tom.no_data === false || windows.length > 0 || !!tom.last_update),
+  }
+}
+
+const sameWindows = (a: readonly MinuteSlot[], b: readonly MinuteSlot[]) =>
+  JSON.stringify(slotsToIntervals('2000-01-01', a)) === JSON.stringify(slotsToIntervals('2000-01-01', b))
+
+/**
+ * Which day the site's undated grid is, according to E-Svitlo's dated answers: the date of the
+ * slot (today's, else tomorrow's) whose windows equal the grid's in every group both have data
+ * for. `undefined` when there is nothing to compare, null when the grid equals neither slot.
+ */
+function dateOfGrid(grid: SumyGrid, cabinet: readonly CabinetGroup[]): string | null | undefined {
+  for (const pick of ['today', 'tomorrow'] as const) {
+    let compared = 0
+    let date: string | null = null
+    for (const c of cabinet) {
+      const slot = c[pick]
+      const mine = grid.groups[c.group]
+      if (!slot?.slots || !mine) continue
+      compared++
+      if (!sameWindows(mine, slot.slots) || (date && date !== slot.date)) {
+        date = null
+        break
+      }
+      date = slot.date
+    }
+    if (date) return date
+    if (!compared && pick === 'today') return undefined
+  }
+  return null
+}
+
+/**
+ * The site's grid as a channel. Its day comes from E-Svitlo when that answered. When the grid
+ * equals neither of E-Svitlo's days it is not dated at all (an error: E-Svitlo's own days are
+ * used). Without E-Svitlo it is the Kyiv day of `now`, as the site shows it, unless its change
+ * time is from before yesterday: a schedule is published the evening before at the earliest, so
+ * such a grid is a leftover and not today's. What remains unguarded: the first moments after
+ * midnight with E-Svitlo down, should the endpoint still serve yesterday's grid.
+ */
+function gridToRead(grid: SumyGrid, cabinet: readonly CabinetGroup[] | null, now: Date): SourceRead {
+  const region = INFO.id
+  const today = kyivDate(now)
+  let date = cabinet ? dateOfGrid(grid, cabinet) : undefined
+  if (date === null)
+    throw new OutageError(
+      'parse',
+      "Sumy: the site's schedule has no date and differs from both days E-Svitlo has; not dating it",
+      { region },
+    )
+  if (date === undefined) {
+    if (grid.updatedAt && kyivDate(new Date(grid.updatedAt)) < addDays(today, -1))
+      throw new OutageError(
+        'parse',
+        `Sumy: the site's schedule has no date and was last changed ${grid.updatedAt}; not dating it today`,
+        { region },
+      )
+    date = today
+  }
+  const schedules: Record<GroupId, DaySchedule> = {}
+  for (const [g, slots] of Object.entries(grid.groups))
+    schedules[g] = slots ? makeDay(date, slots) : { date, status: 'unknown', intervals: [] }
+  return { days: { [date]: { schedules, publishedAt: grid.updatedAt } }, groups: Object.keys(grid.groups) }
+}
+
+/** E-Svitlo's answers for all groups as a channel: today, and tomorrow for the groups that have it. */
+function cabinetToRead(cabinet: readonly CabinetGroup[]): SourceRead {
+  const region = INFO.id
+  const days: SourceRead['days'] = {}
+  const add = (group: GroupId, slot: CabinetSlot) => {
+    const day = (days[slot.date] ??= { schedules: {}, publishedAt: null })
+    day.schedules[group] = slot.slots
+      ? makeDay(slot.date, slot.slots)
+      : { date: slot.date, status: 'unknown', intervals: [] }
+    if (slot.publishedAt && (!day.publishedAt || Date.parse(slot.publishedAt) > Date.parse(day.publishedAt)))
+      day.publishedAt = slot.publishedAt
+  }
+  const date = cabinet[0]?.today.date
+  for (const c of cabinet) {
+    // the answers must be about one day: a day read half before and half after midnight isn't one
+    if (c.today.date !== date)
+      throw new OutageError('parse', 'Sumy E-Svitlo: the day changed while the groups were being read', {
+        region,
+      })
+    add(c.group, c.today)
+    if (c.tomorrow) add(c.group, c.tomorrow)
+  }
+  return { days, groups: cabinet.map((c) => c.group) }
 }
 
 /** The longest word, which the server's substring search can match ("вулиця Тараса Шевченка" → "шевченка"). */

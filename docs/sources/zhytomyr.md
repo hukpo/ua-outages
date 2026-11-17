@@ -23,7 +23,7 @@ curl -s 'https://www.ztoe.com.ua/unhooking-search.php' | iconv -f cp1251 -t utf-
 
 **Structure** (see `schedule-2026-11-05.cp1251.html`):
 
-- Freshness: `<h4>Дата оновлення інформації - 23:30 05.11.2026</h4>`, in `HH:MM DD.MM.YYYY` Kyiv local time.
+- `<h4>Дата оновлення інформації - 23:30 05.11.2026</h4>`: NOT a change time. It is a half-hourly regeneration stamp (see "Channels and freshness" below) and the provider ignores it.
 - Notice block above the form: `УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ! На 06.11.2026р. по команді НЕК "Укренерго" буде застосовано: з 00:00 до 06:00 - 2,5 черги …`. This is free text about how many queues are applied. Optional to parse.
 - Each date has its own `<table … width:1300pt>`. The date sits in the header cell `<b style="font-size:12pt;">DD.MM.YYYY</b>` (colspan=48). The second header row lists the 48 slot labels `00:00-00:30` … `23:30-24:00`.
 - Group rows: the first column `Черга` uses `rowspan="2"` on the x.1 row only, so x.2 rows have one fewer leading cell. The subgroup cell is `<a href="/unhooking-search.php?pidcherga_id=N"><b …>1.1</b></a>`, followed by a spacer `<td style="width:3pt">`, followed by 48 slot `<td>`s.
@@ -66,7 +66,7 @@ Result-row gotchas:
 
 ## Freshness / failure modes
 
-- Freshness comes from the `Дата оновлення інформації` h4. The PowerOn `successful_last_synk` option is a separate sync timestamp (UTC), not for ГПВ.
+- The operator's change time is the `Last-Modified-Shedules-Date` header of the JSON API, not the h4 (see "Channels and freshness"). The PowerOn `successful_last_synk` option is a separate sync timestamp (UTC), not for ГПВ.
 - When no ГПВ is applied, it's UNVERIFIED whether the table renders all white or disappears. Handle both, plus a zero-table page.
 - The page is large (~480 KB today, 1.3 MB with `pidcherga_id`). Poll ≤ every 5–10 min. No rate limit observed (about 15 requests). No robots/WAF on www.ztoe.com.ua.
 - Encoding: forgetting cp1251 yields mojibake and the regexes on `Черга` etc. fail.
@@ -85,3 +85,23 @@ Result-row gotchas:
 - IgorZaharov/UABlackoutPreWarning, IgorZaharov/Android-ZTBlackoutPreWarning (apps; license not checked).
 - nazarsarkhan/ZhytoMate (license not checked).
 - Elvis129/prosvitlo-addresses-db README also notes that the PowerOn API has no addresses.
+
+## Channels and freshness (measured 2026-11-17)
+
+Two channels of the operator, merged per day with `mergeSources`:
+
+| id            | what                                                                                                                                                                                                                                                                                                         | change time                                                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api` (first) | `GET https://www.ztoe.com.ua/gpv/api/api-schedule.php?cherga_id=<1-6>&pidcherga_id=<1-2>`: JSON rows `{cherga, pidcherga, date: "17.11.2026", span: "00:00-00:30", color: "red"\|"white"}`, 48 per day (the last span is `23:30-00:00`), ~4 KB. One request per subqueue: twelve per refresh, four at a time | header `Last-Modified-Shedules-Date: 2026.11.16 22:55:55` of `GET /gpv/api/api-message.php` (Kyiv wall clock; the body is the notice text) |
+| `site`        | the HTML page above                                                                                                                                                                                                                                                                                          | none                                                                                                                                       |
+
+- Both parameters are required: without them the answer is a PHP notice followed by rows of "queue 0.0", all white. Rows that are not for the queue asked are a `parse` error.
+- `red` = off, `white` = on; any other colour, a day without all 48 half hours, or a half hour twice is a `parse` error for the API channel (the page then stands in).
+- The header is a real change time: `22:55:55` on 16.11, one minute before the @ztoe_ua announcement (22:56). The page said "00:00 17.11.2026" at 00:25 and "00:30 17.11.2026" at 00:44: always the current half hour.
+- Cross-check 17.11 00:44: the API and the page gave the same cells for all twelve groups (`test/providers/zhytomyr.test.ts`).
+- Only 17.11 was in the API when probed (after midnight). How tomorrow appears there is UNVERIFIED: the reader takes whatever dates the rows carry, so a second day would simply be read. The page held 16.11 and 17.11 at 23:45 on 16.11.
+- **Merge rule**: per day the channel with the newer change time wins; the page has none, so the API wins every day it has, and the page supplies a day only the page has (tomorrow, should it appear there first). When their cells for a day differ, the page is marked `disagrees`.
+- **`updatedAt`**: the API header; null when the API is down or the header is missing. Never the page's stamp.
+- **Day**: the rows' `date` / the table's header date, never the clock.
+- **Failure modes**: API down or unreadable ⇒ `sources[0].ok: false`, the page's days without a change time; page down ⇒ API alone; both ⇒ the API's error is thrown. `api-message.php` failing alone only costs the change time.
+- **Stale rule**: no day dated today ⇒ `behind`. Telegram @ztoe_ua has no group times (announcement + link); not read.

@@ -7,7 +7,7 @@ Researched 2026-11-05 (~21:35 Europe/Kyiv). GPV was **active** that day, so `sch
 - Official site: https://www.soe.com.ua/ (Next.js app, nginx, **not** behind Cloudflare, IP 93.183.206.108).
 - The apex https://soe.com.ua/ is behind a **Cloudflare managed challenge** (403, `cf-mitigated: challenge`, "Just a moment..."). Always use `www.`.
 - Schedule + address UI: https://www.soe.com.ua/consumers/shutdowns. The page is rendered client-side, so the HTML has no data.
-- Personal account: https://sm.e-svitlo.com.ua/ (needs login, not used here).
+- Personal account: https://sm.e-svitlo.com.ua/ (E-Svitlo). The cabinet needs a login; its schedule endpoint doesn't and is the second channel, see "Channels and freshness".
 
 ## API (found in the JS bundle `/_next/static/chunks/3065_9tk1io81.js`, module 72136)
 
@@ -69,7 +69,7 @@ Reference: Kerber0ss/esvitlo-web `lib/shutdowns.ts` uses the same approach (repo
 - Half-hour boundaries occur (3.1 `18:00–21:30`).
 - Every interval is a definite outage (`kind: "off"`). The format has no "maybe" state.
 - `no_data: true` presumably means no schedule (UNVERIFIED; the UI shows "no GPV" when every `lst_time_disc` is empty).
-- Freshness: parse `last_update` (`Оновлено: DD.MM.YYYY HH:MM`, Kyiv time). The UI refetches every 15 minutes.
+- Freshness: parse `last_update` (`Оновлено: DD.MM.YYYY HH:MM`, Kyiv time). The UI refetches every 15 minutes. The response has no date; see "Channels and freshness" below for how the day is found.
 
 Conversion: for each entry, group = `cherga_n`. For each interval, start = today + start_time and end = today + end_time, with 00:00 meaning the next day 00:00. Merge, then emit `{start, end, kind:"off"}`.
 
@@ -110,3 +110,40 @@ Conversion: for each entry, group = `cherga_n`. For each interval, start = today
 ## Emergency schedules (ГАВ)
 
 `queues-by-street` rows hold `[ГАВ, АЧР, СГАВ, ГПВ, САВН, ГОП, ГОЕ]`; indexes 0–2 are returned in `emergency`. Live ГАВ status: @SumyEnergo (ranges, swaps; never a cancel, 6 h TTL). See [emergency.md](emergency.md).
+
+## Channels and freshness (measured 2026-11-17)
+
+Two channels of the operator, merged per day with `mergeSources`:
+
+| id             | what                                                                                                                                                                                              | date                       | change time   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------- |
+| `site` (first) | `GET /next-api/shutdowns/schedules`: all groups in one request                                                                                                                                    | **none**                   | `last_update` |
+| `e-svitlo`     | `POST https://sm.e-svitlo.com.ua/ip_cabinet/restfull_api/improvise/api_main/get_user_disconnections_image_api.json`, form `cherga=1.1&mobile_v=true`, no cookies, no login: one group per request | `date_today: "17.11.2026"` | `last_update` |
+
+**Is E-Svitlo official?** Yes: the header of www.soe.com.ua links to `https://sm.e-svitlo.com.ua/` (the person icon; in the JS chunk of the layout, `href:"https://sm.e-svitlo.com.ua/"`), the page's title is "Особистий кабінет споживача електричної енергії Сумської області", and the answer carries `filia_name: "АТ «СУМИОБЛЕНЕРГО»"`. It is behind Cloudflare (`cf-cache-status: DYNAMIC`, `no-store`); the SDK's User-Agent was not challenged (14 requests on 17.11).
+
+E-Svitlo answer (fixture `sumy/e-svitlo-2026-11-17.by-group.json`):
+
+```json
+{"data": {"no_data": false, "cherga_n": "1.1", "date_today": "17.11.2026",
+  "last_update": "Оновлено: 16.11.2026 22:49",
+  "lst_time_disc": [{"start_time": "08:00", "end_time": "12:00", "diff_time": "4 год. 00 хв."}, …],
+  "gpv_schedule": [{"start_time": "00:00", "end_time": "00:30", "status": 3, "cherga": "1.1"}, … 48],
+  "dict_tom": {"no_data": true, "date_today": "18.11.2026", "last_update": "", "lst_time_disc": [], …}}}
+```
+
+- `lst_time_disc` has the same shape and, on 17.11 00:48, the same windows and `last_update` as the site's grid for all twelve groups.
+- `gpv_schedule[].status` is not on/off: every row was `3` at 00:48 although outages followed (the legend fields say passed / current / coming). Not used.
+- There is no all-groups call: without `cherga` the answer is `no_data: true`; `cherga=1.1,2.1` answers for 1.1 only.
+- `dict_tom` is the slot for tomorrow. It has only been seen empty (`no_data: true`, probed just after midnight). **A filled one is UNVERIFIED.** The reader accepts it as tomorrow only when it has exactly today's shape: `no_data: false`, the same `cherga_n`, `date_today` = the day after, a non-empty `lst_time_disc` with valid times. Anything else is "not published", never an error. A group with no outages tomorrow therefore stays `unknown` until midnight.
+
+**Why two channels.** The site's endpoint serves one day and switches at midnight, although the backend has tomorrow from the evening (the 17.11 schedule was stamped 16.11 22:49 and announced in @SumyEnergo in the same minute; the endpoint served 16.11 until midnight). And it has no date, so by itself it can only be dated by the clock.
+
+**How it is read** (`getSchedules` in `src/providers/sumy.ts`): the site and E-Svitlo's group 1.1 are asked together (2 requests). The other eleven groups are asked (3 at a time) only when group 1.1's tomorrow slot shows data, the site failed, or the site's grid differs from E-Svitlo's.
+
+- **Day of the site's grid**: the `date_today` of the E-Svitlo slot (today's, else tomorrow's) whose windows equal the grid's. If it equals neither, the site channel fails (`parse`: "differs from both days E-Svitlo has") and E-Svitlo's own dated days are used. So after midnight a grid both still serve as yesterday's is dated yesterday (`behind`), not today.
+- **E-Svitlo down**: the grid is dated by the Kyiv clock, as the site shows it, unless its `last_update` is from before yesterday (a schedule is published the evening before at the earliest): then the site channel fails rather than date a leftover today. Unguarded remainder: the first moments after midnight with E-Svitlo down, should the endpoint not have switched yet (the exact switch time is UNVERIFIED).
+- **Merge rule**: per day the newer `last_update` wins, a tie goes to the site. E-Svitlo supplies days only when all twelve groups were read; with one group read it only dates the grid and is listed with `dates: []`.
+- **`updatedAt`**: `last_update` of the winning days (minute precision, equal to the Telegram posts).
+- **Stale rule**: day from `date_today` < today ⇒ `behind`; `last_update` older than yesterday with nothing to date the grid ⇒ error.
+- Telegram @SumyEnergo posts a picture ("Завтра, DD-MM-YYYY, діятимуть графіки …", 18:49–22:49 over 13 days); not read.

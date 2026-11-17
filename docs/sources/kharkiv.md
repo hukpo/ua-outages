@@ -2,6 +2,22 @@
 
 Verified 2026-11-05 ~23:35 Kyiv. GPV active (news posts daily for 29.10–06.11).
 
+## What the SDK reads (since 2026-11-17)
+
+Measured 17.11.2026, see `research/freshness/CHANNELS-A.md`.
+
+| Source id                 | Channel                                                                                                | Role    |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ | ------- |
+| `site`                    | JSON:API on `https://www.oblenergo.kharkiv.ua`, then `https://oblenergo.kharkiv.ua` if the first fails | primary |
+| `telegram:@kharkivenergy` | `https://t.me/s/kharkivenergy`, posts since yesterday noon (≤ 2 pages)                                 | second  |
+
+- **Host.** On 16–17.11 the bare host answered HTTP 400 "The provided host name is not valid for this server" on every path while `www.` served the same API (still so at 05:30 on 17.11). `www.` is tried first, the bare host second.
+- **Which is first.** Telegram, by a median 3 min (1–13) over 10 evenings. The site post for 14.11 came 8 h 39 min late, and for 17.11 it was still absent at 05:30 while Telegram had it since 16.11 23:02. The text is identical; one parser reads both.
+- **Merge** (`mergeSources`): per date the newer of the site node's `changed` and the Telegram post time wins; `updatedAt` is that time. An edited Telegram post keeps its original time.
+- **Day of a post**: from the date in its text ("у вівторок, 17 листопада"), never from the post time. ГАВ notices and news in the channel have no group lines and are skipped.
+- An update posted during its own day lists only the hours still ahead (an outage in progress is listed from its start; a group with nothing more is left out). The SDK therefore layers a day's posts oldest first (`layerPublications` in `src/providers/posts.ts`): a post published before the day is the whole day; a later one keeps the earlier outages before the minute it takes effect and replaces the rest. No same-day update was seen here in 06–16.11; the rule is the neighbouring operators' and changes nothing for a post that lists the whole day.
+- **Failure modes**: one source down → the other answers, the failure is listed in `sources`; both down → the site's error. Telegram alone gives today and later only. The JSON:API may serve a page up to 45 min old (`max-age=2700`); Telegram covers that gap.
+
 ## Domains
 
 `www.oblenergo.kharkov.ua` → 301 → **`https://oblenergo.kharkiv.ua/uk`** (Drupal, Cloudflare). Personal account / address tool: `https://pa.oblenergo.kharkiv.ua` (Yii2, Cloudflare).

@@ -29,6 +29,8 @@ export interface RequestOptions {
    * the built-in fetch only; a custom `fetch` handles TLS itself.
    */
   ca?: string[]
+  /** For a large file: replaces the client's per-request timeout for this request */
+  timeoutMs?: number
 }
 
 const DEFAULT_UA = 'ua-outages (+https://github.com/hukpo/ua-outages)'
@@ -84,10 +86,9 @@ export class Http {
     opts: RequestOptions = {},
   ): Promise<{ body: string; headers: Headers; status: number }> {
     const res = await this.request(url, opts)
-    const signal = this.signal
     const body = opts.encoding
-      ? new TextDecoder(opts.encoding).decode(await abortable(res.arrayBuffer(), signal))
-      : await abortable(res.text(), signal)
+      ? new TextDecoder(opts.encoding).decode(await this.body(() => res.arrayBuffer(), url, opts))
+      : await this.body(() => res.text(), url, opts)
     if (isChallenge(body))
       throw new OutageError('blocked', `Bot protection answered instead of ${host(url)}`, {
         region: opts.region,
@@ -105,7 +106,7 @@ export class Http {
   /** Binary body with the response headers (e.g. Last-Modified of an image) */
   async file(url: string, opts: RequestOptions = {}): Promise<{ bytes: Uint8Array; headers: Headers }> {
     const res = await this.request(url, opts)
-    const bytes = await abortable(res.arrayBuffer(), this.signal)
+    const bytes = await this.body(() => res.arrayBuffer(), url, opts)
     return { bytes: new Uint8Array(bytes), headers: res.headers }
   }
 
@@ -119,6 +120,28 @@ export class Http {
         url,
         cause,
       })
+    }
+  }
+
+  /**
+   * Reads a response body. The per-request timeout and a dropped connection can still strike
+   * after the headers arrived: that is a `network` error like any other, not a bare
+   * `TimeoutError`. A cancelled call rejects with the signal's reason, as everywhere.
+   */
+  private async body<T>(read: () => Promise<T>, url: string, opts: RequestOptions): Promise<T> {
+    const signal = this.signal
+    try {
+      return await abortable(read(), signal)
+    } catch (cause) {
+      if (signal?.aborted) throw signal.reason
+      const timedOut = (cause as Error)?.name === 'TimeoutError'
+      throw new OutageError(
+        'network',
+        timedOut
+          ? `${host(url)} did not finish answering in ${opts.timeoutMs ?? this.timeoutMs} ms`
+          : `${host(url)} dropped the connection`,
+        { region: opts.region, url, cause },
+      )
     }
   }
 
@@ -148,7 +171,8 @@ export class Http {
     for (let attempt = 0; ; attempt++) {
       // a cancelled call sends nothing more, retries included
       signal?.throwIfAborted()
-      const timeout = AbortSignal.timeout(this.timeoutMs)
+      const timeoutMs = opts.timeoutMs ?? this.timeoutMs
+      const timeout = AbortSignal.timeout(timeoutMs)
       let res: Response
       try {
         res = await abortable(
@@ -167,7 +191,7 @@ export class Http {
         const timedOut = (cause as Error)?.name === 'TimeoutError'
         throw new OutageError(
           'network',
-          timedOut ? `${host(url)} did not answer in ${this.timeoutMs} ms` : `Cannot reach ${host(url)}`,
+          timedOut ? `${host(url)} did not answer in ${timeoutMs} ms` : `Cannot reach ${host(url)}`,
           { region: opts.region, url, cause },
         )
       }

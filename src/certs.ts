@@ -9,7 +9,9 @@
  * Sectigo Public Server Authentication CA DV R36 (issued by Root R46, valid to 2036-03-21),
  * from http://crt.sectigo.com/SectigoPublicServerAuthenticationCADVR36.crt
  * SHA-256 8C:54:C3:34:B6:6B:A4:E4:26:77:2A:F4:A3:F9:13:6C:19:A1:AE:C7:29:FD:B2:8C:53:5C:07:A5:A4:EF:22:E0
- * Needed by chernihivoblenergo.com.ua.
+ * (the DER certificate's fingerprint: `openssl x509 -noout -fingerprint -sha256`).
+ * Needed by chernihivoblenergo.com.ua (the schedule poster and the address list) and by
+ * cabinet.cherkasyoblenergo.com (Cherkasy's address lookup): both send only their leaf.
  */
 export const SECTIGO_DV_R36 = `
 -----BEGIN CERTIFICATE-----
