@@ -25,8 +25,10 @@ import { mapLimit } from '../util.js'
  *   "актуальний станом на 0:30" is a half-hour mark that moves by itself;
  * - `telegram:@oe_cv_ua`: the operator posts every version of a day's schedule there, so the
  *   time of the newest post about a date is when that date last changed. That is the change
- *   time given to the site's days. Until 15.11.2026 the posts carried the schedule as text,
- *   since then as pictures: text is read as a second copy of the day, pictures only as the clock.
+ *   time given to the site's days, unless that post states the day in words and the page shows
+ *   something else: then the page is behind it and has no time at all. Until 15.11.2026 the
+ *   posts carried the schedule as text, since then as pictures: text is read as a second copy
+ *   of the day, pictures only as the clock (a page behind a picture post can't be told).
  *
  * Groups are numbered 1–12 (not 1.1–6.2) and kept as the operator names them.
  *
@@ -150,13 +152,19 @@ export function chernivtsiProvider(): Provider {
             async read() {
               const pages = await site
               // channel unreadable: the days are as good, only without a change time
-              const clock = await channel.then(
-                (c) => c.clock,
-                () => new Map<string, string>(),
-              )
+              const known = await channel.catch(() => null)
               const days: SourceRead['days'] = {}
-              for (const p of pages)
-                days[p.date] = { schedules: p.days, publishedAt: clock.get(p.date) ?? null }
+              for (const p of pages) {
+                // the newest post about the date says something else in words (an all-clear, other
+                // hours): the page doesn't show that publication, so it can't have its time. With
+                // no time of its own it loses the day to the post
+                const said = known?.text.get(p.date)
+                const behind = !!said && !saysTheSame(said, p.days)
+                days[p.date] = {
+                  schedules: p.days,
+                  publishedAt: behind ? null : (known?.clock.get(p.date) ?? null),
+                }
+              }
               return { days }
             },
           },

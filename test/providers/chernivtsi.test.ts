@@ -304,13 +304,36 @@ describe('Chernivtsioblenergo: the site and @oe_cv_ua as two channels', () => {
     expect(s.schedules['1']!.map((d) => d.date)).toEqual(['2026-11-14', '2026-11-15'])
     // 4021: "Група 1 / 00:00 - 20:00 / з 22:30"
     expect(hours(s.schedules['1']![1]!)).toEqual(['20:00–22:30 off'])
-    expect(s.sources!.map((x) => [x.id, x.dates])).toEqual([
-      ['site', ['2026-11-14']],
-      ['telegram:@oe_cv_ua', ['2026-11-15']],
-    ])
     expect(s.updatedAt).toBe('2026-11-14T20:25:46+02:00')
-    // the page (with outages) against "без обмежень для всіх груп" for the same day: flagged
-    expect(s.sources![1]!.disagrees).toBe(true)
+    // the page (with outages) against "без обмежень для всіх груп" (post 4020, 06:03) for the
+    // same day: the page doesn't show what the operator published last, so the post has the day
+    expect(s.sources!.map((x) => [x.id, x.dates, x.updatedAt, x.disagrees])).toEqual([
+      ['site', [], null, true],
+      ['telegram:@oe_cv_ua', ['2026-11-14', '2026-11-15'], '2026-11-14T20:25:46+02:00', undefined],
+    ])
+    expect(s.schedules['1']![0]).toEqual({ date: '2026-11-14', status: 'no-outages', intervals: [] })
+  })
+
+  it("a page still showing old cells doesn't take the time of a newer post that says otherwise", async () => {
+    // CONSTRUCTED: the page of 17.11 with its outages, and an all-clear for 17.11 posted at 10:00
+    const now = new Date('2026-11-17T10:30:00+02:00')
+    const allClear = postPage(
+      4061,
+      '2026-11-17T08:00:00+00:00',
+      '✨ На 17.11.2026\nЕлектропостачання без обмежень для всіх груп споживачів!',
+    )
+    const s = await setup({ channel: allClear, now }).client.getSchedules('chernivtsi')
+    expect(s.schedules['1']).toEqual([{ date: '2026-11-17', status: 'no-outages', intervals: [] }])
+    expect(s.updatedAt).toBe('2026-11-17T10:00:00+02:00')
+    expect(s.sources).toMatchObject([
+      { id: 'site', ok: true, dates: [], updatedAt: null, disagrees: true },
+      { id: 'telegram:@oe_cv_ua', ok: true, dates: ['2026-11-17'], updatedAt: '2026-11-17T10:00:00+02:00' },
+    ])
+
+    // the channel down: the page is all there is, without a time
+    const alone = await setup({ channel: null, now }).client.getSchedules('chernivtsi')
+    expect(hours(alone.schedules['1']![0]!)).toContain('06:00–08:00 off')
+    expect(alone.updatedAt).toBeNull()
   })
 
   it('does not count the page\'s "maybe" half hours as a disagreement with the text', async () => {
@@ -331,9 +354,12 @@ describe('Chernivtsioblenergo: the site and @oe_cv_ua as two channels', () => {
     const d = await setup({ channel: moved, now: new Date('2026-11-17T03:00:00+02:00') }).client.getSchedules(
       'chernivtsi',
     )
-    expect(d.sources![1]).toMatchObject({ id: 'telegram:@oe_cv_ua', dates: [], disagrees: true })
-    // same change time on both: the site, the first channel, keeps the day
-    expect(hours(d.schedules['1']![0]!)).toContain('06:00–08:00 off')
+    // the page doesn't show that post, so it has no claim to its time: the post has the day
+    expect(d.sources).toMatchObject([
+      { id: 'site', dates: [], updatedAt: null, disagrees: true },
+      { id: 'telegram:@oe_cv_ua', dates: ['2026-11-17'], updatedAt: '2026-11-17T02:40:00+02:00' },
+    ])
+    expect(hours(d.schedules['1']![0]!)).toEqual(['06:30–08:30 off', '14:30–16:30 off', '20:30–22:30 off'])
   })
 
   it('reads the site without a change time when the channel is down', async () => {
