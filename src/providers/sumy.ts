@@ -2,8 +2,17 @@ import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, slotsToIntervals, type MinuteSlot } from '../schedule.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
-import { addDays, kyivDate, kyivMinuteOfDay, parseClock, toKyivIso } from '../time.js'
-import type { City, DaySchedule, GroupId, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import { addDays, kyivDate, kyivInstant, kyivMinuteOfDay, parseClock, toKyivIso } from '../time.js'
+import type {
+  City,
+  DaySchedule,
+  GroupId,
+  GroupMatch,
+  HouseOutage,
+  HouseOutageKind,
+  ProviderInfo,
+  RegionSchedule,
+} from '../types.js'
 import { mapLimit } from '../util.js'
 import { parseUaDateTime } from './gpv.js'
 import { STANDARD_GROUPS } from './poweron.js'
@@ -82,10 +91,26 @@ interface ListResponse<Row> {
   data?: { result?: number; list?: Row[] } | ''
 }
 type QueueRow = [city: string, street: string, house: string, queues: (string | null)[]]
+/** A row of `by-house` / `by-street`: an outage of one house, now or ahead. The last two were always "" */
+export type ShutdownRow = [
+  city: string,
+  street: string,
+  house: string,
+  start: string,
+  end: string,
+  type: number,
+  ...rest: unknown[],
+]
+
+/** A house's outages are read once per this */
+const SHUTDOWNS_TTL_MS = 5 * 60_000
+/** `fresh` still takes what the same call has just read */
+const FRESH_TTL_MS = 15_000
 
 export function sumyProvider(): Provider {
   const region = INFO.id
   let key: Promise<CryptoKey> | null = null
+  const shutdowns = new Map<string, { at: number; rows: Promise<ShutdownRow[]> }>()
 
   const get = async <T>(ctx: ProviderContext, path: string): Promise<T> => {
     const url = `${API}/${path}`
@@ -217,6 +242,41 @@ export function sumyProvider(): Provider {
       return rows.map(([id, number]) => ({ id: String(id), number: number.trim(), streetId: street.id }))
     },
 
+    async outageOf(ctx, house, street, city): Promise<HouseOutage | null> {
+      const hit = shutdowns.get(house.id)
+      let rows: Promise<ShutdownRow[]>
+      if (hit && Date.now() - hit.at < (ctx.fresh ? FRESH_TTL_MS : SHUTDOWNS_TTL_MS)) rows = hit.rows
+      else {
+        // the house's own rows: the street's (`by-street`) would be every house of it, 170 rows
+        rows = list<ShutdownRow>(ctx, `by-house?houseId=${encodeURIComponent(house.id)}`)
+        if (shutdowns.size > 500) shutdowns.clear()
+        const entry = { at: Date.now(), rows }
+        shutdowns.set(house.id, entry)
+        rows.catch(() => {
+          if (shutdowns.get(house.id) === entry) shutdowns.delete(house.id)
+        })
+      }
+      const outage = currentShutdown(await rows, ctx.now())
+      if (!outage) return null
+      // the groups of the address, as `groupOf` reads them; a house without one (Sumy city) has none
+      const groups = await this.groupOf!(ctx, house, street, city).then(
+        (m) => [m.group, ...(m.otherGroups ?? [])],
+        (e: unknown) => {
+          if (!(e instanceof OutageError) || e.code !== 'not-found') throw e
+          return []
+        },
+      )
+      return {
+        region,
+        address: { city: city?.name, street: street.name, house: house.number },
+        ...outage,
+        groups,
+        updatedAt: null,
+        url: INFO.website,
+        fetchedAt: toKyivIso(ctx.now()),
+      }
+    },
+
     async groupOf(ctx, house, street, city): Promise<GroupMatch> {
       const rows = await list<QueueRow>(
         ctx,
@@ -245,6 +305,73 @@ export function sumyProvider(): Provider {
       }
     },
   }
+}
+
+/**
+ * The site's labels of `by-house` rows (its JS `eC`, 16.11.2026): 1 Планове, 2 Аварійне, 3 ГАВ,
+ * 4/5 ГПВ, 6 СГАВ, 7 Планове (термінове), 8 САВН, 9 Аварійне, 10 ГОП.
+ *
+ * Seen live (16–17.11.2026): 1 and 2 only. UNVERIFIED: 3 and 6 (ГАВ, СГАВ) were not in force; the
+ * operator writes that a house's ГАВ outage shows "в момент відключення" (Telegram, post 3728).
+ * They are `emergency` because the site itself labels them so. САВН (automatic load shedding)
+ * and ГОП (power limitation) say nothing clear about the hourly schedule: `other`.
+ */
+const SHUTDOWN_TYPES: Record<number, { kind: HouseOutageKind; reason: string }> = {
+  1: { kind: 'planned', reason: 'Планове' },
+  2: { kind: 'repair', reason: 'Аварійне' },
+  3: { kind: 'emergency', reason: 'ГАВ' },
+  4: { kind: 'scheduled', reason: 'ГПВ' },
+  5: { kind: 'scheduled', reason: 'ГПВ' },
+  6: { kind: 'emergency', reason: 'СГАВ' },
+  7: { kind: 'planned', reason: 'Планове (термінове)' },
+  8: { kind: 'other', reason: 'САВН' },
+  9: { kind: 'repair', reason: 'Аварійне' },
+  10: { kind: 'other', reason: 'ГОП' },
+}
+const KIND_RANK: Record<HouseOutageKind, number> = {
+  emergency: 0,
+  repair: 1,
+  planned: 2,
+  other: 3,
+  scheduled: 4,
+}
+
+/** "2026-11-17T21:03:00", Kyiv wall clock (planned works read 08:00–17:00) → ISO */
+function shutdownTime(text: unknown): string | null {
+  const m = typeof text === 'string' ? /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/.exec(text) : null
+  if (!m) return null
+  const at = kyivInstant(m[1]!, Number(m[2]) * 60 + Number(m[3]))
+  return Number.isFinite(at.getTime()) ? toKyivIso(at) : null
+}
+
+/**
+ * The house's outage at `now` from its `by-house` rows (current ones and those planned ahead):
+ * started and not ended; ГАВ before an accident, before the rest. Exported for tests.
+ */
+export function currentShutdown(
+  rows: readonly ShutdownRow[],
+  now: Date,
+): Pick<HouseOutage, 'kind' | 'reason' | 'scheduleApplies' | 'from' | 'to'> | null {
+  const t = now.getTime()
+  let best: Pick<HouseOutage, 'kind' | 'reason' | 'scheduleApplies' | 'from' | 'to'> | null = null
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue
+    const from = shutdownTime(row[3])
+    const to = shutdownTime(row[4])
+    if (!from || Date.parse(from) > t || (to && Date.parse(to) <= t)) continue
+    const label = SHUTDOWN_TYPES[Number(row[5])] ?? {
+      kind: 'other' as const,
+      reason: `тип ${String(row[5])}`,
+    }
+    const outage = {
+      ...label,
+      scheduleApplies: label.kind === 'emergency' ? false : label.kind === 'scheduled' ? true : null,
+      from,
+      to,
+    }
+    if (!best || KIND_RANK[outage.kind] < KIND_RANK[best.kind]) best = outage
+  }
+  return best
 }
 
 function importPayloadKey(): Promise<CryptoKey> {

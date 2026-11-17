@@ -68,7 +68,7 @@ export async function yasnoEmergency(
 
 // --- Mykolaivoblenergo outage feed ---
 
-const MK_FEED = 'https://www.energy.mk.ua/outage/api/v1/outage'
+export const MK_FEED = 'https://www.energy.mk.ua/outage/api/v1/outage'
 
 export interface MkOutageRow {
   id?: number
@@ -80,7 +80,7 @@ export interface MkOutageRow {
 }
 
 /** A ГАВ/СГАВ row of the feed (not a mislabelled ГПВ one, not a neighbour's ГАВ). */
-function isEmergencyRow(r: MkOutageRow): boolean {
+export function isEmergencyRow(r: MkOutageRow): boolean {
   // AVARIYA is an accident record even when its reason names the schedule
   if (r.type === 'AVARIYA') return false
   const reason = r.reason ?? ''
