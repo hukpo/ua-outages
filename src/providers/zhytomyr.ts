@@ -13,7 +13,7 @@ import type {
   RegionSchedule,
   Street,
 } from '../types.js'
-import { STANDARD_GROUPS } from './poweron.js'
+import { STANDARD_GROUPS, hydraList, powerOnAddressSearch, powerOnOutages } from './poweron.js'
 import { sharedList, type Provider, type ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
@@ -122,6 +122,7 @@ export function zhytomyrProvider(): Provider {
   return {
     info: INFO,
     sampleAddress: { city: 'Житомир', street: 'вул. Київська', house: '5' },
+    houseOutages: zhytomyrHouseOutages(),
 
     getSchedules: (ctx) =>
       mergeSources(
@@ -204,6 +205,57 @@ export function zhytomyrProvider(): Provider {
         address: { city: city?.name, street: street.name, house: h.number },
       }
     },
+  }
+}
+
+const POWERON_API = 'https://api-ztoe-poweron.inneti.net/api'
+const POWERON_SITE = 'https://ztoe-poweron.inneti.net/'
+
+/**
+ * `getHouseOutage` for Zhytomyr: the operator's copy of the PowerOn platform («Чому немає
+ * світла?», ztoe-poweron.inneti.net), whose `pw_accidents` lists the streets and houses off now,
+ * ГПВ slots included. Its address ids are its own, so it has its own chain: settlements found by
+ * name on the server (the whole list is 4.4 MB, 20 000 of it "Невідомо"), the streets of one.
+ * It has no list of a street's houses (`pw_address_queues` is empty): the house is taken as
+ * typed, so a misspelled number finds no outage rather than `not-found`. Times are Kyiv wall
+ * clock labelled `+00:00` (a 19:30–22:00 ГПВ slot read "19:30:00+00:00", 17.11.2026).
+ */
+export function zhytomyrHouseOutages(): Provider {
+  const region = INFO.id
+  const info: ProviderInfo = { ...INFO, website: POWERON_SITE }
+  const label = 'Zhytomyr PowerOn'
+  const outages = powerOnOutages({ info, label, api: POWERON_API, site: POWERON_SITE })
+  // only its street lists are used: there are no building lists to give it
+  const search = powerOnAddressSearch({ info, label, api: POWERON_API, streetBuildings: async () => [] })
+  return {
+    info,
+    remoteSearch: { cities: true },
+    async getSchedules() {
+      throw new OutageError('unsupported', `${label}: no schedule here, only the outages now`, { region })
+    },
+    async searchCities(ctx, query) {
+      // no name, no list: the whole directory is not worth it
+      if (!query.trim()) return []
+      const q = new URLSearchParams({ pagination: 'false', name: query.trim() })
+      const data = await ctx.http.json(`${POWERON_API}/pw_cities?${q}`, { region })
+      return hydraList<{ id: number; name?: string; otg?: { name?: string } | string }>(
+        data,
+        `${label} pw_cities`,
+        region,
+      )
+        .filter((c) => c.name?.trim() && c.name.trim() !== 'Невідомо')
+        .map((c) => ({
+          id: String(c.id),
+          name: c.name!.trim(),
+          ...(typeof c.otg === 'object' && c.otg?.name ? { district: c.otg.name.trim() } : {}),
+        }))
+    },
+    searchStreets: search.searchStreets,
+    async searchHouses(_ctx, street, query) {
+      const number = query?.trim()
+      return number ? [{ id: number, number, streetId: street.id }] : []
+    },
+    outageOf: (ctx, house, street, city) => outages.outageOf(ctx, house, street, city, []),
   }
 }
 

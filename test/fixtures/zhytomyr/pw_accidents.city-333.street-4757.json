@@ -1,0 +1,51 @@
+{
+ "@context": "/api/contexts/PwAccident",
+ "@id": "/api/pw_accidents",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_accidents/432938199",
+   "@type": "PwAccident",
+   "id": 432938199,
+   "code_otg": "6",
+   "city": {
+    "@id": "/api/pw_cities/333",
+    "@type": "PwCity",
+    "id": 333,
+    "name": "Житомир",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/4757",
+    "@type": "PwStreet",
+    "id": 4757,
+    "city": {
+     "@id": "/api/pw_cities/333",
+     "@type": "PwCity",
+     "id": 333,
+     "name": "Житомир",
+     "codeOtg": ""
+    },
+    "name": "вул. Київська"
+   },
+   "dateEvent": "2026-11-17T19:30:00+00:00",
+   "datePlanIn": "2026-11-17T22:00:00+00:00",
+   "koment": "3,1",
+   "switchSubReason": 2,
+   "otg": {
+    "@id": "/api/pw_otgs/6",
+    "@type": "PwOtg",
+    "id": 6,
+    "code": "6",
+    "name": "Житомирський РЕМ"
+   },
+   "buildingNames": "0, 120, 18, 20, 22, 24, 29, 31, 31А, 33, 35, 37, 38, 39, 40, 41, 43, 45, 47, 49, 51, 52, 52/20, 53, 54, 55, 56, 57, 60, 60-А, 60а, 62, 64, 66, 68, 69, 70, 80, 82, 84, 86, 96",
+   "typeOff": 1
+  }
+ ],
+ "hydra:totalItems": 1,
+ "hydra:view": {
+  "@id": "/api/pw_accidents?otg.id=&city.id=333&street.id=4757",
+  "@type": "hydra:PartialCollectionView"
+ }
+}

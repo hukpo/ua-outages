@@ -1,0 +1,90 @@
+{
+ "@context": "/api/contexts/PwAccident",
+ "@id": "/api/pw_accidents",
+ "@type": "hydra:Collection",
+ "hydra:member": [
+  {
+   "@id": "/api/pw_accidents/432938206",
+   "@type": "PwAccident",
+   "id": 432938206,
+   "code_otg": "6",
+   "city": {
+    "@id": "/api/pw_cities/333",
+    "@type": "PwCity",
+    "id": 333,
+    "name": "Житомир",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/4789",
+    "@type": "PwStreet",
+    "id": 4789,
+    "city": {
+     "@id": "/api/pw_cities/333",
+     "@type": "PwCity",
+     "id": 333,
+     "name": "Житомир",
+     "codeOtg": ""
+    },
+    "name": "вул. Покровська"
+   },
+   "dateEvent": "2026-11-11T19:00:00+00:00",
+   "datePlanIn": "2026-11-20T17:00:00+00:00",
+   "koment": "УДАР БПЛА",
+   "switchSubReason": 0,
+   "otg": {
+    "@id": "/api/pw_otgs/6",
+    "@type": "PwOtg",
+    "id": 6,
+    "code": "6",
+    "name": "Житомирський РЕМ"
+   },
+   "buildingNames": "166, 234-А, 236, 239",
+   "typeOff": 1
+  },
+  {
+   "@id": "/api/pw_accidents/432938207",
+   "@type": "PwAccident",
+   "id": 432938207,
+   "code_otg": "6",
+   "city": {
+    "@id": "/api/pw_cities/333",
+    "@type": "PwCity",
+    "id": 333,
+    "name": "Житомир",
+    "codeOtg": ""
+   },
+   "street": {
+    "@id": "/api/pw_streets/4789",
+    "@type": "PwStreet",
+    "id": 4789,
+    "city": {
+     "@id": "/api/pw_cities/333",
+     "@type": "PwCity",
+     "id": 333,
+     "name": "Житомир",
+     "codeOtg": ""
+    },
+    "name": "вул. Покровська"
+   },
+   "dateEvent": "2026-11-17T19:30:00+00:00",
+   "datePlanIn": "2026-11-17T22:00:00+00:00",
+   "koment": "6,1",
+   "switchSubReason": 2,
+   "otg": {
+    "@id": "/api/pw_otgs/6",
+    "@type": "PwOtg",
+    "id": 6,
+    "code": "6",
+    "name": "Житомирський РЕМ"
+   },
+   "buildingNames": "126, 128, 130, 130А, 130Б, 132, 134, 134А, 134Б, 136, 136А, 138, 140, 142, 144, 146, 146А, 148, 150, 150А, 152, 154, 156, 158, 158А, 160, 160А, 162, 164, 169, 222, 224, 224А, 224Б, 226, 228, 230, 232, 234, 234 Б, 234Б, 236, 238, 240, 241, 241А, 242, 243, 243А, 243В, 244, 245, 246, 248, 249, 251, 253, 255, 255А, 257, 259, 261-А, 261А, 261Б, 263, 263А, 265, 267, 269, 271",
+   "typeOff": 1
+  }
+ ],
+ "hydra:totalItems": 2,
+ "hydra:view": {
+  "@id": "/api/pw_accidents?otg.id=&city.id=333&street.id=4789",
+  "@type": "hydra:PartialCollectionView"
+ }
+}

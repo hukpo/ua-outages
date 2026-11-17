@@ -141,6 +141,8 @@ export function ternopilProvider(): Provider {
       info: INFO,
       label: 'Ternopil',
       api: API,
+      // empty on 17.11.2026; times taken as Kyiv wall clock like the backend's other stamps (UNVERIFIED here)
+      outages: { site: INFO.website },
       async streetBuildings(ctx, street) {
         const q = new URLSearchParams({ cityId: street.cityId ?? '', streetId: street.id })
         const data = await ctx.http.json<{ buildingNames?: unknown }>(

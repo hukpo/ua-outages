@@ -1,0 +1,7 @@
+{
+ "@context": "/api/contexts/PwAccident",
+ "@id": "/api/pw_accidents",
+ "@type": "hydra:Collection",
+ "hydra:member": [],
+ "hydra:totalItems": 0
+}
