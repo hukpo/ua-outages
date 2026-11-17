@@ -170,3 +170,8 @@ Sample address for the health check: `{ city: 'Вільногірськ', street
 ## Emergency schedules (ГАВ)
 
 `planned-outages` `today.status = "EmergencyShutdowns"` is read by `getEmergency` for kyiv and dnipro, together with @dtek_ua posts (not for ЦЕК: 3/303 never showed it). See [emergency.md](emergency.md).
+
+## Status 2026-11-17: no longer the only source of `kyiv` and `dnipro`
+
+Since 0.4.3 DTEK's own sites (dtek-kem, dtek-dnem) are read next to this API for `kyiv` and `dnipro`; see dtek-kem.md and
+dtek-dnem.md. On 17.11.2026 the hours were the same in every queue of both regions.

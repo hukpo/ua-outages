@@ -1,11 +1,11 @@
 import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { normalizeGroup, unpublished } from '../schedule.js'
-import type { AddressQuery, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
+import type { AddressQuery, GroupMatch, ProviderInfo, RegionId, RegionSchedule } from '../types.js'
 import { asSource } from './as-source.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
-import { mergeSources } from './sources.js'
+import { mergeSources, type SourceSpec } from './sources.js'
 import { cookieHeader } from '../util.js'
 
 /**
@@ -264,6 +264,25 @@ export function dtekProvider(o: DtekOptions): Provider {
         ...(groups.length > 1 ? { otherGroups: groups.slice(1) } : {}),
         address: { city: city?.name ?? street.cityId, street: street.name, house: house.number },
       }
+    },
+  }
+}
+
+/**
+ * A DTEK site's schedule as one `mergeSources` channel, for a region whose main channel is
+ * another one: Kyiv and Dnipro are read from YASNO's API, and the grid operator's own site
+ * (dtek-kem, dtek-dnem) carries the same schedule. /ua/ajax first, then the page, as above.
+ */
+export function dtekSiteSource(region: RegionId, operator: string, code: string): SourceSpec {
+  const page = `https://www.dtek-${code}.com.ua/ua/shutdowns`
+  const site = dtekProvider({ info: { id: region, name: operator, operator, website: page }, code })
+  return {
+    id: 'site',
+    url: page,
+    read: async (ctx) => {
+      const s = await site.getSchedules!(ctx)
+      const via = s.sources?.[0]?.url
+      return { ...asSource(s), ...(via ? { url: via } : {}) }
     },
   }
 }

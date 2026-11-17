@@ -25,3 +25,13 @@ Not attempted here (out of scope: no WAF bypass).
 ## Alternative official source
 
 YASNO regionId=25 dsoId=902 (see ../yasno/NOTES.md) — same operator, WAF-free, has address search.
+
+## Status 2026-11-17: second source of `kyiv`
+
+`/ua/ajax` answers plain requests here (15:40 Kyiv, a Ukrainian residential address): POST without a token → 400 with
+`Set-Cookie: _csrf-dtek-kem`; with `X-CSRF-Token` built from it → 200. `checkDisconUpdate`: `fact.update` 16.11.2026 23:46, 60 queues; YASNO `updatedOn` 17.11 00:00:01.
+Every queue had the same intervals as YASNO for 17.11; neither had 18.11 yet.
+
+Since 0.4.3 the site is merged with YASNO for `kyiv` (`dtekSiteSource` in `src/providers/dtek.ts`): `/ua/ajax` first, the
+page if that fails. Address lookup stays on YASNO. Not measured: which of the two has a change first, and whether YASNO ever
+re-stamps old hours after the site has changed (the merge takes the newer stamp).
