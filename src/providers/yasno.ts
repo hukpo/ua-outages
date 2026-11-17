@@ -14,7 +14,7 @@ import type {
   RegionSchedule,
   Street,
 } from '../types.js'
-import { asSource } from './as-source.js'
+import { asSource, steadyStamps } from './as-source.js'
 import { cekTelegramSource } from './cek-telegram.js'
 import { dtekSiteSource } from './dtek.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -82,6 +82,10 @@ export function yasnoProvider(o: YasnoOptions): Provider {
     if (!Array.isArray(data)) throw new OutageError('parse', `YASNO ${path}: expected a list`, { region })
     return data as YasnoItem[]
   }
+  // `updatedOn` moves with any queue and any day: a day that didn't change keeps the time it came with
+  const steady = steadyStamps()
+  // made once, so that a channel which remembers what it read keeps doing so between calls
+  const channel = OPERATOR_CHANNELS[o.dsoId]?.()
 
   const provider: Provider = {
     info: { ...o.info, capabilities: { schedule: true, addressSearch: true } },
@@ -97,13 +101,14 @@ export function yasnoProvider(o: YasnoOptions): Provider {
         read: async () => {
           const now = ctx.now()
           const bust = Math.floor(now.getTime() / 1000)
-          return asSource(
-            parsePlanned(region, await ctx.http.json<YasnoPlanned>(`${url}?_=${bust}`, { region }), now),
+          return steady(
+            asSource(
+              parsePlanned(region, await ctx.http.json<YasnoPlanned>(`${url}?_=${bust}`, { region }), now),
+            ),
           )
         },
       }
-      const channel = OPERATOR_CHANNELS[o.dsoId]
-      return mergeSources(ctx, region, channel ? [api, channel()] : [api])
+      return mergeSources(ctx, region, channel ? [api, channel] : [api])
     },
 
     async searchStreets(ctx, query, city) {
