@@ -90,9 +90,12 @@ Two channels of the operator, merged with `mergeSources` (`src/providers/sources
 - **Changes in words** ("📊 … маємо зміни у Графіку погодинних відключень (ГПВ) на 16 листопада"). Applied only where the words are exact:
   - `З 6:00 до 8:00 додатково відключаються черги 1/1 та 1/2`: the outage is added.
   - `До 17:00 продовжується відключення для черг 4/1 та 4/2`: the last outage of the poster that begins before 17:00 now ends at 17:00, if it is running at the time of the post or still ahead (on 02.11 "До 17:00 продовжується … 6/1" at 11:20 was about the outage due at 12:00).
-  - `З 07:15 починається відключення для …` and `З 22:00 відключаються …` give no end: not applied, the poster's times stay. A later "продовжується" for the same group isn't applied either, since it may be about that outage.
-  - A post for two days ("на 3 та 4 листопада") doesn't say which line is for which day: not applied.
-  - In every case the day's `publishedAt` (and so `updatedAt`) moves to the post's time and the post becomes the source's `url`. The SDK has no field yet that says "this day was amended by a post that couldn't be applied".
+  - `З 07:15 починається відключення для …` and `З 22:00 відключаються …` give no end: not applied, and the groups the line names are `unknown` for that day from then on (since 0.4.4; see below). A later "продовжується" for the same group isn't applied either, since it may be about that outage.
+  - `До 01:00 продовжується …` that fits no outage of the poster (15.11 00:11, an outage running over from the day before): the group is `unknown` too.
+  - A post for two days ("на 3 та 4 листопада") doesn't say which line is for which day: not applied, and the groups its lines name are `unknown` on both days.
+  - A line with a time and "черг" but no group that can be read: every group is `unknown`.
+  - In every case the day's `publishedAt` (and so `updatedAt`) moves to the post's time and the post becomes the source's `url`.
+  - **Why `unknown` (0.4.4).** Until 0.4.3 such a group kept the poster's hours while the day's `publishedAt` moved to the change post: an old schedule with a new time, which also beat the site's copy of the same poster. The outage the post announces is real and its end isn't given, so the poster's hours are known to be wrong and nothing exact can replace them. The group's day is `unknown` until the next poster ("ОНОВЛЕНИЙ" or tomorrow's) states it again, as `src/providers/cek-telegram.ts` does for ЦЕК. The other groups keep their hours; `assessFreshness` lists `partial`. On the saved posts: 14.11 by 18:30 seven of twelve groups (1/1, 1/2, 3/1, 3/2, 4/1, 4/2, 5/2), 16.11 by 10:30 four (2/1, 2/2, 5/1, 5/2).
 - No cancellation wording has been seen; an unknown line changes nothing.
 
 ### The poster reader (`src/image/cards.ts`)
@@ -129,7 +132,8 @@ Other notes:
 - Site unreachable (it reset every connection from the research machine for hours on 17.11.2026 after a burst of requests): Telegram alone gives today and tomorrow.
 - Telegram unreachable or its markup changed: the site alone gives its day, i.e. nothing for today before the morning upload and never tomorrow.
 - A poster in a new typography, or with a typo in a time: the channel that carries it fails with `parse`; the other one still answers.
-- A change in words that can't be applied: the day keeps the poster's times with a newer `updatedAt`.
+- A change in words that can't be applied: the groups it names are `unknown` for that day until the next poster, the day has a newer `updatedAt` (until 0.4.3: the poster's times stayed).
+- Telegram unreachable after such a change: the site's poster alone gives the day, with the hours the change made wrong; nothing on the site says so.
 
 ---
 

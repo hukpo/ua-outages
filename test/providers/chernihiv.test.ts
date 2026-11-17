@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import { parseTelegramPreview, type TelegramPost } from '../../src/emergency/telegram.js'
 import { STANDARD_GROUPS } from '../../src/image/table.js'
 import { readCardPoster } from '../../src/image/cards.js'
@@ -140,7 +141,7 @@ const read = (at: string, routes: Route[]) =>
   )
 const day = (s: RegionSchedule, group: string, date: string) => {
   const d = s.schedules[group]!.find((d) => d.date === date)
-  return d ? hhmm(d) : undefined
+  return d ? (d.status === 'unknown' ? 'unknown' : hhmm(d)) : undefined
 }
 const dates = (s: RegionSchedule) => s.schedules['1.1']!.map((d) => d.date)
 const source = (s: RegionSchedule, id: string) => s.sources!.find((x) => x.id === id)!
@@ -173,19 +174,34 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     })
   })
 
-  it('a change in words moves the day forward even when it can not be applied', async () => {
+  it('a change in words that gives no end leaves its queues unknown, not on the old hours', async () => {
     // 16.11 10:30: "З 07:15 починається відключення для черг 5/1 та 5/2", "З 10:10 … 2/1 та 2/2"
     const s = await read('2026-11-16T10:30:00+02:00', [
       SITE_16,
       ...channel('5717-5723', { 5718: 'tg-5718.jpg' }, 5721),
     ])
     expect(dates(s)).toEqual(['2026-11-16'])
-    // no end is given: the poster's times stay as they are
-    expect(day(s, '5.1', '2026-11-16')).toBe('09:30-13:00 16:30-20:00')
-    expect(day(s, '2.1', '2026-11-16')).toBe('02:30-06:00 13:00-16:30 23:30-00:00')
+    // no end is given: the poster's 09:30-13:00 16:30-20:00 is no longer the day of 5/1 and 5/2,
+    // and what is can't be told. The poster's hours under the time of the change post would be
+    // an old schedule passed off as the new one
+    for (const g of ['5.1', '5.2', '2.1', '2.2']) expect(day(s, g, '2026-11-16'), g).toBe('unknown')
+    expect(s.schedules['5.1']![0]).toEqual({ date: '2026-11-16', status: 'unknown', intervals: [] })
+    // the queues the posts don't name keep the poster's hours
+    expect(day(s, '6.1', '2026-11-16')).toBe('00:00-02:30 09:30-13:00 20:00-22:00')
     expect(s.updatedAt).toBe('2026-11-16T10:06:15+02:00')
     expect(source(s, TG).dates).toEqual(['2026-11-16'])
     expect(source(s, 'site').disagrees).toBeUndefined()
+    expect(
+      assessFreshness(s, { now: new Date('2026-11-16T10:30:00+02:00') }).issues.map((i) => i.code),
+    ).toEqual(['partial'])
+
+    // before the first change post the poster stands for every queue
+    const early = await read('2026-11-16T07:00:00+02:00', [
+      SITE_16,
+      ...channel('5717-5723', { 5718: 'tg-5718.jpg' }, 5719),
+    ])
+    expect(day(early, '5.1', '2026-11-16')).toBe('09:30-13:00 16:30-20:00')
+    expect(day(early, '2.1', '2026-11-16')).toBe('02:30-06:00 13:00-16:30 23:30-00:00')
   })
 
   it('after midnight the site still shows yesterday: today comes from Telegram alone', async () => {
@@ -324,9 +340,10 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     expect(day(before, '4.1', '2026-11-02')).toBe('09:00-14:00 19:00-22:30')
     // "До 17:00 продовжується відключення для черги 6/1": the outage that was to begin at 12:00
     expect(day(before, '6.1', '2026-11-02')).toBe('12:00-17:00 22:30-00:00')
-    // "З 11:00 починається відключення для черги 6/2", "З 17:00 … 4/2": no end, not applied
-    expect(day(before, '6.2', '2026-11-02')).toBe('12:00-15:30 22:30-00:00')
-    expect(day(before, '4.2', '2026-11-02')).toBe('09:00-12:00 19:00-22:30')
+    // "З 11:00 починається відключення для черги 6/2", "З 14:00 … 5/1", "З 17:00 … 4/2": no end,
+    // so their day isn't known until the re-issued poster (above) states it again
+    for (const g of ['6.2', '5.1', '4.2']) expect(day(before, g, '2026-11-02'), g).toBe('unknown')
+    expect(day(before, '5.2', '2026-11-02')).not.toBe('unknown')
   })
 
   it('changes in words: applied only where they are exact', async () => {
@@ -336,14 +353,30 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     expect(dates(s)).toEqual(['2026-11-14'])
     expect(s.updatedAt).toBe('2026-11-14T17:59:16+02:00')
     // 12:02 "До 17:00 продовжується відключення для черг 4/1 та 4/2", "До 20:00 … 6/1 та 6/2"
-    expect(day(s, '4.1', '2026-11-14')).toBe('01:30-05:00 11:30-17:00')
-    expect(day(s, '4.2', '2026-11-14')).toBe('01:30-05:00 11:30-17:00')
     expect(day(s, '6.2', '2026-11-14')).toBe('05:00-08:00 15:00-20:00')
+    // … but 17:59 "З 22:00 відключаються черги 4/1 та 4/2" gives no end: not known any more
+    expect(day(s, '4.1', '2026-11-14')).toBe('unknown')
+    expect(day(s, '4.2', '2026-11-14')).toBe('unknown')
+    const noon = await read('2026-11-14T12:30:00+02:00', [down, ...channel('5705-5717', pictures, 5711)])
+    expect(day(noon, '4.1', '2026-11-14')).toBe('01:30-05:00 11:30-17:00')
+    expect(day(noon, '4.2', '2026-11-14')).toBe('01:30-05:00 11:30-17:00')
     // 11:55 "З 12:00 починається відключення для черг 1/1 та 1/2": until when isn't said
-    expect(day(s, '1.1', '2026-11-14')).toBe('15:00-18:30')
+    expect(day(s, '1.1', '2026-11-14')).toBe('unknown')
     // 12:02 "З 17:00 починається … 3/1 та 3/2", then 17:59 "До 22:00 продовжується … 3/2": which
     // outage goes on is no longer in the poster, so that one isn't applied either
-    expect(day(s, '3.2', '2026-11-14')).toBe('08:00-11:30 18:30-20:00')
+    expect(day(s, '3.2', '2026-11-14')).toBe('unknown')
+    // 17:59 "З 20:00 починається відключення для черги 5/2": 5/1, which no post names, stays
+    expect(day(s, '5.2', '2026-11-14')).toBe('unknown')
+    expect(day(s, '5.1', '2026-11-14')).not.toBe('unknown')
+    expect(s.groups.filter((g) => day(s, g, '2026-11-14') === 'unknown')).toEqual([
+      '1.1',
+      '1.2',
+      '3.1',
+      '3.2',
+      '4.1',
+      '4.2',
+      '5.2',
+    ])
 
     const next = await read('2026-11-15T01:00:00+02:00', [down, ...channel('5705-5717', pictures)])
     expect(dates(next)).toEqual(['2026-11-15'])
@@ -351,8 +384,10 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     // 00:31 "З 6:00 до 8:00 додатково відключаються черги 1/1 та 1/2"
     expect(day(next, '1.1', '2026-11-15')).toBe('06:00-08:00 16:00-19:30')
     expect(day(next, '1.2', '2026-11-15')).toBe('06:00-08:00 16:00-19:30')
-    // 00:11 "До 01:00 продовжується відключення для черг 5/1 та 5/2": an outage of the 14th
-    expect(day(next, '5.1', '2026-11-15')).toBe('16:00-19:30')
+    // 00:11 "До 01:00 продовжується відключення для черг 5/1 та 5/2": an outage of the 14th, or
+    // one the poster of the 15th doesn't have; which, and from when, isn't said
+    expect(day(next, '5.1', '2026-11-15')).toBe('unknown')
+    expect(day(next, '5.2', '2026-11-15')).toBe('unknown')
   })
 
   it('a re-issued poster with no earlier one to lay it on stands alone', () => {
@@ -405,7 +440,7 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     )
   })
 
-  it('a change for two days at once is not applied to either', () => {
+  it('a change for two days at once is applied to neither, and leaves the queues it names unknown', () => {
     const post = (id: number, at: string, text: string): TelegramPost => ({
       channel: 'chernigivoblenergo',
       id,
@@ -438,7 +473,12 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     )
     expect(Object.keys(r.days)).toEqual(['2026-11-04'])
     expect(r.days['2026-11-04']!.publishedAt).toBe('2026-11-03T23:05:00+02:00')
-    expect(hhmm(r.days['2026-11-04']!.schedules['2.1']!)).toBe('00:00-03:00 09:30-16:30 20:00-00:00')
+    // which line is for which day isn't said: the poster's "00:00-03:00 09:30-16:30 20:00-00:00"
+    // for 2/1 may or may not have become "…-06:00"
+    const nov4 = r.days['2026-11-04']!.schedules
+    for (const g of ['2.1', '2.2', '5.1', '5.2', '6.1', '6.2'])
+      expect(nov4[g], g).toEqual({ date: '2026-11-04', status: 'unknown', intervals: [] })
+    for (const g of ['1.1', '1.2', '3.1', '3.2', '4.1', '4.2']) expect(nov4[g]!.status, g).not.toBe('unknown')
     expect(r.url).toBe('https://t.me/chernigivoblenergo/5652')
   })
 

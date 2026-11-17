@@ -203,7 +203,10 @@ function namedDates(text: string, near: string): string[] {
 interface ChannelDay {
   cards: MinuteSlot[][]
   publishedAt: string
-  /** Groups (as card indexes) a change in words left in a state that isn't known exactly, see `amend` */
+  /**
+   * Groups (as card indexes) a change in words left in a state that isn't known exactly, see
+   * `amend`: their day is `unknown` from then on, until the next poster
+   */
   open: Set<number>
 }
 
@@ -241,11 +244,16 @@ const clock = (text: string | undefined) => (text ? parseClock(text.replace('.',
  * - "До 17:00 продовжується відключення для черг 4/1 та 4/2": the last outage of the poster
  *   that begins before 17:00 ends at 17:00, if it is running when the post comes or still ahead.
  * - "З 07:15 починається відключення для черг 5/1 та 5/2" doesn't say when it ends, and
- *   "З 22:00 відключаються …" neither: nothing is invented, the poster's times stay. A later
- *   "продовжується" for such a group is left alone too: it may be about the outage that isn't
- *   in the poster.
+ *   "З 22:00 відключаються …" neither: nothing is invented, and the poster's times are no
+ *   longer the group's day either. The group is `open`: its day is not known until the next
+ *   poster, as in `cek-telegram.ts`. So is a group whose "продовжується" fits no outage of the
+ *   poster, and any later line about an open group: it may be about the outage that isn't in
+ *   the poster.
+ *
+ * With `exact: false` (a post for two days, which doesn't say which line is for which) nothing
+ * is applied and every group a line names is open.
  */
-function amend(day: ChannelDay, text: string, posted: number): void {
+function amend(day: ChannelDay, text: string, posted: number, exact = true): void {
   for (const line of text.split('\n')) {
     const groups = [...line.matchAll(/(?<![\d/.:])([1-6])\/([12])(?![\d/])/g)].map((m) =>
       STANDARD_GROUPS.indexOf(`${m[1]}.${m[2]}`),
@@ -263,12 +271,14 @@ function amend(day: ChannelDay, text: string, posted: number): void {
     const end = clock(added?.[2] ?? until?.[1]) || (added || until ? 1440 : null)
     for (const g of groups) {
       const slots = day.cards[g]!
-      if (added && start !== null && end !== null && start < end) {
+      if (exact && added && start !== null && end !== null && start < end) {
         day.cards[g] = joined([...slots, { start, end, kind: 'off' }])
         continue
       }
       const last =
-        until && end !== null && !day.open.has(g) ? slots.filter((s) => s.start < end).at(-1) : undefined
+        exact && until && end !== null && !day.open.has(g)
+          ? slots.filter((s) => s.start < end).at(-1)
+          : undefined
       if (last && end !== null && last.end >= posted && last.end < end) {
         last.end = end
         day.cards[g] = joined(slots)
@@ -365,7 +375,7 @@ export function chernihivChannelDays(
       const day = days.get(date)
       if (!day) continue
       // which line is for which day isn't said when the post is for two
-      if (dates.length === 1) amend(day, post.text, date === postDate ? kyivMinuteOfDay(at) : 0)
+      amend(day, post.text, date === postDate ? kyivMinuteOfDay(at) : 0, dates.length === 1)
       // applied or not, the poster is no longer the last word on this day
       day.publishedAt = post.at
       url = post.url
@@ -375,7 +385,13 @@ export function chernihivChannelDays(
   for (const [date, day] of days) {
     if (date < today) continue
     const schedules: Record<GroupId, DaySchedule> = {}
-    STANDARD_GROUPS.forEach((g, i) => (schedules[g] = toDay(date, day.cards[i]!)))
+    STANDARD_GROUPS.forEach(
+      (g, i) =>
+        // a change that couldn't be applied: neither the poster's hours nor a guess
+        (schedules[g] = day.open.has(i)
+          ? { date, status: 'unknown', intervals: [] }
+          : toDay(date, day.cards[i]!)),
+    )
     out.days[date] = { schedules, publishedAt: day.publishedAt }
   }
   return out
