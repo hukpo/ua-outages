@@ -77,6 +77,8 @@ export interface RegionInfo {
     streetSearch?: boolean
     /** `getEmergency` has a source for this region (ГАВ / СГАВ announcements); filled in by the client */
     emergency: boolean
+    /** `getHouseOutage` can tell whether a house is off right now and why; filled in by the client */
+    houseOutage?: boolean
   }
 }
 
@@ -85,8 +87,8 @@ export interface RegionInfo {
  * works out (`streetSearch`, `emergency`).
  */
 export type ProviderInfo = Omit<RegionInfo, 'capabilities'> & {
-  capabilities: Omit<RegionInfo['capabilities'], 'emergency' | 'streetSearch'> &
-    Partial<Pick<RegionInfo['capabilities'], 'emergency' | 'streetSearch'>>
+  capabilities: Omit<RegionInfo['capabilities'], 'emergency' | 'streetSearch' | 'houseOutage'> &
+    Partial<Pick<RegionInfo['capabilities'], 'emergency' | 'streetSearch' | 'houseOutage'>>
 }
 
 /**
@@ -301,6 +303,41 @@ export interface EmergencyQueues {
   gav?: string[]
   sgav?: string[]
   achr?: string[]
+}
+
+// --- one house, now ---
+
+/**
+ * Why a house is off, as the operator's site says:
+ * - `emergency`: екстрені відключення (ГАВ). The hourly schedule doesn't apply to the house now.
+ * - `scheduled`: the hourly schedule's own outage ("стабілізаційне відключення згідно графіку").
+ * - `repair`: аварійні ремонтні роботи, local damage (after an attack, a broken line).
+ * - `planned`: планові ремонтні роботи.
+ * - `other`: a reason not seen before; `reason` has the operator's words.
+ */
+export type HouseOutageKind = 'emergency' | 'scheduled' | 'repair' | 'planned' | 'other'
+
+/** A house that is off right now, from the operator's per-address record (`getHouseOutage`). */
+export interface HouseOutage {
+  region: RegionId
+  /** Address as the operator spells it */
+  address: { city?: string; street: string; house: string }
+  kind: HouseOutageKind
+  /** The reason as the operator writes it ("Екстренні відключення (Аварійне без застосування …)") */
+  reason: string
+  /** `false` for `emergency` (the schedule doesn't apply now), `true` for `scheduled`, else `null` */
+  scheduleApplies: boolean | null
+  /** When it started, ISO with the Kyiv offset; null when the operator gives none */
+  from: string | null
+  /** When power is expected back: the operator's estimate, often moved */
+  to: string | null
+  /** Outage groups of the house, as in `GroupMatch` (first = `group`) */
+  groups: GroupId[]
+  /** When the operator last updated its per-house records */
+  updatedAt: string | null
+  /** Where it was read */
+  url: string
+  fetchedAt: string
 }
 
 // --- emergency status ---

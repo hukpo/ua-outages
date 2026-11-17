@@ -14,6 +14,7 @@ import type {
   GroupMatch,
   GroupSchedule,
   House,
+  HouseOutage,
   RegionHealth,
   RegionId,
   RegionInfo,
@@ -130,6 +131,7 @@ export class OutageClient {
         ...p.info.capabilities,
         streetSearch: !!(p.searchStreets && p.searchHouses && p.groupOf),
         emergency: !!p.getEmergency,
+        houseOutage: !!(p.houseOutages ?? p).outageOf,
       },
     }
   }
@@ -346,15 +348,16 @@ export class OutageClient {
     region: RegionId,
     query: string,
     opts: SearchOptions & { district?: string },
+    chain: AddressChain = { p: this.provider(region), tag: '' },
   ): Promise<City[]> {
-    const p = this.provider(region)
+    const { p, tag } = chain
     if (!p.searchCities) return []
     const found = await this.rankedSearch(
       ctx,
       region,
       'settlement',
       query,
-      'cities',
+      `${tag}cities`,
       !!p.remoteSearch?.cities,
       (q) => p.searchCities!(ctx, q),
       opts.district ? MAX_CANDIDATES : (opts.limit ?? DEFAULT_LIMIT),
@@ -384,8 +387,9 @@ export class OutageClient {
     region: RegionId,
     query: string,
     opts: SearchOptions & { city?: City },
+    chain: AddressChain = { p: this.addressProvider(region), tag: '' },
   ): Promise<Street[]> {
-    const p = this.addressProvider(region)
+    const { p, tag } = chain
     if (p.searchCities && !opts.city)
       throw new OutageError('not-found', `${p.info.name}: pick a city first`, { region })
     return this.rankedSearch(
@@ -393,7 +397,7 @@ export class OutageClient {
       region,
       'street',
       query,
-      `streets:${opts.city?.id ?? ''}`,
+      `${tag}streets:${opts.city?.id ?? ''}`,
       !!p.remoteSearch?.streets,
       (q) => p.searchStreets!(ctx, q, opts.city),
       opts.limit ?? DEFAULT_LIMIT,
@@ -439,21 +443,84 @@ export class OutageClient {
     const direct = this.provider(region)
     if (direct.lookupAddress) return direct.lookupAddress(ctx, address)
     const p = this.addressProvider(region)
+    const { house, street, city } = await this.resolveAddress(ctx, region, address, { p, tag: '' })
+    return p.groupOf!(ctx, house, street, city)
+  }
 
+  /**
+   * Whether a house is off right now and why, from the operator's own record of the address
+   * (DTEK's sites: `capabilities.houseOutage`). `null` when the operator lists no outage there.
+   *
+   * This is the only place that sees per-house emergency outages: while a region as a whole is
+   * back on the schedule (`getEmergency` is `inactive`), some houses can still be off under
+   * "екстрені відключення" until a time of their own, and others off for local repairs. A
+   * `kind: 'emergency'` result means the schedule doesn't apply to this house now.
+   *
+   * The address is looked up on the operator's site, so names may be spelled as for `findGroup`.
+   * One request per street, cached for 5 minutes (`fresh: true` skips that). Ask for the houses
+   * people asked about; the sites are behind a bot check that blocks a client asking for
+   * hundreds of streets in a row.
+   */
+  async getHouseOutage(
+    region: RegionId,
+    address: AddressQuery,
+    opts: { signal?: AbortSignal; fresh?: boolean } = {},
+  ): Promise<HouseOutage | null> {
+    const direct = this.provider(region)
+    const p = direct.houseOutages ?? direct
+    if (!p.outageOf || !p.searchStreets || !p.searchHouses)
+      throw new OutageError(
+        'unsupported',
+        `${direct.info.name}: the operator publishes no per-house status`,
+        {
+          region,
+        },
+      )
+    opts.signal?.throwIfAborted()
+    const base = this.context(opts.signal)
+    const ctx = opts.fresh ? { ...base, fresh: true } : base
+    const chain = { p, tag: p === direct ? '' : 'site:' }
+    const { house, street, city } = await abortable(
+      this.resolveAddress(ctx, region, address, chain),
+      opts.signal,
+    )
+    return abortable(p.outageOf(ctx, house, street, city), opts.signal)
+  }
+
+  /** An address down a provider's chain: settlement (if it has them), street, house. */
+  private async resolveAddress(
+    ctx: ProviderContext,
+    region: RegionId,
+    address: AddressQuery,
+    chain: AddressChain,
+  ): Promise<{ house: House; street: Street; city?: City }> {
+    const { p } = chain
     let city: City | undefined
-    if (p.searchCities) {
+    if (p.searchCities && !address.city && chain.tag) {
+      // another provider's chain for a region asked about without a city (Kyiv: YASNO has no
+      // cities, DTEK's site lists "м. Київ" alone) takes its city when it has only one
+      const all = await this.candidates(ctx, region, `${chain.tag}cities`, '', false, (q) =>
+        p.searchCities!(ctx, q),
+      )
+      if (all.length !== 1)
+        throw new OutageError('not-found', `${p.info.name}: specify a city or village`, { region })
+      city = all[0]
+    } else if (p.searchCities) {
       if (!address.city)
         throw new OutageError('not-found', `${p.info.name}: specify a city or village`, { region })
-      const cities = await this.searchCitiesIn(ctx, region, address.city, {
-        limit: 10,
-        district: address.district,
-      })
+      const cities = await this.searchCitiesIn(
+        ctx,
+        region,
+        address.city,
+        { limit: 10, district: address.district },
+        chain,
+      )
       city = choose(address.city, cities, 'city', region, (c) =>
         c.district ? `${c.name} (${c.district})` : c.name,
       )
     }
 
-    const ranked = await this.searchStreetsIn(ctx, region, address.street, { city, limit: 10 })
+    const ranked = await this.searchStreetsIn(ctx, region, address.street, { city, limit: 10 }, chain)
     // a street with another number or of another type is a neighbour, however close the name
     const streets = ranked.filter((s) => sameStreet(address.street, s.name))
     if (ranked.length && !streets.length)
@@ -482,7 +549,7 @@ export class OutageClient {
         }`,
         { region },
       )
-    return p.groupOf!(ctx, house, street, city)
+    return { house, street, city }
   }
 
   /**
@@ -674,6 +741,12 @@ export class OutageClient {
       })
     return p
   }
+}
+
+/** A provider whose address chain is walked, and the prefix of its entries in the search cache */
+interface AddressChain {
+  p: Provider
+  tag: string
 }
 
 /**

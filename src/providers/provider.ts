@@ -5,6 +5,7 @@ import type {
   EmergencyStatus,
   GroupMatch,
   House,
+  HouseOutage,
   ProviderInfo,
   RegionSchedule,
   Street,
@@ -60,6 +61,16 @@ export interface Provider {
    */
   lookupAddress?(ctx: ProviderContext, address: AddressQuery): Promise<GroupMatch>
 
+  /**
+   * Whether a house is off right now and why (`OutageClient.getHouseOutage`), on this provider's
+   * own address chain; null when the operator lists no outage there.
+   */
+  outageOf?(ctx: ProviderContext, house: House, street: Street, city?: City): Promise<HouseOutage | null>
+  /**
+   * Another provider with `outageOf` and its own address chain, for a region whose lookup reads a
+   * source without per-house status (Kyiv and Dnipro: YASNO for groups, the DTEK site for this).
+   */
+  readonly houseOutages?: Provider
   /**
    * ГАВ / СГАВ status of the region now (`OutageClient.getEmergency`). Present only when the
    * region has a source for it; nothing announced is `inactive`, never an error.
