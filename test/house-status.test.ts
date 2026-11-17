@@ -345,3 +345,151 @@ describe('healthCheck({ houseOutage: true })', () => {
     ).toBeUndefined()
   })
 })
+
+/** Cases the review of 0.4.8 found (five testers: Claude and GPT, mocks and live) */
+describe('decideHouseStatus: review of 0.4.8', () => {
+  const at = (hhmm: string) => new Date(`2026-11-17T${hhmm}:00+02:00`)
+  const day = (status: DaySchedule['status'], intervals = [iv('17T10:00', '17T12:00')]): DaySchedule => ({
+    date: '2026-11-17',
+    status,
+    intervals,
+  })
+
+  it('only a day published as scheduled gives its slots a say', () => {
+    const now = at('11:00')
+    expect(decideHouseStatus(inputs({ now, days: [day('emergency')] }))).toMatchObject({
+      state: 'maybe',
+      basis: 'emergency',
+      scheduled: null,
+    })
+    expect(decideHouseStatus(inputs({ now, days: [day('unknown')] }))).toMatchObject({ state: 'unknown' })
+    expect(decideHouseStatus(inputs({ now, days: [day('no-outages')] }))).toMatchObject({ state: 'on' })
+  })
+
+  it('an outage runs past midnight only into a published tomorrow; the next outage too', () => {
+    const tomorrow = (status: DaySchedule['status']): DaySchedule => ({
+      date: '2026-11-18',
+      status,
+      intervals: [iv('18T00:00', '18T05:00')],
+    })
+    const today = day('scheduled', [iv('17T23:00', '18T00:00')])
+    expect(decideHouseStatus(inputs({ now: at('23:30'), days: [today, tomorrow('unknown')] })).until).toBe(
+      '2026-11-18T00:00:00+02:00',
+    )
+    expect(decideHouseStatus(inputs({ now: at('23:30'), days: [today, tomorrow('scheduled')] })).until).toBe(
+      '2026-11-18T05:00:00+02:00',
+    )
+    const clear = day('scheduled', [])
+    expect(
+      decideHouseStatus(inputs({ now: at('15:00'), days: [clear, tomorrow('unknown')] })).nextOutage,
+    ).toBeNull()
+  })
+
+  it('no on when a part the region has failed, or the emergency is unknown', () => {
+    const now = at('15:00')
+    const gap = (part: 'house-outage' | 'emergency', code: 'network' | 'unsupported') => [
+      { part, code, message: 'x' },
+    ]
+    expect(decideHouseStatus(inputs({ now, gaps: gap('house-outage', 'network') }))).toMatchObject({
+      state: 'unknown',
+      basis: 'none',
+    })
+    expect(decideHouseStatus(inputs({ now, emergency: null, gaps: gap('emergency', 'network') })).state).toBe(
+      'unknown',
+    )
+    expect(decideHouseStatus(inputs({ now, emergency: emergency({ state: 'unknown' }) })).state).toBe(
+      'unknown',
+    )
+    // a part the region simply doesn't have is no doubt
+    expect(decideHouseStatus(inputs({ now, gaps: gap('house-outage', 'unsupported') })).state).toBe('on')
+    // an outage still shows: doubt only stops `on`
+    expect(decideHouseStatus(inputs({ now: NOW, gaps: gap('house-outage', 'network') })).state).toBe('off')
+  })
+
+  it('a ГАВ with unnamed queues: the schedule decides only when the operator says it still applies', () => {
+    expect(
+      decideHouseStatus(inputs({ now: NOW, emergency: emergency({ scheduleApplies: null }) })),
+    ).toMatchObject({
+      state: 'maybe',
+      basis: 'emergency',
+    })
+  })
+
+  it('a ГАВ that leaves the house out while the schedule is suspended: nothing has it off', () => {
+    expect(
+      decideHouseStatus(
+        inputs({ now: NOW, emergency: emergency({ queues: ['6'], scheduleApplies: false }) }),
+      ),
+    ).toMatchObject({ state: 'on', basis: 'emergency' })
+  })
+
+  it('an empty queue list names nothing', () => {
+    expect(decideHouseStatus(inputs({ emergency: emergency({ queues: [] }) })).state).toBe('maybe')
+  })
+})
+
+describe('getHouseStatus: review of 0.4.8', () => {
+  it('`fresh` reaches the address lookup', async () => {
+    const seen: (boolean | undefined)[] = []
+    const p = fakeRegion({})
+    const c = client({
+      ...p,
+      groupOf: async (ctx, ...rest) => {
+        seen.push(ctx.fresh)
+        return p.groupOf!(ctx, ...rest)
+      },
+    })
+    await c.getHouseStatus('dnipro', ADDRESS, { fresh: true })
+    expect(seen).toEqual([true])
+  })
+
+  it('a last good schedule is not taken for now: the failure is a gap', async () => {
+    let fail = false
+    const p = fakeRegion({})
+    const c = new OutageClient({
+      providers: [
+        {
+          ...p,
+          getSchedules: async (ctx) => {
+            if (fail) throw new OutageError('network', 'down', { region: 'dnipro' })
+            return p.getSchedules(ctx)
+          },
+        },
+      ],
+      now: () => new Date('2026-11-17T15:00:00+02:00'),
+      cacheTtlMs: 0,
+      staleIfError: true,
+    })
+    expect((await c.getHouseStatus('dnipro', ADDRESS)).state).toBe('on')
+    fail = true
+    expect(await c.getHouseStatus('dnipro', ADDRESS)).toMatchObject({
+      state: 'unknown',
+      gaps: [{ part: 'schedule', code: 'network' }],
+    })
+  })
+
+  it('the group from the house record when the lookup has none: its schedule is read', async () => {
+    const s = await client(
+      fakeRegion({ group: new OutageError('network', 'down', { region: 'dnipro' }), outage: OUTAGE }),
+      new Date('2026-11-17T15:00:00+02:00'),
+    ).getHouseStatus('dnipro', ADDRESS)
+    expect(s.nextOutage?.from).toBe('2026-11-17T22:00:00+02:00')
+  })
+
+  it('a region whose only lookup is the house record: a typo is not-found', async () => {
+    const p = fakeRegion({})
+    const { groupOf: _, ...withoutGroups } = p
+    const c = client({ ...withoutGroups, searchHouses: async () => [] })
+    await expect(c.getHouseStatus('dnipro', ADDRESS)).rejects.toMatchObject({ code: 'not-found' })
+  })
+
+  it('healthCheck: a probe rejecting with something not an Error is reported, not thrown', async () => {
+    const p = fakeRegion({})
+    const c = client({
+      ...p,
+      outageOf: () => Promise.reject(undefined), // eslint-disable-line prefer-promise-reject-errors
+    })
+    const r = await c.healthCheck({ houseOutage: true })
+    expect(r.regions[0]!.houseOutage).toEqual({ ok: false, message: 'undefined' })
+  })
+})

@@ -299,9 +299,14 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       (a, b) => Date.parse(a.since) - Date.parse(b.since) || areaKey(a.area).localeCompare(areaKey(b.area)),
     )
     const areas = active.some((t) => !t.area) ? null : [...new Set(byStart.map((t) => t.area!))]
-    // several areas: one area's queues aren't the region's, unless they all say the same
-    const same = (t: Track) => t.count === primary.count && queuesOf(t)?.join() === queuesOf(primary)?.join()
-    const shared = !areas || areas.length < 2 || active.every(same)
+    // several announcements in force: the newest one's queues are the whole picture only when
+    // every one says the same. A region-wide ГАВ next to a district's, or a ГАВ next to a newer
+    // СГАВ, each has queues of its own, and one list would read as all that is off
+    const same = (t: Track) =>
+      t.kind === primary.kind &&
+      t.count === primary.count &&
+      queuesOf(t)?.join() === queuesOf(primary)?.join()
+    const shared = active.every(same)
     return status({
       state: 'active',
       kind: primary.kind,

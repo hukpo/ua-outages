@@ -793,3 +793,42 @@ describe('health check: freshness and sources', () => {
     expect(report.regions[0]).toMatchObject({ status: 'ok', address: { ok: false } })
   })
 })
+
+describe('choose: the name as typed wins', () => {
+  it('an exact street beats a near-duplicate the directory misspells (Zhytomyr, "Бердичивська")', async () => {
+    const c = new OutageClient({
+      now: () => NOW,
+      providers: [
+        fakeProvider({
+          searchStreets: async () => [
+            { id: 's1', name: 'вул. Велика Бердичивська' },
+            { id: 's2', name: 'вул. Велика Бердичівська' },
+          ],
+        }),
+      ],
+    })
+    expect(
+      (await c.findGroup('kyiv', { street: 'вул. Велика Бердичівська', house: '1' })).address.street,
+    ).toBe('вул. Велика Бердичівська')
+  })
+
+  it('two streets of the same name: the type given settles it, none given stays ambiguous', async () => {
+    const c = new OutageClient({
+      now: () => NOW,
+      providers: [
+        fakeProvider({
+          searchStreets: async () => [
+            { id: 's1', name: 'вул. Шевченка' },
+            { id: 's2', name: 'пров. Шевченка' },
+          ],
+        }),
+      ],
+    })
+    expect((await c.findGroup('kyiv', { street: 'пров. Шевченка', house: '1' })).address.street).toBe(
+      'пров. Шевченка',
+    )
+    await expect(c.findGroup('kyiv', { street: 'Шевченка', house: '1' })).rejects.toMatchObject({
+      code: 'not-found',
+    })
+  })
+})

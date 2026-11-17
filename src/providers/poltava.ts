@@ -40,6 +40,8 @@ const CELL: Record<string, IntervalKind | null | undefined> = { s1: null, s2: 'o
 const DIRECTORY_TTL_MS = 24 * 3_600_000
 /** A house's status is read once per this */
 const RESULT_TTL_MS = 5 * 60_000
+/** An outage line this long past its expected end is not taken as current (as for PowerOn) */
+const STALE_AFTER_END_MS = 30 * 60_000
 /** `fresh` still takes what the same call has just read */
 const FRESH_TTL_MS = 15_000
 
@@ -180,6 +182,11 @@ export function poltavaProvider(): Provider {
         )
       const outage = poltavaOutage(r)
       if (!outage) return null
+      // the line is the operator's status now; should it still show an outage past its expected
+      // end (PowerOn's lists do, for hours) or one not begun, that is not an outage now
+      const t = ctx.now().getTime()
+      if (outage.from && Date.parse(outage.from) > t) return null
+      if (outage.to && Date.parse(outage.to) + STALE_AFTER_END_MS <= t) return null
       return {
         region,
         address: { city: city?.name, street: street.name, house: house.number },

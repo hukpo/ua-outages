@@ -312,6 +312,17 @@ describe('DTEK /ua/ajax route (Kyiv region)', () => {
     ).rejects.toMatchObject({ code: 'parse', message: expect.stringMatching(/CSRF cookie/) })
   })
 
+  it('a page whose street list is null or empty still gives the schedule (the list is asked for when needed)', async () => {
+    for (const streets of ['null', '[]']) {
+      const page = fixture('dtek/shutdowns.trimmed.html').replace(
+        /DisconSchedule\.streets\s*=.*/,
+        `DisconSchedule.streets = ${streets}`,
+      )
+      const s = await krem({ stub: true, page }).client.getSchedules('kyiv-region')
+      expect(s.groups.length).toBeGreaterThan(0)
+    }
+  })
+
   it('Odesa reads /ua/ajax first too', async () => {
     const calls: string[] = []
     const fetch: FetchLike = async (url, init) => {

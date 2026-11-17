@@ -95,7 +95,7 @@ export function dtekProvider(o: DtekOptions): Provider {
   return dtekSite(o).provider
 }
 
-/** The provider, and the reading of its schedule as it is (`load`) for `dtekSiteSource` */
+/** The provider, and the reading of its schedule as it is (`load`) for `dtekSiteParts` */
 function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderContext) => Promise<Session> } {
   const region = o.info.id
   const base = `https://www.dtek-${o.code}.com.ua`
@@ -158,7 +158,6 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
       via: url,
     }
     session = s
-    houseCache.clear()
     return s
   }
 
@@ -181,12 +180,13 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
       at: Date.now(),
       cookie: cookieHeader(headers),
       csrf: /<meta name="csrf-token" content="([^"]+)"/.exec(body)?.[1] ?? null,
-      streets: vars.streets === undefined ? {} : streetsByCity(vars.streets, o.code),
+      // a list the page doesn't carry or that can't be read is asked for on /ua/ajax when needed;
+      // the schedule doesn't depend on it
+      streets: pageStreets(vars.streets, o.code),
       schedule: read(fact, ctx.now()),
       via: `${base}/ua/shutdowns`,
     }
     session = s
-    houseCache.clear()
     return s
   }
 
@@ -206,10 +206,12 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
     }
   }
 
+  /** A new session, or the one being loaded: the schedule and an address lookup at the same time share it */
+  const reload = (ctx: ProviderContext) => (pending ??= load(ctx).finally(() => (pending = null)))
+
   const ensure = async (ctx: ProviderContext) => {
     if (session && Date.now() - session.at < SESSION_TTL) return session
-    pending ??= load(ctx).finally(() => (pending = null))
-    return pending
+    return reload(ctx)
   }
 
   const streetsOf = async (ctx: ProviderContext): Promise<Record<string, string[]>> => {
@@ -271,7 +273,7 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
           id: 'site',
           url: `${base}/ua/shutdowns`,
           read: async () => {
-            const s = await load(ctx)
+            const s = await reload(ctx)
             return { ...asSource(s.schedule), url: s.via }
           },
         },
@@ -339,26 +341,33 @@ function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderCon
       }
     },
   }
-  return { provider, load }
+  return { provider, load: reload }
 }
 
 /**
- * A DTEK site's schedule as one `mergeSources` channel, for a region whose main channel is
- * another one: Kyiv and Dnipro are read from YASNO's API, and the grid operator's own site
- * (dtek-kem, dtek-dnem) carries the same schedule. /ua/ajax first, then the page, as above.
+ * One DTEK site as both the schedule channel of a YASNO region and its `houseOutages` provider:
+ * one instance, so the two share the site's session (one CSRF handshake, one street list) instead
+ * of each loading its own from a site behind a bot check.
  */
-export function dtekSiteSource(region: RegionId, operator: string, code: string): SourceSpec {
+export function dtekSiteParts(
+  region: RegionId,
+  operator: string,
+  code: string,
+): { source: SourceSpec; provider: Provider } {
   const page = `https://www.dtek-${code}.com.ua/ua/shutdowns`
   const site = dtekSite({ info: { id: region, name: operator, operator, website: page }, code })
   // `fact.update` is one time for every day the site shows: next to another channel, a day that
   // didn't change keeps the time it came with (see `steadyStamps`)
   const steady = steadyStamps()
   return {
-    id: 'site',
-    url: page,
-    read: async (ctx) => {
-      const s = await site.load(ctx)
-      return { ...steady(asSource(s.schedule)), url: s.via }
+    provider: site.provider,
+    source: {
+      id: 'site',
+      url: page,
+      read: async (ctx) => {
+        const s = await site.load(ctx)
+        return { ...steady(asSource(s.schedule)), url: s.via }
+      },
     },
   }
 }
@@ -396,6 +405,18 @@ export function houseOutage(
  * "м. Київ" as the city
  */
 const ONE_CITY: Record<string, string> = { kem: 'м. Київ' }
+
+/** The page's street list, or null (ask /ua/ajax for it when needed) when it has none or can't be read */
+function pageStreets(streets: unknown, code: string): Record<string, string[]> | null {
+  if (streets === undefined || streets === null) return null
+  try {
+    const all = streetsByCity(streets, code)
+    return Object.keys(all).length ? all : null
+  } catch (e) {
+    if (e instanceof OutageError) return null
+    throw e
+  }
+}
 
 /** `streets` as settlement → street names, whichever form the site sent. Exported for tests. */
 export function streetsByCity(streets: unknown, code: string): Record<string, string[]> {
