@@ -569,6 +569,48 @@ describe('Kirovohradoblenergo: site and channel merged', () => {
     })
   })
 
+  it('the day after "скасовано до окремого розпорядження": a blank grid is today, not yesterday', async () => {
+    // 15.11 20:24 "ГПВ та ГОП скасовано до окремого розпорядження"; CONSTRUCTED: no order follows,
+    // and on 16.11 the grid shows nobody switched off
+    const channel = upTo(CHANNEL_17, 1818)
+    const cancel = v(1818)
+    const blank = gridOf(cancel)
+    const grid = parseGrid(JSON.parse(blank).data)!
+    const morning = new Date('2026-11-16T09:00:00+02:00')
+    const known = versionsAt(channel, morning)
+    expect(dateGrid(grid, known, morning)).toEqual({ date: '2026-11-16', publishedAt: cancel.at })
+    // the order stands at any hour: no doubt after midnight either
+    expect(dateGrid(grid, known, new Date('2026-11-16T00:10:00+02:00'))).toEqual({
+      date: '2026-11-16',
+      publishedAt: cancel.at,
+    })
+
+    const s = await setup({ now: morning, graphs: blank, channel }).client.getSchedules('kirovohrad')
+    for (const g of s.groups)
+      expect(s.schedules[g]).toEqual([{ date: '2026-11-16', status: 'scheduled', intervals: [] }])
+    expect(s.updatedAt).toBe('2026-11-15T20:24:03+02:00')
+    expect(source(s, SITE)).toMatchObject({ dates: ['2026-11-16'], updatedAt: '2026-11-15T20:24:03+02:00' })
+    expect(assessFreshness(s, { now: morning })).toMatchObject({
+      state: 'fresh',
+      today: 'published',
+      issues: [],
+    })
+
+    // a grid with outages under that order is not confirmed by it
+    expect(dateGrid(parseGrid(JSON.parse(gridOf(v(1817))).data)!, known, morning)).toEqual({
+      date: '2026-11-15',
+      publishedAt: '2026-11-15T17:49:00+02:00',
+    })
+    // a cancellation of yesterday alone ("скасовано графік … станом на 20:00") says nothing about
+    // today, and a blank grid isn't "yesterday's" by it: undated in the hour of doubt, then today's
+    const dayOnly = [{ ...cancel, untilFurtherOrder: undefined }]
+    expect(dateGrid(grid, dayOnly, new Date('2026-11-16T00:10:00+02:00'))).toBeNull()
+    expect(dateGrid(grid, dayOnly, morning)).toEqual({ date: '2026-11-16', publishedAt: null })
+    // a new order for today ends it: the blank grid is then behind the channel's list
+    const order = { ...v(1826), date: '2026-11-16', at: '2026-11-16T08:00:00+02:00' }
+    expect(dateGrid(grid, [...known, order], morning)).toEqual({ date: '2026-11-16', publishedAt: null })
+  })
+
   it('reports an unreadable recent list as a failed channel and keeps the site', async () => {
     const now = new Date('2026-11-17T09:00:00+02:00')
     const broken = CHANNEL_17.replace(

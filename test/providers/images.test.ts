@@ -63,7 +63,7 @@ describe('Khmelnytskoblenergo image schedule', () => {
     ])
   })
 
-  it('is empty when nothing is published for today or later', async () => {
+  it('lists its twelve subgroups as unknown when nothing is published for today or later', async () => {
     const s = await new OutageClient({
       fetch: mockFetch([
         { match: '/page/pogodinni-vidkljuchennja', body: '<div class="post"><p>Перевірити чергу</p></div>' },
@@ -72,7 +72,10 @@ describe('Khmelnytskoblenergo image schedule', () => {
       now: () => new Date('2026-11-05T12:00:00+02:00'),
       cacheTtlMs: 0,
     }).getSchedules('khmelnytskyi')
-    expect(s.groups).toEqual([])
+    // never an empty group list: that reads as a region without queues
+    expectUnpublished(s, 12)
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05'])
+    expect(s.updatedAt).toBeNull()
   })
 
   it('reports a date whose images hold no table', async () => {

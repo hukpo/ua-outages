@@ -3,6 +3,7 @@ import { OutageClient } from '../src/client.js'
 import { OutageError } from '../src/errors.js'
 import { Http } from '../src/http.js'
 import type { ProviderContext } from '../src/providers/provider.js'
+import { asSource, steadyStamps } from '../src/providers/as-source.js'
 import { mergeSources, type SourceRead, type SourceSpec } from '../src/providers/sources.js'
 import { makeDay } from '../src/schedule.js'
 import type { DaySchedule } from '../src/types.js'
@@ -321,5 +322,73 @@ describe('mergeSources', () => {
       [0, undefined],
       [0, undefined],
     ])
+  })
+})
+
+describe('steadyStamps', () => {
+  const read = (at: string | null, days: Record<string, DaySchedule>): SourceRead => ({
+    days: Object.fromEntries(Object.entries(days).map(([date, d]) => [date, day(at, { '1': d })])),
+  })
+  const stamps = (r: SourceRead) =>
+    Object.fromEntries(Object.entries(r.days).map(([d, x]) => [d, x.publishedAt]))
+
+  it('gives a day that did not change the time it first came with', () => {
+    const steady = steadyStamps()
+    const first = steady(read('2026-11-05T08:00:00+02:00', { '2026-11-05': off('2026-11-05', 0, 60) }))
+    expect(stamps(first)).toEqual({ '2026-11-05': '2026-11-05T08:00:00+02:00' })
+    const next = steady(
+      read('2026-11-05T20:00:00+02:00', {
+        '2026-11-05': off('2026-11-05', 0, 60),
+        '2026-11-06': off('2026-11-06', 0, 60),
+      }),
+    )
+    expect(stamps(next)).toEqual({
+      '2026-11-05': '2026-11-05T08:00:00+02:00',
+      '2026-11-06': '2026-11-05T20:00:00+02:00',
+    })
+    // a change moves it, and a change back is a change
+    const changed = steady(read('2026-11-05T21:00:00+02:00', { '2026-11-05': off('2026-11-05', 0, 90) }))
+    expect(stamps(changed)).toEqual({ '2026-11-05': '2026-11-05T21:00:00+02:00' })
+    const back = steady(read('2026-11-05T22:00:00+02:00', { '2026-11-05': off('2026-11-05', 0, 60) }))
+    expect(stamps(back)).toEqual({ '2026-11-05': '2026-11-05T22:00:00+02:00' })
+  })
+
+  it('keeps a time when the channel stops giving one, and takes one it first lacked', () => {
+    const steady = steadyStamps()
+    const d = { '2026-11-05': off('2026-11-05', 0, 60) }
+    expect(stamps(steady(read(null, d)))).toEqual({ '2026-11-05': null })
+    expect(stamps(steady(read('2026-11-05T08:00:00+02:00', d)))).toEqual({
+      '2026-11-05': '2026-11-05T08:00:00+02:00',
+    })
+    expect(stamps(steady(read(null, d)))).toEqual({ '2026-11-05': '2026-11-05T08:00:00+02:00' })
+  })
+
+  it('is one memory per call of `steadyStamps`, and forgets the days the channel has left behind', () => {
+    const a = steadyStamps()
+    const b = steadyStamps()
+    const d = (date: string) => ({ [date]: off(date, 0, 60) })
+    a(read('2026-11-05T08:00:00+02:00', d('2026-11-05')))
+    expect(stamps(b(read('2026-11-05T20:00:00+02:00', d('2026-11-05'))))).toEqual({
+      '2026-11-05': '2026-11-05T20:00:00+02:00',
+    })
+    // the channel moved on to the 6th: the 5th is forgotten, so seeing it again is a first reading
+    a(read('2026-11-06T08:00:00+02:00', d('2026-11-06')))
+    expect(stamps(a(read('2026-11-06T09:00:00+02:00', d('2026-11-05'))))).toEqual({
+      '2026-11-05': '2026-11-06T09:00:00+02:00',
+    })
+  })
+
+  it('leaves `asSource` as it was: every day at the result’s `updatedAt`', () => {
+    const r = asSource({
+      region: 'kyiv',
+      groups: ['1'],
+      schedules: { '1': [off('2026-11-05', 0, 60), off('2026-11-06', 0, 60)] },
+      updatedAt: '2026-11-05T20:00:00+02:00',
+      fetchedAt: '2026-11-05T20:05:00+02:00',
+    })
+    expect(stamps(r)).toEqual({
+      '2026-11-05': '2026-11-05T20:00:00+02:00',
+      '2026-11-06': '2026-11-05T20:00:00+02:00',
+    })
   })
 })

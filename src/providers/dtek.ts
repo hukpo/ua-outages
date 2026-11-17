@@ -2,7 +2,7 @@ import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { normalizeGroup, unpublished } from '../schedule.js'
 import type { AddressQuery, GroupMatch, ProviderInfo, RegionId, RegionSchedule } from '../types.js'
-import { asSource } from './as-source.js'
+import { asSource, steadyStamps } from './as-source.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceSpec } from './sources.js'
@@ -58,6 +58,11 @@ export interface DtekOptions {
 }
 
 export function dtekProvider(o: DtekOptions): Provider {
+  return dtekSite(o).provider
+}
+
+/** The provider, and the reading of its schedule as it is (`load`) for `dtekSiteSource` */
+function dtekSite(o: DtekOptions): { provider: Provider; load: (ctx: ProviderContext) => Promise<Session> } {
   const region = o.info.id
   const base = `https://www.dtek-${o.code}.com.ua`
   let session: Session | null = null
@@ -210,7 +215,7 @@ export function dtekProvider(o: DtekOptions): Provider {
     return res.data
   }
 
-  return {
+  const provider: Provider = {
     info: { ...o.info, capabilities: { schedule: true, addressSearch: true } },
     sampleAddress: o.sampleAddress,
 
@@ -266,6 +271,7 @@ export function dtekProvider(o: DtekOptions): Provider {
       }
     },
   }
+  return { provider, load }
 }
 
 /**
@@ -275,14 +281,16 @@ export function dtekProvider(o: DtekOptions): Provider {
  */
 export function dtekSiteSource(region: RegionId, operator: string, code: string): SourceSpec {
   const page = `https://www.dtek-${code}.com.ua/ua/shutdowns`
-  const site = dtekProvider({ info: { id: region, name: operator, operator, website: page }, code })
+  const site = dtekSite({ info: { id: region, name: operator, operator, website: page }, code })
+  // `fact.update` is one time for every day the site shows: next to another channel, a day that
+  // didn't change keeps the time it came with (see `steadyStamps`)
+  const steady = steadyStamps()
   return {
     id: 'site',
     url: page,
     read: async (ctx) => {
-      const s = await site.getSchedules!(ctx)
-      const via = s.sources?.[0]?.url
-      return { ...asSource(s), ...(via ? { url: via } : {}) }
+      const s = await site.load(ctx)
+      return { ...steady(asSource(s.schedule)), url: s.via }
     },
   }
 }

@@ -90,9 +90,16 @@ Two channels of the operator, merged with `mergeSources` (`src/providers/sources
 - **Changes in words** ("📊 … маємо зміни у Графіку погодинних відключень (ГПВ) на 16 листопада"). Applied only where the words are exact:
   - `З 6:00 до 8:00 додатково відключаються черги 1/1 та 1/2`: the outage is added.
   - `До 17:00 продовжується відключення для черг 4/1 та 4/2`: the last outage of the poster that begins before 17:00 now ends at 17:00, if it is running at the time of the post or still ahead (on 02.11 "До 17:00 продовжується … 6/1" at 11:20 was about the outage due at 12:00).
-  - `З 07:15 починається відключення для …` and `З 22:00 відключаються …` give no end: not applied, the poster's times stay. A later "продовжується" for the same group isn't applied either, since it may be about that outage.
-  - A post for two days ("на 3 та 4 листопада") doesn't say which line is for which day: not applied.
-  - In every case the day's `publishedAt` (and so `updatedAt`) moves to the post's time and the post becomes the source's `url`. The SDK has no field yet that says "this day was amended by a post that couldn't be applied".
+  - `З 07:15 починається відключення для …` and `З 22:00 відключаються …` give a start and no end. The poster's outages stay, and from the start to the poster's next outage of the group (to midnight when there is none) the group is `maybe` (since 0.4.4; see below). On 16.11 "З 07:15 … 5/1" over the poster's `09:30-13:00 16:30-20:00` gives `~07:15-09:30 09:30-13:00 16:30-20:00`.
+  - `До 22:00 продовжується …` while such a started outage is running ends that outage: off from its start to 22:00, the `maybe` gone (14.11: "З 17:00 … 3/2" at 12:02, "До 22:00 продовжується … 3/2" at 17:59 → `17:00-22:00`).
+  - `До 01:00 продовжується …` that fits no outage of the poster, on the day itself (15.11 00:11, an outage running over from the day before): off from the post to 01:00.
+  - The group is `unknown` for the day, until the next poster, when a line about it can't be read that way: a start inside an outage the day already has (the poster's or a started one: the power came back in between, when isn't said), an end already past, a "продовжується" while a started stretch is still ahead or for the next day (which outage goes on isn't said), a "продовжується" for the next day that fits nothing.
+  - The same start posted twice is one outage. A re-issued poster ("ОНОВЛЕНИЙ") keeps a started stretch up to its cut, like the earlier poster's outages.
+  - `З 21:00 до 22:00 відключаються …` without "додатково" is an exact outage too.
+  - A post for two days ("на 3 та 4 листопада") doesn't say which line is for which day: not applied, and the groups its lines name are `unknown` on both days.
+  - A line with a time and "черг" but no group that can be read: every group is `unknown`.
+  - In every case the day's `publishedAt` (and so `updatedAt`) moves to the post's time and the post becomes the source's `url`.
+  - **Why `maybe` (0.4.4).** Until 0.4.3 such a group kept the poster's hours while the day's `publishedAt` moved to the change post: an old schedule with a new time, which also beat the site's copy of the same poster. A first fix made the group `unknown` until the next poster; on the saved posts that was 7 of 12 groups on 14.11 and 4 on 16.11, and a consumer then filled them from the OE_OUTAGE_DATA mirror. That mirror (checked 17.11 against all six such posts of 14–16.11) draws the outage on to the poster's next one as definite, with the start rounded up to the half hour (07:15 → 07:30, 10:10 → 10:30): an end nobody gave and 15–20 minutes of power that isn't there. `maybe` marks the stretch nobody gave an end for: off from the stated time, back at some moment of it or not before the poster's next outage. Only "the power is off from 07:15" is certain, so `maybe` is a little weaker than the truth at the start; there is no interval kind for "off, end unknown". The poster's later hours are kept as published. The post doesn't say they still hold; that rests on the operator's practice on the saved posts, where an outage that runs on gets its own "продовжується" (14.11 3/2) and a start ahead of the poster ran into the poster's outage. A start equal to the start of a poster outage changes nothing.
 - No cancellation wording has been seen; an unknown line changes nothing.
 
 ### The poster reader (`src/image/cards.ts`)
@@ -129,7 +136,8 @@ Other notes:
 - Site unreachable (it reset every connection from the research machine for hours on 17.11.2026 after a burst of requests): Telegram alone gives today and tomorrow.
 - Telegram unreachable or its markup changed: the site alone gives its day, i.e. nothing for today before the morning upload and never tomorrow.
 - A poster in a new typography, or with a typo in a time: the channel that carries it fails with `parse`; the other one still answers.
-- A change in words that can't be applied: the day keeps the poster's times with a newer `updatedAt`.
+- A change in words that can't be read exactly: a `maybe` stretch from its start (see above), or the group `unknown` for that day until the next poster; the day has a newer `updatedAt` (until 0.4.3: the poster's times stayed). The site's copy of the poster then `disagrees`.
+- Telegram unreachable after such a change: the site's poster alone gives the day, with the hours the change made wrong; nothing on the site says so.
 
 ---
 

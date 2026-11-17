@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import {
   announcements,
   khmelnytskyiProvider,
@@ -9,7 +10,7 @@ import {
   textSchedules,
 } from '../../src/providers/khmelnytskyi.js'
 import type { DaySchedule } from '../../src/types.js'
-import { fixture, mockFetch, type Route } from '../helpers.js'
+import { expectUnpublished, fixture, mockFetch, type Route } from '../helpers.js'
 
 const SITE = 'https://hoe.com.ua'
 
@@ -203,5 +204,100 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     await expect(schedules([down('hoe.com.ua'), down('t.me')])).rejects.toMatchObject({ code: 'http' })
     const broken = '<div class="post"><p>ГПВ на 16 листопада</p><p>Підчерга А – зранку</p><hr /></div>'
     expect(() => textSchedules(broken, NIGHT, '2026-11-16')).toThrow(/no subgroups read/)
+  })
+
+  /** A preview page of made-up posts; the first is days old, so the window is read whole */
+  const channel = (posts: { id: number; at: string; text: string }[]): Route => ({
+    match: 't.me/s/khmelnytskoblenergo',
+    body: [{ id: 1800, at: '2026-11-10T10:00:00+00:00', text: 'Шановні споживачі!' }, ...posts]
+      .map(
+        (p) =>
+          `<div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message" data-post="khmelnytskoblenergo/${p.id}">` +
+          `<div class="tgme_widget_message_text js-message_text" dir="auto">${p.text.replace(/\n/g, '<br/>')}</div>` +
+          `<span class="tgme_widget_message_meta"><a class="tgme_widget_message_date" href="https://t.me/khmelnytskoblenergo/${p.id}"><time datetime="${p.at}" class="time">00:00</time></a></span></div></div>`,
+      )
+      .join('\n'),
+  })
+  const sitePage = (...blocks: string[]): Route => ({
+    match: '/page/pogodinni-vidkljuchennja',
+    body: `<div class="post">${blocks.join('<hr />')}<hr /></div><p>Перевірити чергу</p>`,
+  })
+
+  it('"(оновлено з 18:00, …)" read at 17:10 is no time of publication: a newer Telegram post wins', async () => {
+    const now = new Date('2026-11-17T17:10:00+02:00')
+    const PAGE_18 = sitePage(
+      '<p>Оновлено графік погодинних відключень (ГПВ) на 17 листопада (оновлено з 18:00, 17.11.2026).</p><p>Підчерга 1.1 – 18:00-22:00.</p>',
+    )
+    // 17:05, after the page's announcement: the outage moves to 19:00-21:00
+    const newer = channel([
+      {
+        id: 1900,
+        at: '2026-11-17T15:05:00+00:00',
+        text: 'Графік погодинних відключень на 17.11.2026 р. (оновлено з 19:00)\nПідчерга 1.1 – 19:00-21:00.',
+      },
+    ])
+    const { s } = await schedules([PAGE_18, ARCHIVE, down('/post/'), newer], now)
+    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['19:00-21:00'])
+    expect(s.updatedAt).toBe('2026-11-17T17:05:00+02:00')
+    expect(s.sources).toMatchObject([
+      { id: 'site', dates: [], updatedAt: null, disagrees: true },
+      { id: 'news', ok: false },
+      { id: 'telegram:@khmelnytskoblenergo', dates: ['2026-11-17'] },
+    ])
+
+    // alone, the page still gives the day, and no `updatedAt` from the future
+    const alone = await schedules([PAGE_18, ARCHIVE, down('/post/'), down('t.me')], now)
+    expect(hhmm(alone.s.schedules['1.1']![0]!)).toEqual(['18:00-22:00'])
+    expect(alone.s.updatedAt).toBeNull()
+    // once 18:00 has passed the stamp is a time again
+    const later = await schedules(
+      [PAGE_18, ARCHIVE, down('/post/'), down('t.me')],
+      new Date('2026-11-17T18:20:00+02:00'),
+    )
+    expect(later.s.updatedAt).toBe('2026-11-17T18:00:00+02:00')
+  })
+
+  it('a cancellation on the page reaches the reader although it names no subgroup', async () => {
+    const now = new Date('2026-11-17T10:00:00+02:00')
+    const first =
+      '<p>Графік погодинних відключень (ГПВ) на 17 листопада.</p><p>Підчерга 1.1 – 14:00-18:00.<br />Підчерга 2.1 – 18:00-22:00.</p>'
+    const cancel = '<p>Графік погодинних відключень на 17 листопада скасовано.</p>'
+    const before = await schedules([sitePage(first), ARCHIVE, down('/post/'), down('t.me')], now)
+    expect(hhmm(before.s.schedules['1.1']![0]!)).toEqual(['14:00-18:00'])
+
+    const { s } = await schedules([sitePage(cancel, first), ARCHIVE, down('/post/'), down('t.me')], now)
+    // neither the old hours nor "no outages"
+    expectUnpublished(s, 12)
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-17'] })
+    // a cancellation is a publication: the region is neither silent nor behind
+    expect(assessFreshness(s, { now })).toMatchObject({
+      state: 'fresh',
+      today: 'missing',
+      coveredThrough: '2026-11-17',
+      issues: [{ code: 'source-failed' }],
+    })
+    expect(announcements(sitePage(cancel, first).body as string, now)).toHaveLength(2)
+
+    // a schedule published after the cancellation stands again
+    const again = await schedules(
+      [sitePage(first, cancel, first), ARCHIVE, down('/post/'), down('t.me')],
+      now,
+    )
+    expect(hhmm(again.s.schedules['1.1']![0]!)).toEqual(['14:00-18:00'])
+    // text without a date is about no day: the schedule under it stays
+    const standing = '<p>Графіки погодинних відключень застосовуються за розпорядженням НЕК «Укренерго».</p>'
+    expect(announcements(sitePage(standing, first).body as string, now)).toHaveLength(1)
+  })
+
+  it('nothing published on any of the three: twelve subgroups, today unknown, never `groups: []`', async () => {
+    const now = new Date('2026-11-20T12:00:00+02:00')
+    const { s } = await schedules([sitePage(), ARCHIVE, LIST, channel([])], now)
+    expect(s.sources!.map((x) => [x.ok, x.dates])).toEqual([
+      [true, []],
+      [true, []],
+      [true, []],
+    ])
+    expectUnpublished(s, 12)
+    expect(s.schedules['6.2']).toEqual([{ date: '2026-11-20', status: 'unknown', intervals: [] }])
   })
 })
