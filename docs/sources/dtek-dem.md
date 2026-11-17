@@ -32,3 +32,8 @@ Still blocked from a Ukrainian residential address: `/ua/shutdowns` answers HTTP
 `<script src="/_Incapsula_Resource?SWJIYLWA=…">`. The SDK reports `blocked` and never `empty`. Kyiv oblast is read through `POST /ua/ajax` alone
 (see dtek-krem.md); Donetsk's `/ua/ajax` answers with the same stub, so that route does not exist here. No other official source was found (YASNO lists only Kyiv city
 and Dnipro; no public Telegram channel with group times).
+
+Seen from abroad the same day (the site's build on a GitHub runner, 12:43 Kyiv): `/ua/shutdowns` answered without the bot
+check and its `DisconSchedule.fact` had no days. Since 0.4.1 that reads as nothing published (12 groups, today `unknown`),
+not as a region without groups. So the check depends on where the request comes from, and the operator has no schedule
+in force.

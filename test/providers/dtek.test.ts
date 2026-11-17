@@ -4,7 +4,7 @@ import { assessFreshness } from '../../src/freshness.js'
 import { csrfFromCookie, maskCsrfToken, parseDisconScript } from '../../src/providers/dtek.js'
 import { gpvCellsToSlots, parseGpvDays, parseUaDateTime } from '../../src/providers/gpv.js'
 import type { FetchLike } from '../../src/http.js'
-import { fixture, mockFetch } from '../helpers.js'
+import { expectUnpublished, fixture, mockFetch } from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:30:00+02:00')
 const PAGE = 'https://www.dtek-oem.com.ua/ua/shutdowns'
@@ -152,6 +152,18 @@ describe('DTEK sites', () => {
     const f = assessFreshness(s, { now })
     expect(f).toMatchObject({ state: 'stale', today: 'missing', coveredThrough: '2026-11-06' })
     expect(f.issues.map((i) => i.code)).toContain('behind')
+  })
+
+  it('a page whose schedule has no days is "nothing published": twelve queues, today unknown', async () => {
+    // what dtek-dem.com.ua serves (seen from abroad, 17.11.2026); never `groups: []`
+    const page = fixture('dtek/shutdowns.trimmed.html').replace(
+      /DisconSchedule\.fact\s*=\s*.+/,
+      'DisconSchedule.fact = {"data":[],"update":"16.12.2024 00:13","today":1794866400}',
+    )
+    const s = await setup(page).client.getSchedules('odesa')
+    expectUnpublished(s, 12)
+    expect(s.schedules['1.1']![0]!.date).toBe('2026-11-05')
+    expect(assessFreshness(s, { now: NOW }).state).toBe('unpublished')
   })
 
   it('says when the page changed', async () => {
