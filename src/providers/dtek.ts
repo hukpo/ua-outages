@@ -1,5 +1,6 @@
 import { OutageError } from '../errors.js'
-import { normalizeGroup } from '../schedule.js'
+import { STANDARD_GROUPS } from '../image/table.js'
+import { normalizeGroup, unpublished } from '../schedule.js'
 import type { AddressQuery, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
 import { asSource } from './as-source.js'
 import { gpvRegionSchedule, type GpvDays } from './gpv.js'
@@ -74,6 +75,16 @@ export function dtekProvider(o: DtekOptions): Provider {
       headers: { ...xhrHeaders(base), 'X-CSRF-Token': auth.csrf, Cookie: auth.cookie },
     })
 
+  /**
+   * `fact` as a schedule. While no schedule is in force the site keeps `fact` with no days in it
+   * (Donetsk, read from abroad, 17.11.2026): nothing published, so the twelve queues come back
+   * with today `unknown`, not as a region without groups.
+   */
+  const read = (fact: { data?: GpvDays; update?: string }, now: Date): RegionSchedule => {
+    const s = gpvRegionSchedule(region, fact.data, fact.update, now)
+    return s.groups.length ? s : unpublished(region, STANDARD_GROUPS, now, s.updatedAt)
+  }
+
   const loadAjax = async (ctx: ProviderContext): Promise<Session> => {
     const url = `${base}/ua/ajax`
     // refused for the missing token (400), but the refusal carries the CSRF cookie
@@ -103,7 +114,7 @@ export function dtekProvider(o: DtekOptions): Provider {
       at: Date.now(),
       ...auth,
       streets: null,
-      schedule: gpvRegionSchedule(region, res.fact.data, res.fact.update, ctx.now()),
+      schedule: read(res.fact, ctx.now()),
     }
     session = s
     houseCache.clear()
@@ -130,7 +141,7 @@ export function dtekProvider(o: DtekOptions): Provider {
       cookie: cookieHeader(headers),
       csrf: /<meta name="csrf-token" content="([^"]+)"/.exec(body)?.[1] ?? null,
       streets: (vars.streets as Record<string, string[]>) ?? {},
-      schedule: gpvRegionSchedule(region, fact.data, fact.update, ctx.now()),
+      schedule: read(fact, ctx.now()),
     }
     session = s
     houseCache.clear()
