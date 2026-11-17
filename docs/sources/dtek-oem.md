@@ -142,3 +142,10 @@ too; a large one without it is `parse`.
   oem only; also `curl_cffi` Chrome impersonation, with the comment "aiohttp is served the Incapsula interstitial instead of the real shutdowns page".
   Sends `X-Csrf-Token` from page meta.
   Both reference projects resort to TLS impersonation / headless browsers — i.e. a plain-HTTP SDK should expect DTEK sites to be unreliable.
+
+## Status 2026-11-17: /ua/ajax first
+
+The page was behind the bot check for requests from one Ukrainian residential address for some hours on 17.11.2026 and open
+again by 15:20. `/ua/ajax` answered throughout the check at 15:20: POST without a token → 400 with `Set-Cookie: _csrf-dtek-oem`;
+with `X-CSRF-Token` built from it → 200, `checkDisconUpdate` 30 KB, `getStreets` 267 KB. Since 0.4.3 the SDK asks `/ua/ajax`
+first and the page (923 KB) only if that fails, as for the other DTEK sites (see dtek-krem.md).

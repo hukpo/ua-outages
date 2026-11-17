@@ -48,3 +48,6 @@ schedule read and keeps it at most 10 minutes for address requests).
 No challenge is solved and no browser is imitated. If Imperva starts answering `/ua/ajax` with the stub (as it does for
 Donetsk), the region is `blocked` again. No other official source was found (YASNO lists only Kyiv city and Dnipro; no
 public Telegram channel with group times).
+
+Since 0.4.3 every DTEK region asks `/ua/ajax` first and the page second, so if the page is opened here again it becomes the
+fallback.

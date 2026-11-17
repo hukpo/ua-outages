@@ -89,7 +89,6 @@ export function createProviders(opts: ProvidersOptions = {}): Provider[] {
         website: 'https://www.dtek-krem.com.ua/ua/shutdowns',
       },
       code: 'krem',
-      route: 'ajax',
       sampleAddress: { city: 'Ірпінь', street: 'вул. Західна', house: '2' },
     }),
     dtekProvider({
