@@ -204,10 +204,15 @@ interface ChannelDay {
   cards: MinuteSlot[][]
   publishedAt: string
   /**
-   * Groups (as card indexes) a change in words left in a state that isn't known exactly, see
+   * Groups (as card indexes) a change in words left in a state that isn't known at all, see
    * `amend`: their day is `unknown` from then on, until the next poster
    */
   open: Set<number>
+  /**
+   * Per card, the time after an outage a change post started without saying when it ends
+   * (`maybe`), see `amend`
+   */
+  started: MinuteSlot[][]
 }
 
 /** Sorted, and joined where they touch or overlap */
@@ -243,17 +248,24 @@ const clock = (text: string | undefined) => (text ? parseClock(text.replace('.',
  * - "З 6:00 до 8:00 додатково відключаються черги 1/1 та 1/2": that outage is added;
  * - "До 17:00 продовжується відключення для черг 4/1 та 4/2": the last outage of the poster
  *   that begins before 17:00 ends at 17:00, if it is running when the post comes or still ahead.
+ *   A "продовжується" that fits no outage of the poster (15.11.2026 00:11, "До 01:00
+ *   продовжується …", an outage running over from the day before) is an outage from the post
+ *   to that time, when the post is of the day itself.
  * - "З 07:15 починається відключення для черг 5/1 та 5/2" doesn't say when it ends, and
- *   "З 22:00 відключаються …" neither: nothing is invented, and the poster's times are no
- *   longer the group's day either. The group is `open`: its day is not known until the next
- *   poster, as in `cek-telegram.ts`. So is a group whose "продовжується" fits no outage of the
- *   poster, and any later line about an open group: it may be about the outage that isn't in
- *   the poster.
+ *   "З 22:00 відключаються …" neither. No end is invented: the poster's outages stay, and the
+ *   time from 07:15 to the poster's next outage of the group (to midnight when there is none)
+ *   is `maybe`: the power went off at 07:15 and may be back at any moment of it. A
+ *   "продовжується" posted while that stretch runs is its end: off from 07:15 to then.
+ *
+ * A group is `open`, its day not known until the next poster (as in `cek-telegram.ts`), when a
+ * line about it can't be read this way: a start inside an outage the day already has (the
+ * poster's or a started one: the power came back in between, when isn't said), an end already
+ * past or one the poster's outage already passes, a line with neither.
  *
  * With `exact: false` (a post for two days, which doesn't say which line is for which) nothing
- * is applied and every group a line names is open.
+ * is applied and every group a line names is open. `live`: the post is of the day itself.
  */
-function amend(day: ChannelDay, text: string, posted: number, exact = true): void {
+function amend(day: ChannelDay, text: string, posted: number, exact = true, live = true): void {
   for (const line of text.split('\n')) {
     const groups = [...line.matchAll(/(?<![\d/.:])([1-6])\/([12])(?![\d/])/g)].map((m) =>
       STANDARD_GROUPS.indexOf(`${m[1]}.${m[2]}`),
@@ -266,7 +278,13 @@ function amend(day: ChannelDay, text: string, posted: number, exact = true): voi
     }
     const added = /з\s+(\d{1,2}[:.]\d{2})\s+до\s+(\d{1,2}[:.]\d{2})\s+додатково\s+відключа/iu.exec(line)
     const until = added ? null : /до\s+(\d{1,2}[:.]\d{2})\s+продовжується,?\s+відключення/iu.exec(line)
-    const start = clock(added?.[1])
+    const begun =
+      added || until
+        ? null
+        : /(?<![\p{L}\d])з\s+(\d{1,2}[:.]\d{2})\s+(?:починається\s+відключення|відключа[єю]ться)(?![^\n]*\sдо\s+\d)/iu.exec(
+            line,
+          )
+    const start = clock(added?.[1] ?? begun?.[1])
     // "до 00:00" is midnight at the end of the day
     const end = clock(added?.[2] ?? until?.[1]) || (added || until ? 1440 : null)
     for (const g of groups) {
@@ -275,13 +293,32 @@ function amend(day: ChannelDay, text: string, posted: number, exact = true): voi
         day.cards[g] = joined([...slots, { start, end, kind: 'off' }])
         continue
       }
-      const last =
-        exact && until && end !== null && !day.open.has(g)
-          ? slots.filter((s) => s.start < end).at(-1)
-          : undefined
-      if (last && end !== null && last.end >= posted && last.end < end) {
+      if (exact && begun && start !== null) {
+        const running = [...slots, ...day.started[g]!].some((s) => s.start < start && start < s.end)
+        const next = slots.find((s) => s.start >= start)?.start ?? 1440
+        if (running) day.open.add(g)
+        else if (next > start) day.started[g]!.push({ start, end: next, kind: 'maybe' })
+        continue
+      }
+      if (!exact || !until || end === null) {
+        day.open.add(g)
+        continue
+      }
+      // an outage a post started is running now: this is its end, and it was off all along
+      const running = live ? day.started[g]!.find((s) => s.start <= posted && posted < s.end) : undefined
+      if (running) {
+        day.started[g] = day.started[g]!.filter((s) => s !== running)
+        if (posted < end) day.cards[g] = joined([...slots, { start: running.start, end, kind: 'off' }])
+        else day.open.add(g)
+        continue
+      }
+      const last = slots.filter((s) => s.start < end).at(-1)
+      if (last && last.end >= posted && last.end < end) {
         last.end = end
         day.cards[g] = joined(slots)
+      } else if (live && posted < end && (!last || last.end < posted)) {
+        // no outage of the poster is running or ahead: the one that goes on isn't in it
+        day.cards[g] = joined([...slots, { start: posted, end, kind: 'off' }])
       } else day.open.add(g)
     }
   }
@@ -365,7 +402,7 @@ export function chernihivChannelDays(
         poster.stamped && base
           ? layer(base.cards, poster.cards, date === postDate ? kyivMinuteOfDay(at) : 0)
           : poster.cards
-      days.set(date, { cards, publishedAt: post.at, open: new Set() })
+      days.set(date, { cards, publishedAt: post.at, open: new Set(), started: poster.cards.map(() => []) })
       url = post.url
     }
     const changes = CHANGES.exec(post.text)
@@ -375,7 +412,13 @@ export function chernihivChannelDays(
       const day = days.get(date)
       if (!day) continue
       // which line is for which day isn't said when the post is for two
-      amend(day, post.text, date === postDate ? kyivMinuteOfDay(at) : 0, dates.length === 1)
+      amend(
+        day,
+        post.text,
+        date === postDate ? kyivMinuteOfDay(at) : 0,
+        dates.length === 1,
+        date === postDate,
+      )
       // applied or not, the poster is no longer the last word on this day
       day.publishedAt = post.at
       url = post.url
@@ -390,7 +433,7 @@ export function chernihivChannelDays(
         // a change that couldn't be applied: neither the poster's hours nor a guess
         (schedules[g] = day.open.has(i)
           ? { date, status: 'unknown', intervals: [] }
-          : toDay(date, day.cards[i]!)),
+          : toDay(date, [...day.cards[i]!, ...day.started[i]!])),
     )
     out.days[date] = { schedules, publishedAt: day.publishedAt }
   }
