@@ -70,15 +70,21 @@ export function khmelnytskyiProvider(): Provider {
     sampleAddress: { city: 'Хмельницький', street: 'вул. Проскурівська', house: '2' },
 
     getSchedules: (ctx) =>
-      mergeSources(ctx, region, [
-        { id: 'site', url: INFO.website, read: readSite },
-        { id: 'news', url: NEWS, read: readNews },
-        {
-          id: `telegram:@${CHANNEL}`,
-          url: `https://t.me/s/${CHANNEL}`,
-          read: async (ctx) => listed((await readChannelPosts(ctx, region, CHANNEL, TEXT)).read),
-        },
-      ]),
+      mergeSources(
+        ctx,
+        region,
+        [
+          { id: 'site', url: INFO.website, read: readSite },
+          { id: 'news', url: NEWS, read: readNews },
+          {
+            id: `telegram:@${CHANNEL}`,
+            url: `https://t.me/s/${CHANNEL}`,
+            read: async (ctx) => (await readChannelPosts(ctx, region, CHANNEL, TEXT)).read,
+          },
+        ],
+        // nothing published anywhere: the twelve subgroups stay listed, with today `unknown`
+        { groups: STANDARD_GROUPS },
+      ),
 
     async searchCities(ctx, query) {
       // the trailing slash is required; the term is a case-insensitive substring
@@ -264,11 +270,18 @@ function effectiveFrom(post: SchedulePost, date: string): number | undefined {
   return Math.abs(stamp.minutes - kyivMinuteOfDay(new Date(at))) <= 180 ? stamp.minutes : undefined
 }
 
-/** When the site says an announcement was made; null when it doesn't (a day's first one) */
-function stampTime(post: SchedulePost, date: string): string | null {
+/**
+ * When the site says an announcement was made; null when it doesn't (a day's first one). "з
+ * 18:00" is when the change takes effect: read at 17:10 it lies ahead, and is then no time of
+ * publication at all (it would beat a newer Telegram post, and put `updatedAt` in the future).
+ * All that is known of such an announcement is that it was out by `now`; that is not a time
+ * either, so it has none.
+ */
+function stampTime(post: SchedulePost, date: string, now: Date): string | null {
   const stamp = stampOf(headerOf(post.body))
   if (!stamp || (!stamp.date && !stamp.from)) return null
-  return toKyivIso(kyivInstant(stamp.date ?? date, stamp.minutes))
+  const at = kyivInstant(stamp.date ?? date, stamp.minutes)
+  return at.getTime() > now.getTime() ? null : toKyivIso(at)
 }
 
 const TEXT: PostsOptions = { omitted: 'none', groups: STANDARD_GROUPS, updates: 'layer', effectiveFrom }
@@ -276,7 +289,10 @@ const TEXT: PostsOptions = { omitted: 'none', groups: STANDARD_GROUPS, updates: 
 /**
  * The text announcements of a page (the schedule page or a day's news post), newest first.
  * They are separated by <hr>. One that names subgroups but has no date or no readable line is
- * a changed format. Exported for tests.
+ * a changed format. A block without subgroups is kept when it names a date: it may call that
+ * day's schedule off ("Графік погодинних відключень на 17 листопада скасовано"), which
+ * `postsToDays` decides; one that names no date (the page's standing text) is never a
+ * publication about a day. Exported for tests.
  */
 export function announcements(html: string, now: Date): SchedulePost[] {
   const start = html.indexOf('class="post"')
@@ -286,8 +302,11 @@ export function announcements(html: string, now: Date): SchedulePost[] {
     .filter((i) => i !== -1)
   const posts: SchedulePost[] = []
   for (const block of html.slice(start, ends.length ? Math.min(...ends) : undefined).split(/<hr\b[^>]*>/i)) {
-    if (!/Підчерг/i.test(block)) continue
     const date = findUaDate(block.replace(/<[^>]+>/g, ' '), now)
+    if (!/Підчерг/i.test(block)) {
+      if (date) posts.push({ title: '', body: block, publishedAt: '' })
+      continue
+    }
     if (!date)
       throw new OutageError('parse', 'Khmelnytskyi: a schedule announcement without a date', {
         region: INFO.id,
@@ -306,14 +325,10 @@ export function announcements(html: string, now: Date): SchedulePost[] {
 function announced(posts: SchedulePost[], now: Date, from: string): SourceRead {
   const days = postsToDays(posts, now, TEXT)
   for (const date of [...days.keys()]) if (date < from) days.delete(date)
-  return listed(
-    daysToSource(days, { ...TEXT, publishedAt: (day: PostDay, date) => stampTime(posts[day.post]!, date) }),
-  )
-}
-
-/** With nothing published the groups aren't listed either, as before these readers were merged */
-function listed(read: SourceRead): SourceRead {
-  return Object.keys(read.days).length ? read : { days: {} }
+  return daysToSource(days, {
+    ...TEXT,
+    publishedAt: (day: PostDay, date) => stampTime(posts[day.post]!, date, now),
+  })
 }
 
 /**

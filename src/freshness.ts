@@ -28,7 +28,11 @@ const STALE: ReadonlySet<FreshnessIssueCode> = new Set([
  * and the clock, so it also works on a schedule the app stored earlier.
  *
  * "Published" below means a day whose status isn't `unknown` (so `no-outages` and `emergency`
- * count); dates are Kyiv calendar days.
+ * count), or a day one of the `sources` supplied (it is in that source's `dates`): the second
+ * is how a day the operator called off shows, whose status is `unknown` for every group. A
+ * cancellation is a publication, so the newest word being one doesn't make a region `behind`.
+ * `today` / `tomorrow` still say `missing` for such a day: there are no hours to show. Dates are
+ * Kyiv calendar days.
  *
  * | issue               | when                                                                         | state         |
  * | ------------------- | ---------------------------------------------------------------------------- | ------------- |
@@ -72,6 +76,14 @@ export function assessFreshness(
       if (d.date === tomorrow) hasTomorrow = true
     }
   }
+  // a day a channel supplied with nothing known in it: the operator cancelled that day's schedule
+  // (or, for one group, published the day without it). Either way the source is not behind.
+  // Only a day the schedule itself has: `sources` copied onto other days says nothing about them
+  const listed = new Set(groups.flatMap((days) => days.map((d) => d.date)))
+  const supplied = new Set(
+    (schedule.sources ?? []).flatMap((s) => (s.ok ? s.dates : [])).filter((date) => listed.has(date)),
+  )
+  for (const date of supplied) if (coveredThrough === null || date > coveredThrough) coveredThrough = date
 
   const minutesSince = (iso: string) => Math.max(0, Math.floor((now.getTime() - Date.parse(iso)) / 60_000))
   const ageMinutes =
@@ -87,7 +99,13 @@ export function assessFreshness(
   else if (coveredThrough < today)
     add('behind', `The newest published day is ${coveredThrough}, nothing for ${today} or later`)
   const staleAfterHours = opts.staleAfterHours ?? 36
-  if (coveredThrough !== null && !todayGroups && ageMinutes !== null && ageMinutes > staleAfterHours * 60)
+  if (
+    coveredThrough !== null &&
+    !todayGroups &&
+    !supplied.has(today) &&
+    ageMinutes !== null &&
+    ageMinutes > staleAfterHours * 60
+  )
     add(
       'not-updated',
       `Not updated for ${Math.floor(ageMinutes / 60)} h (since ${schedule.updatedAt}) and ${today} isn't published`,
@@ -118,7 +136,7 @@ export function assessFreshness(
     const at = parseClock(opts.tomorrowExpectedAt)
     if (at === null)
       throw new RangeError(`tomorrowExpectedAt: expected "HH:MM", got "${opts.tomorrowExpectedAt}"`)
-    if (!hasTomorrow && kyivMinuteOfDay(now) >= at)
+    if (!hasTomorrow && !supplied.has(tomorrow) && kyivMinuteOfDay(now) >= at)
       add(
         'tomorrow-missing',
         `${tomorrow} isn't published although it is past ${opts.tomorrowExpectedAt} in Kyiv`,

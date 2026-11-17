@@ -339,3 +339,94 @@ describe('dnipro-cek: YASNO and @cek_info merged', () => {
     expect(s.schedules['1.1']![0]!.status).toBe('emergency')
   })
 })
+
+describe('dnipro-cek: one YASNO stamp for every day', () => {
+  // YASNO's `updatedOn` moves when tomorrow comes out; today's hours under it are the old ones
+  const morning = JSON.parse(fixture('yasno/planned-outages-3-303.json')) as Record<
+    string,
+    { tomorrow: { status: string; slots: unknown[] }; updatedOn: string }
+  >
+  const evening = structuredClone(morning)
+  for (const g of Object.values(morning)) {
+    g.tomorrow = { ...g.tomorrow, status: 'WaitingForSchedule', slots: [] }
+    g.updatedOn = '2026-11-05T08:00:00+00:00'
+  }
+  for (const g of Object.values(evening)) g.updatedOn = '2026-11-05T18:50:00+00:00'
+  /** A post from days before: the channel answers and says nothing about these days */
+  const QUIET = {
+    id: 4300,
+    at: '2026-11-01T10:00:00+00:00',
+    text: 'Шановні споживачі! Дякуємо за розуміння.',
+  }
+  const correction = page([
+    QUIET,
+    {
+      id: 4321,
+      at: '2026-11-05T13:30:00+00:00',
+      text: '📢 Шановні споживачі! Повідомляємо, що за розпорядженням диспетчерського центру НЕК "Укренерго", 05 ЛИСТОПАДА з 00:00 до 24:00 застосовуватимуться відключення наступних черг:\n🔹 Черга 1.1\n18:00-20:00',
+    },
+  ])
+
+  function longLived() {
+    const state = { now: '2026-11-05T15:00:00+02:00', yasno: JSON.stringify(morning), channel: page([QUIET]) }
+    const { fetch } = mockFetch([
+      { match: API, body: () => state.yasno },
+      { match: TG, body: () => state.channel },
+    ])
+    const client = new OutageClient({ fetch, now: () => new Date(state.now), cacheTtlMs: 0, retries: 0 })
+    return { state, client }
+  }
+
+  it('a day YASNO did not change keeps its time, so the operator’s later correction stays', async () => {
+    const { state, client } = longLived()
+    const first = await client.getSchedules('dnipro-cek')
+    expect(first.sources!.map((x) => x.ok)).toEqual([true, true])
+    expect(source(first, 'api')).toMatchObject({
+      dates: ['2026-11-05'],
+      updatedAt: '2026-11-05T10:00:00+02:00',
+    })
+
+    // 15:30: ЦЕК corrects today in its channel
+    Object.assign(state, { now: '2026-11-05T16:00:00+02:00', channel: correction })
+    const corrected = await client.getSchedules('dnipro-cek')
+    expect(spans(corrected, '1.1', '2026-11-05')).toEqual(['18:00–20:00 off'])
+
+    // 20:50: YASNO publishes tomorrow; its today is still the morning's
+    Object.assign(state, { now: '2026-11-05T21:00:00+02:00', yasno: JSON.stringify(evening) })
+    const s = await client.getSchedules('dnipro-cek')
+    expect(spans(s, '1.1', '2026-11-05')).toEqual(['18:00–20:00 off'])
+    expect(source(s, CHANNEL)).toMatchObject({ dates: ['2026-11-05'] })
+    expect(source(s, 'api')).toMatchObject({
+      dates: ['2026-11-06'],
+      updatedAt: '2026-11-05T20:50:00+02:00',
+      disagrees: true,
+    })
+    expect(s.updatedAt).toBe('2026-11-05T20:50:00+02:00')
+  })
+
+  it('a day YASNO did change takes the new time', async () => {
+    const { state, client } = longLived()
+    await client.getSchedules('dnipro-cek')
+    const changed = structuredClone(evening) as unknown as Record<string, { today: { slots: unknown[] } }>
+    changed['1.1']!.today.slots = [{ start: 60, end: 120, type: 'Definite' }]
+    Object.assign(state, {
+      now: '2026-11-05T21:00:00+02:00',
+      yasno: JSON.stringify(changed),
+      channel: correction,
+    })
+    const s = await client.getSchedules('dnipro-cek')
+    expect(spans(s, '1.1', '2026-11-05')).toEqual(['01:00–02:00 off'])
+    expect(source(s, 'api').dates).toEqual(['2026-11-05', '2026-11-06'])
+  })
+
+  it('a new client cannot know and reads as before: the stamp it is given', async () => {
+    const { state, client } = longLived()
+    Object.assign(state, {
+      now: '2026-11-05T21:00:00+02:00',
+      yasno: JSON.stringify(evening),
+      channel: correction,
+    })
+    const s = await client.getSchedules('dnipro-cek')
+    expect(source(s, 'api').dates).toEqual(['2026-11-05', '2026-11-06'])
+  })
+})

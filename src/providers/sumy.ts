@@ -2,7 +2,7 @@ import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, slotsToIntervals, type MinuteSlot } from '../schedule.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
-import { addDays, kyivDate, parseClock, toKyivIso } from '../time.js'
+import { addDays, kyivDate, kyivMinuteOfDay, parseClock, toKyivIso } from '../time.js'
 import type { City, DaySchedule, GroupId, GroupMatch, ProviderInfo, RegionSchedule } from '../types.js'
 import { mapLimit } from '../util.js'
 import { parseUaDateTime } from './gpv.js'
@@ -466,6 +466,13 @@ export function parseCabinetAnswer(res: unknown, group: GroupId, now: Date): Cab
   }
 }
 
+/**
+ * How long after Kyiv midnight an undated grid that nothing else dates is not taken for today's.
+ * The endpoint served 16.11 until midnight and had 17.11 by 00:26; the minute it switches isn't
+ * known.
+ */
+const MIDNIGHT_DOUBT_MIN = 60
+
 const sameWindows = (a: readonly MinuteSlot[], b: readonly MinuteSlot[]) =>
   JSON.stringify(slotsToIntervals('2000-01-01', a)) === JSON.stringify(slotsToIntervals('2000-01-01', b))
 
@@ -498,10 +505,13 @@ function dateOfGrid(grid: SumyGrid, cabinet: readonly CabinetGroup[]): string | 
 /**
  * The site's grid as a channel. Its day comes from E-Svitlo when that answered. When the grid
  * equals neither of E-Svitlo's days it is not dated at all (an error: E-Svitlo's own days are
- * used). Without E-Svitlo it is the Kyiv day of `now`, as the site shows it, unless its change
- * time is from before yesterday: a schedule is published the evening before at the earliest, so
- * such a grid is a leftover and not today's. What remains unguarded: the first moments after
- * midnight with E-Svitlo down, should the endpoint still serve yesterday's grid.
+ * used). Without E-Svitlo it is the Kyiv day of `now`, as the site shows it, with two limits:
+ * - its change time is from before yesterday: a schedule is published the evening before at the
+ *   earliest, so such a grid is a leftover and not today's (an error);
+ * - it is the first hour of the day and the grid wasn't changed today: it may be the evening's
+ *   schedule for today or yesterday's grid the endpoint hasn't dropped yet (it switches around
+ *   midnight, the minute isn't known), and the change time is "yesterday" for both. Nothing tells
+ *   them apart, so the grid gets no date: the day stays `unknown` until `MIDNIGHT_DOUBT_MIN`.
  */
 function gridToRead(grid: SumyGrid, cabinet: readonly CabinetGroup[] | null, now: Date): SourceRead {
   const region = INFO.id
@@ -520,6 +530,9 @@ function gridToRead(grid: SumyGrid, cabinet: readonly CabinetGroup[] | null, now
         `Sumy: the site's schedule has no date and was last changed ${grid.updatedAt}; not dating it today`,
         { region },
       )
+    const changedToday = !!grid.updatedAt && kyivDate(new Date(grid.updatedAt)) === today
+    if (!changedToday && kyivMinuteOfDay(now) < MIDNIGHT_DOUBT_MIN)
+      return { days: {}, groups: Object.keys(grid.groups) }
     date = today
   }
   const schedules: Record<GroupId, DaySchedule> = {}

@@ -360,7 +360,12 @@ function versionOff(v: GpvVersion): string | null {
  *   taken, so a grid showing the current list ties with the channel and, being the first
  *   source, wins the day (it has the "possible" half hours the text lacks). A grid still showing
  *   a list the channel has since replaced or cancelled is older than the channel's day and loses.
+ * - Else it is blank and the channel's last word up to today is "скасовано до окремого
+ *   розпорядження": that order covers today, and a blank grid is what it looks like. Today,
+ *   published when the cancellation was.
  * - Else it equals a list for yesterday: the site hasn't moved to the new day yet. Yesterday.
+ *   Never by a cancellation: that has no hours, and a blank grid equals every blank day, so
+ *   yesterday's cancellation says nothing about which day a blank grid is.
  * - Else nothing confirms it. In the first hour after midnight it gets no date at all (null);
  *   later it is today's with no publication time, so any dated list of the channel wins the day
  *   and the grid is reported as disagreeing.
@@ -374,13 +379,18 @@ export function dateGrid(
 ): { date: string; publishedAt: string | null } | null {
   const today = kyivDate(now)
   const off = gridOff(grid)
-  for (const date of [today, addDays(today, -1)]) {
-    // newest first
-    for (let i = (versions?.length ?? 0) - 1; i >= 0; i--) {
-      const v = versions![i]!
-      if (v.date === date && versionOff(v) === off) return { date, publishedAt: v.at }
-    }
-  }
+  const yesterday = addDays(today, -1)
+  // newest first
+  const newest = [...(versions ?? [])].reverse()
+  /** The newest statement about `date` the grid equals; a cancellation counts when `blank` */
+  const shown = (date: string, blank: boolean) =>
+    newest.find((v) => v.date === date && (blank || !v.cancelled) && versionOff(v) === off)
+  const current = shown(today, true)
+  if (current) return { date: today, publishedAt: current.at }
+  const last = newest.find((v) => v.date <= today)
+  if (last?.untilFurtherOrder && !off.includes('1')) return { date: today, publishedAt: last.at }
+  const old = shown(yesterday, false)
+  if (old) return { date: yesterday, publishedAt: old.at }
   return kyivMinuteOfDay(now) < MIDNIGHT_DOUBT_MIN ? null : { date: today, publishedAt: null }
 }
 

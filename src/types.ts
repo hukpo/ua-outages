@@ -198,9 +198,9 @@ export interface RegionSchedule {
 export type FreshnessIssueCode =
   /** No day of any group has published data. Not stale: silence is not staleness */
   | 'nothing-published'
-  /** There is published data, but none for today or later: the source is stuck on a past day */
+  /** There is published data, but none for today or later (a cancellation of the day counts): the source is stuck on a past day */
   | 'behind'
-  /** `updatedAt` is older than `staleAfterHours`, and today isn't published */
+  /** `updatedAt` is older than `staleAfterHours`, and today isn't published (nor cancelled) */
   | 'not-updated'
   /** A channel of the region failed; the result comes from the others */
   | 'source-failed'
@@ -225,10 +225,17 @@ export interface Freshness {
    * - `unpublished`: the source answered and publishes nothing (`nothing-published`).
    */
   state: 'fresh' | 'stale' | 'unpublished'
-  /** Whether any group has published data (status other than `unknown`) for the Kyiv day of `now` */
+  /**
+   * Whether any group has published data (status other than `unknown`) for the Kyiv day of `now`.
+   * `missing` also for a day the operator called off: published, but with no hours to show
+   */
   today: 'published' | 'missing'
   tomorrow: 'published' | 'missing'
-  /** Newest date with anything published (status other than `unknown`) in any group, or null */
+  /**
+   * Newest date with anything published in any group, or null: a status other than `unknown`,
+   * or a day one of `sources` supplied (a day the operator cancelled is `unknown` in every group
+   * and is in the `dates` of the channel that cancelled it)
+   */
   coveredThrough: string | null
   /** Minutes since the operator last changed it; null when the source doesn't say */
   ageMinutes: number | null

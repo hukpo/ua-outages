@@ -298,6 +298,27 @@ describe("Kyiv and Dnipro: YASNO and the grid operator's own site together", () 
     ])
   })
 
+  it("the site's one `fact.update` moving doesn't make its unchanged day newer than a YASNO change", async () => {
+    const state = { yasno: YASNO_1117, site: SITE_1117 }
+    const inner: FetchLike = (url, init) => yasno(state.yasno)(url, init)
+    const client = kyiv((url, init) => withSite(inner, 'kem', state.site)(url, init))
+    await client.getSchedules('kyiv')
+
+    // 00:10: YASNO changes queue 1.1; 00:30: the site republishes the hours it had at 23:46
+    const changed = JSON.parse(YASNO_1117)
+    changed['1.1'].today.slots = [{ start: 1140, end: 1260, type: 'Definite' }]
+    changed['1.1'].updatedOn = '2026-11-16T22:10:00+00:00'
+    const republished = JSON.parse(SITE_1117)
+    republished.fact.update = '17.11.2026 00:30'
+    Object.assign(state, { yasno: JSON.stringify(changed), site: JSON.stringify(republished) })
+    const s = await client.getSchedules('kyiv')
+    expect(hours(s, '1.1')).toBe('19:00-21:00')
+    expect(s.sources).toMatchObject([
+      { id: 'api', dates: ['2026-11-17'], updatedAt: '2026-11-17T00:10:00+02:00' },
+      { id: 'site', dates: [], updatedAt: '2026-11-16T23:46:00+02:00', disagrees: true },
+    ])
+  })
+
   it("both down is an error of the region: the API's", async () => {
     await expect(
       kyiv(withSite(yasno('upstream error', 502), 'kem', SITE_1117, true)).getSchedules('kyiv'),
