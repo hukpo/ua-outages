@@ -19,10 +19,19 @@ import { zakarpattiaProvider } from './zakarpattia.js'
 import { zaporizhzhiaProvider } from './zaporizhzhia.js'
 import { zhytomyrProvider } from './zhytomyr.js'
 import { UZ_PAGES, uzProvider } from './uz.js'
+import { vinnytsiaProvider } from './vinnytsia.js'
 import { yasnoProvider } from './yasno.js'
 
+export interface ProvidersOptions {
+  /**
+   * Also read channels that are not the operator's own, where it has none a plain request can
+   * read. Today that is one community mirror, for Vinnytsia. Off by default
+   */
+  unofficialSources?: boolean
+}
+
 /** Built-in providers for every supported region. */
-export function createProviders(): Provider[] {
+export function createProviders(opts: ProvidersOptions = {}): Provider[] {
   // channel pages are shared between the regions of one client (@dtek_ua serves five)
   const hub = new EmergencyHub()
   return withEmergency(hub, [
@@ -94,6 +103,7 @@ export function createProviders(): Provider[] {
     }),
     mykolaivProvider(),
     poltavaProvider(),
+    vinnytsiaProvider({ unofficial: opts.unofficialSources }),
     kharkivProvider(),
     zaporizhzhiaProvider(),
     cherkasyProvider(),

@@ -67,7 +67,8 @@ describe('capabilities', () => {
       .regions()
       .filter((r) => !r.capabilities.emergency)
       .map((r) => r.id)
-    expect(none.every((id) => id.startsWith('uz-'))).toBe(true)
+    // the railway's pages, and Vinnytsia, whose operator has no channel a plain request can read
+    expect(none.every((id) => id.startsWith('uz-') || id === 'vinnytsia')).toBe(true)
   })
 
   it('throws unsupported where there is none', async () => {

@@ -42,6 +42,8 @@ export interface SourceSpec {
   id: string
   /** Where a person can see the same data, or null */
   url: string | null
+  /** `false` for a channel that isn't the operator's own (a community mirror); copied to `SourceStatus` */
+  official?: false
   /**
    * Reads the channel. Throw an `OutageError` when it can't be read; return `days: {}` when it
    * answers and publishes nothing. Runs concurrently with the other channels on the same `ctx`.
@@ -88,7 +90,13 @@ export async function mergeSources(
 
   const statuses: SourceStatus[] = specs.map((spec, i) => {
     const r = settled[i]!
-    const base = { id: spec.id, url: reads[i]?.url ?? spec.url, dates: [], updatedAt: null }
+    const base = {
+      id: spec.id,
+      url: reads[i]?.url ?? spec.url,
+      dates: [],
+      updatedAt: null,
+      ...(spec.official === false ? { official: false as const } : {}),
+    }
     if (r.status === 'fulfilled') return { ...base, ok: true }
     const e: unknown = r.reason
     // anything that isn't an OutageError is a bug in the reader: the channel couldn't be read

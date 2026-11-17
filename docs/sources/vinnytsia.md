@@ -1,6 +1,6 @@
 # Vinnytsiaoblenerho (АТ «Вінницяобленерго», Вінницька обл.) — research notes
 
-Researched 2026-11-05. **Verdict: there is no official machine-readable daily GPV source you can get with plain fetch.**
+Researched 2026-11-05, again 2026-11-17 (last section). **Verdict: there is no official machine-readable daily GPV source you can get with plain fetch.**
 The live per-address schedule tool sits behind a Cloudflare managed challenge. What plain fetch can reach:
 (a) a rotating "орієнтовний" weekly table, shown as an image (per черга, not per підчерга), (b) an address→підчерга
 directory as a PDF, (c) news posts that say "ГПВ will apply on date X" without any per-group hours.
@@ -104,3 +104,48 @@ How the tool worked when it was unprotected, reconstructed from community code (
   `maybe`-only data from the rotation image plus an "active today" flag from news/homepage, and fuzzy address→підчерга from the PDF.
 - The rotation image covers черги 1–6, while the address directory uses підчерги 1.1–6.2.
 - No rate limits seen on www.voe.com.ua (a handful of requests).
+
+## Status 2026-11-17: what the SDK does
+
+Checked again from a Ukrainian residential address with the SDK's default User-Agent. Still no official channel with the hours
+per queue that a plain request can read. The SDK reads nothing by default (`capabilities.schedule` false, `unsupported`); with
+`unofficialSources: true` it reads one community mirror and marks it `official: false` (`src/providers/vinnytsia.ts`).
+
+### Official channels, and why each is closed
+
+| Channel                                                                        | What it has                                                                                                                                                                            | 2026-11-17                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `disconnection.voe.com.ua` (schedule by address, EIC or account)               | today and tomorrow, 24 cells per day                                                                                                                                                   | every route 403 `cf-mitigated: challenge`, "Just a moment...": `/`, `/disconnection/detailed`, the autocomplete, `POST …?ajax_form=1&_wrapper_format=drupal_ajax` with `X-Requested-With`. No unchallenged route (unlike dtek-krem's `/ua/ajax`)                                                                                                                                                                                                                                                                                                    |
+| `vn.e-svitlo.com.ua` (cabinet; the service the Sumy provider reads)            | a consumer's schedule                                                                                                                                                                  | `POST /ip_cabinet/restfull_api/improvise/api_main/get_user_disconnections_image_api.json`, `cherga=<queue>&mobile_v=true`: 200 `{"error": {"no_data": true, "cherga_n": "За даною адресою графіки не застосовуються", "err": "object of type 'NoneType' has no len()"}}` for `1.1`, `1`, `11`, `1/1`, `Черга 1.1`, at 13:28 while ГПВ was in force. With `a=290637` (the branch id in the cabinet's URLs): "Ви не увійшли до кабінету". The by-queue table Sumy has is not filled for Vinnytsia; the cabinet shows the schedule per EIC after login |
+| Telegram                                                                       | `@pat_voe_bot` (a bot); `t.me/+IdXSOUC…` from the site's header: a private channel with grid-status notices                                                                            | not readable by HTTP. Public `@vinoblenergo` (named in the operator's news of 11.09.2024) holds two posts from 01.12.2024                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Viber                                                                          | `chats.viber.com/patvoe` (a bot)                                                                                                                                                       | not readable by HTTP                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Facebook `facebook.com/vinoblenergo`                                           | the hours per queue as text ("Черга 1.1: 🔴 06:00 – 08:00; 12:00 – 14:00; 18:00 – 20:00"); local news reprint it                                                                       | posts are not in the page or the page plugin without a login                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `www.voe.com.ua/news`                                                          | "Введення ГПВ", "Зміни по ГПВ": "Дата та час відключень - 17.11.2026. Будуть застосовані з 06:00 - 24:00"                                                                              | plain fetch works; no hours per queue                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `www.voe.com.ua/informatsiya-pro-cherhy-hrafika-pohodynnykh-vidklyuchen-hpv-1` | a table of _possible_ hours per queue 1–6 (no subqueues) for three weeks, inline PNG; `gpv-2026-2027-na-sayt.pdf` (34 pages, 28.09.2026): streets and houses per subqueue as free text | plain fetch works                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+The table is not the schedule. For 17.11 the hours the operator announced fit inside its coloured cells; for 16.11 queue 3.1 was
+off 04:00–08:00, 10:00–14:00, 16:00–20:00 and 22:00–24:00, partly in cells the table leaves white.
+
+Regional administration and council channels (`@VinnytsiaODA`, `@vinrada`) post no hours per queue.
+
+### The mirror (opt-in)
+
+`https://raw.githubusercontent.com/vn-progr/gpv-voe-vinnytsia/main/data/Vinnytsiaoblenerho.json`, the same shape as the DTEK
+pages' `fact`: `fact.data[<unix midnight>]["GPV1.1"]["1".."24"]` = `yes` / `no` / `first` / `second` …, plus `lastUpdated` (unix
+seconds of the mirror's run) and `lastUpdateStatus.ok`.
+
+- Chain: operator's site → bezsvitla.com.ua (third party; "Ми не є офіційним джерелом") → `scripts/parser.py` in the repository
+  (12 queue pages and their `/grafik-na-zavtra`, hours rounded to half an hour) → the file. The repository has no licence.
+- `fact.update` is the time of the mirror's run, so the SDK gives `updatedAt: null`.
+- Tomorrow is all `yes` until the operator publishes it, so a day with no outage in any queue is read as `unknown`.
+- Refused with `parse`: `lastUpdated` older than 3 hours, `lastUpdateStatus.ok === false`, no `fact`.
+  The older mirror olnet93/gpv-voe-vinnytsia (cabinet login with EIC codes) stopped on 14.12.2025 and still serves that day.
+- 17.11.2026 14:25: 12 queues, e.g. 2.1 off 06:00–08:00 and 18:00–20:00. Several queues had fewer hours than the operator's
+  morning post (2.2: only 18:00–20:00 against 06:00–08:00, 12:00–14:00, 18:00–20:00). Not established which was current
+  after the day's changes.
+
+### Not done
+
+- Address lookup from the operator's PDF (official, open; free text like Rivne's).
+- A reader for `disconnection.voe.com.ua` behind a caller's own allowlisted `fetch`: the response format is known only from
+  community code, never seen here.
