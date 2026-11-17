@@ -392,4 +392,3 @@ describe('steadyStamps', () => {
     })
   })
 })
-

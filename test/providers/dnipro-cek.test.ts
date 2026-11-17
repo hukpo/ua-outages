@@ -352,7 +352,14 @@ describe('dnipro-cek: one YASNO stamp for every day', () => {
     g.updatedOn = '2026-11-05T08:00:00+00:00'
   }
   for (const g of Object.values(evening)) g.updatedOn = '2026-11-05T18:50:00+00:00'
+  /** A post from days before: the channel answers and says nothing about these days */
+  const QUIET = {
+    id: 4300,
+    at: '2026-11-01T10:00:00+00:00',
+    text: 'Шановні споживачі! Дякуємо за розуміння.',
+  }
   const correction = page([
+    QUIET,
     {
       id: 4321,
       at: '2026-11-05T13:30:00+00:00',
@@ -361,7 +368,7 @@ describe('dnipro-cek: one YASNO stamp for every day', () => {
   ])
 
   function longLived() {
-    const state = { now: '2026-11-05T15:00:00+02:00', yasno: JSON.stringify(morning), channel: page([]) }
+    const state = { now: '2026-11-05T15:00:00+02:00', yasno: JSON.stringify(morning), channel: page([QUIET]) }
     const { fetch } = mockFetch([
       { match: API, body: () => state.yasno },
       { match: TG, body: () => state.channel },
@@ -373,7 +380,11 @@ describe('dnipro-cek: one YASNO stamp for every day', () => {
   it('a day YASNO did not change keeps its time, so the operator’s later correction stays', async () => {
     const { state, client } = longLived()
     const first = await client.getSchedules('dnipro-cek')
-    expect(source(first, 'api')).toMatchObject({ dates: ['2026-11-05'], updatedAt: '2026-11-05T10:00:00+02:00' })
+    expect(first.sources!.map((x) => x.ok)).toEqual([true, true])
+    expect(source(first, 'api')).toMatchObject({
+      dates: ['2026-11-05'],
+      updatedAt: '2026-11-05T10:00:00+02:00',
+    })
 
     // 15:30: ЦЕК corrects today in its channel
     Object.assign(state, { now: '2026-11-05T16:00:00+02:00', channel: correction })
@@ -419,4 +430,3 @@ describe('dnipro-cek: one YASNO stamp for every day', () => {
     expect(source(s, 'api').dates).toEqual(['2026-11-05', '2026-11-06'])
   })
 })
-
