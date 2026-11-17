@@ -1,7 +1,8 @@
+import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
-import { cellsToIntervals, compareGroups } from '../schedule.js'
+import { cellsToIntervals, compareGroups, makeDay, type MinuteSlot } from '../schedule.js'
 import { matchScore, normalizeHouse, normalizeSettlement, normalizeStreet, streetType } from '../text.js'
-import { kyivInstant, toKyivIso } from '../time.js'
+import { addDays, kyivDate, parseClock } from '../time.js'
 import type {
   City,
   DaySchedule,
@@ -10,15 +11,22 @@ import type {
   House,
   IntervalKind,
   ProviderInfo,
-  RegionSchedule,
   Street,
 } from '../types.js'
 import type { Provider, ProviderContext } from './provider.js'
+import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
 
 /**
- * Chernivtsioblenergo (oblenergo.cv.ua). The schedule is server-rendered HTML with 48
- * half-hour cells per group; `/shutdowns/` shows today and `/shutdowns/?next` tomorrow.
+ * Chernivtsioblenergo. Two channels of the operator, merged per day:
+ *
+ * - `site` (oblenergo.cv.ua): server-rendered HTML with 48 half-hour cells per group;
+ *   `/shutdowns/` shows today and `/shutdowns/?next` tomorrow. The page has no change time: its
+ *   "актуальний станом на 0:30" is a half-hour mark that moves by itself;
+ * - `telegram:@oe_cv_ua`: the operator posts every version of a day's schedule there, so the
+ *   time of the newest post about a date is when that date last changed. That is the change
+ *   time given to the site's days. Until 15.11.2026 the posts carried the schedule as text,
+ *   since then as pictures: text is read as a second copy of the day, pictures only as the clock.
  *
  * Groups are numbered 1–12 (not 1.1–6.2) and kept as the operator names them.
  *
@@ -27,6 +35,14 @@ import { mapLimit } from '../util.js'
  * district is fetched once per provider instance and indexed in memory.
  */
 const SITE = 'https://oblenergo.cv.ua'
+const CHANNEL = 'oe_cv_ua'
+const GROUPS: readonly GroupId[] = Array.from({ length: 12 }, (_, i) => String(i + 1))
+/**
+ * How far back the channel is read. The newest post about today is from yesterday evening at
+ * the earliest (20:00–23:00), and posts come newest first, so two pages always reach it.
+ */
+const CHANNEL_LOOKBACK_MS = 36 * 3600_000
+const CHANNEL_PAGES = 2
 
 const INFO: ProviderInfo = {
   id: 'chernivtsi',
@@ -103,15 +119,69 @@ export function chernivtsiProvider(): Provider {
     info: INFO,
     sampleAddress: { city: 'Чернівці', street: 'бульвар Героїв Крут', house: '10' },
 
-    async getSchedules(ctx) {
-      const today = await ctx.http.text(`${SITE}/shutdowns/`, { region })
-      const pages = [today]
-      // the link to tomorrow appears only once it is published
-      if (today.includes('href="/shutdowns/?next"'))
-        pages.push(await ctx.http.text(`${SITE}/shutdowns/?next`, { region }))
-      return mergeDays(
-        pages.map((p) => parseSchedulePage(p, ctx.now())),
-        ctx.now(),
+    getSchedules(ctx) {
+      // each channel is read once and both readers look at both: the site's days take their
+      // change time from the channel, and the channel's text is compared with the site's cells
+      const site = (async () => {
+        const html = await ctx.http.text(`${SITE}/shutdowns/`, { region })
+        const today = parseSchedulePage(html)
+        // the link to tomorrow appears only once it is published
+        if (!html.includes('href="/shutdowns/?next"')) return [today]
+        const next = parseSchedulePage(await ctx.http.text(`${SITE}/shutdowns/?next`, { region }))
+        // without a tomorrow `?next` is today's page again
+        return next.date === today.date ? [today] : [today, next]
+      })()
+      const channel = readChannelWindow(ctx, CHANNEL, {
+        region,
+        since: new Date(ctx.now().getTime() - CHANNEL_LOOKBACK_MS),
+        maxPages: CHANNEL_PAGES,
+      }).then((read) => parseChannelPosts(read.posts))
+      // both are awaited by both readers; a failure is reported there, not as an unhandled one
+      site.catch(() => {})
+      channel.catch(() => {})
+
+      return mergeSources(
+        ctx,
+        region,
+        [
+          {
+            id: 'site',
+            url: INFO.website,
+            async read() {
+              const pages = await site
+              // channel unreadable: the days are as good, only without a change time
+              const clock = await channel.then(
+                (c) => c.clock,
+                () => new Map<string, string>(),
+              )
+              const days: SourceRead['days'] = {}
+              for (const p of pages)
+                days[p.date] = { schedules: p.days, publishedAt: clock.get(p.date) ?? null }
+              return { days }
+            },
+          },
+          {
+            id: `telegram:@${CHANNEL}`,
+            url: `https://t.me/s/${CHANNEL}`,
+            async read() {
+              const { clock, text } = await channel
+              const pages = await site.catch(() => [])
+              const days: SourceRead['days'] = {}
+              const today = kyivDate(ctx.now())
+              for (const [date, schedules] of text) {
+                // the window reaches back into yesterday; a past day is of no use to anyone
+                if (date < today) continue
+                const page = pages.find((p) => p.date === date)
+                days[date] = {
+                  schedules: page && saysTheSame(schedules, page.days) ? page.days : schedules,
+                  publishedAt: clock.get(date) ?? null,
+                }
+              }
+              return { days }
+            },
+          },
+        ],
+        { groups: GROUPS },
       )
     },
 
@@ -159,11 +229,11 @@ export function chernivtsiProvider(): Provider {
 
 // --- schedule ---
 
-/** One `/shutdowns/` page → its day for every group. Exported for tests. */
-export function parseSchedulePage(
-  html: string,
-  now: Date,
-): { date: string; days: Record<GroupId, DaySchedule>; updatedAt: string | null } {
+/**
+ * One `/shutdowns/` page → its day for every group, dated by the page's own date line, so a
+ * page still showing another day is never read as today. Exported for tests.
+ */
+export function parseSchedulePage(html: string): { date: string; days: Record<GroupId, DaySchedule> } {
   const region = INFO.id
   const gsv = html.indexOf('<div id="gsv"')
   if (gsv === -1)
@@ -191,49 +261,139 @@ export function parseSchedulePage(
   // a page that is all "з" means no outages for anyone that day
   if (!anyOutage) for (const d of Object.values(days)) d.status = 'no-outages'
 
-  return { date, days, updatedAt: parseUpdatedAt(html, now) }
+  return { date, days }
+}
+
+// --- Telegram ---
+
+/** What the channel says about the days it posted about. */
+export interface ChannelDays {
+  /** date → time of the newest post about that date's schedule: when the operator last changed it */
+  clock: Map<string, string>
+  /** date → the day as text, when the newest post about that date carries it as text */
+  text: Map<string, Record<GroupId, DaySchedule>>
+}
+
+const HEADER = /^[^\p{L}\d]*Орієнтовний графік заживлення[^\n]*?(\d{2})\.(\d{2})\.(\d{4})\s*$/mu
+const ALL_ON = /^[^\p{L}\d]*На (\d{2})\.(\d{2})\.(\d{4})\s*\n\s*Електропостачання без обмежень для всіх груп/u
+
+/**
+ * Posts (oldest first) → the change clock and the text days. A post is about the date in its
+ * first line ("⚡ Орієнтовний графік заживлення на 17.11.2026", "✨ На 13.11.2026 /
+ * Електропостачання без обмежень для всіх груп споживачів!") when that date is the post's own
+ * day or the next one; the channel has misdated a post before, and such a post is skipped.
+ *
+ * Telegram shows when a post was made, not when it was edited, so an edited post keeps its
+ * first time. Exported for tests.
+ */
+export function parseChannelPosts(posts: readonly TelegramPost[]): ChannelDays {
+  const clock = new Map<string, string>()
+  const text = new Map<string, Record<GroupId, DaySchedule>>()
+  for (const post of [...posts].sort((a, b) => a.id - b.id)) {
+    const allOn = ALL_ON.exec(post.text)
+    const m = allOn ?? HEADER.exec(post.text.split('\n', 1)[0]!)
+    if (!m) continue
+    const date = `${m[3]}-${m[2]}-${m[1]}`
+    const posted = kyivDate(new Date(post.at))
+    if (date !== posted && date !== addDays(posted, 1)) continue
+    clock.set(date, post.at)
+    // only the newest post about a date counts: a picture after a text post outdates the text
+    const days = allOn
+      ? Object.fromEntries(GROUPS.map((g) => [g, { date, status: 'no-outages' as const, intervals: [] }]))
+      : parsePowerOnText(post.text, date)
+    if (days) text.set(date, days)
+    else text.delete(date)
+  }
+  return { clock, text }
 }
 
 /**
- * "Графік актуальний станом на <b>23:30</b>" carries only a time. It's combined with the
- * server's render date ("Сторінку відкрито 05.11.2026 о 23:46"); a time later than the render
- * time belongs to the day before.
+ * The text format of the channel: per group the windows WITH power ("графік заживлення"), the
+ * inverse of outages:
+ *
+ * ```
+ * 💡 Група 1
+ * 00:00 - 17:00
+ * 19:30 - 23:00
+ *
+ * 💡 Група 3
+ * 00:00 - 19:00
+ * з 21:30
+ *
+ * 💡 Група 4
+ * Електропостачання без обмежень
+ * ```
+ *
+ * "з 21:30" runs to the end of the day. Everything outside the windows is `off`: the half hour
+ * the site shows as "можливо заживлені" before the power is back lies inside the text's gap.
+ * Null when the post has no group blocks (a picture's caption) or any block has a line this
+ * doesn't know, windows out of order, or a group twice: unread rather than misread.
+ * Exported for tests.
  */
-function parseUpdatedAt(html: string, now: Date): string | null {
-  const time = /актуальний станом на\s*<b>\s*(\d{1,2}):(\d{2})\s*<\/b>/.exec(html)
-  if (!time) return null
-  const minutes = Number(time[1]) * 60 + Number(time[2])
-  const opened = /Сторінку відкрито\s*(\d{2})\.(\d{2})\.(\d{4})\s*о\s*(\d{1,2}):(\d{2})/.exec(html)
-  let day: string
-  let openedAt: number
-  if (opened) {
-    day = `${opened[3]}-${opened[2]}-${opened[1]}`
-    openedAt = Number(opened[4]) * 60 + Number(opened[5])
-  } else {
-    const iso = toKyivIso(now)
-    day = iso.slice(0, 10)
-    openedAt = Number(iso.slice(11, 13)) * 60 + Number(iso.slice(14, 16))
+export function parsePowerOnText(text: string, date: string): Record<GroupId, DaySchedule> | null {
+  const on = new Map<GroupId, [number, number][]>()
+  let current: [number, number][] | null = null
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    const group = /^[^\p{L}\d]*Група\s+(\d{1,2})$/u.exec(line)?.[1]
+    if (group) {
+      const g = String(Number(group))
+      if (!GROUPS.includes(g) || on.has(g)) return null
+      on.set(g, (current = []))
+      continue
+    }
+    if (!current) continue
+    // a blank line ends the group's block
+    if (!line) {
+      current = null
+      continue
+    }
+    const range = /^(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})$/.exec(line)
+    const from = /^з\s+(\d{1,2}:\d{2})$/.exec(line)
+    const start = parseClock(range?.[1] ?? from?.[1] ?? '')
+    const end = range ? parseClock(range[2]!) : 1440
+    if (/^Електропостачання без обмежень$/.test(line)) {
+      if (current.length) return null
+      current.push([0, 1440])
+    } else if (start !== null && end !== null && start < end && start >= (current.at(-1)?.[1] ?? 0)) {
+      current.push([start, end])
+    } else return null
   }
-  let at = kyivInstant(day, minutes)
-  if (minutes > openedAt) at = new Date(at.getTime() - 86_400_000)
-  return toKyivIso(at)
+  if (!on.size || [...on.values()].some((w) => !w.length)) return null
+
+  const days: Record<GroupId, DaySchedule> = {}
+  let anyOutage = false
+  for (const [g, windows] of on) {
+    const off: MinuteSlot[] = []
+    let at = 0
+    for (const [start, end] of [...windows, [1440, 1440] as [number, number]]) {
+      if (start > at) off.push({ start: at, end: start, kind: 'off' })
+      at = end
+    }
+    if (off.length) anyOutage = true
+    days[g] = makeDay(date, off)
+  }
+  // like the page: nobody has an outage that day
+  if (!anyOutage) for (const d of Object.values(days)) d.status = 'no-outages'
+  return days
 }
 
-function mergeDays(pages: ReturnType<typeof parseSchedulePage>[], now: Date): RegionSchedule {
-  const schedules: Record<GroupId, DaySchedule[]> = {}
-  let updatedAt: string | null = null
-  for (const page of [...pages].sort((a, b) => a.date.localeCompare(b.date))) {
-    for (const [g, day] of Object.entries(page.days)) (schedules[g] ??= []).push(day)
-    if (page.updatedAt && (!updatedAt || Date.parse(page.updatedAt) > Date.parse(updatedAt)))
-      updatedAt = page.updatedAt
+/**
+ * The text and the page describe the same day: in every group of the text, the page's `off`
+ * and `maybe` cells together are exactly the text's gaps. Then the page's richer day stands for
+ * both and the channels don't count as disagreeing over the "maybe" half hours.
+ */
+function saysTheSame(text: Record<GroupId, DaySchedule>, page: Record<GroupId, DaySchedule>): boolean {
+  const spans = (d: DaySchedule) => {
+    const out: [string, string][] = []
+    for (const i of d.intervals) {
+      const last = out.at(-1)
+      if (last && last[1] === i.from) last[1] = i.to
+      else out.push([i.from, i.to])
+    }
+    return JSON.stringify(out)
   }
-  return {
-    region: INFO.id,
-    groups: Object.keys(schedules).sort(compareGroups),
-    schedules,
-    updatedAt,
-    fetchedAt: toKyivIso(now),
-  }
+  return Object.entries(text).every(([g, d]) => page[g] && spans(page[g]) === spans(d))
 }
 
 // --- address directory ---

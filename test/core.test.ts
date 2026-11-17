@@ -33,6 +33,47 @@ describe('time', () => {
     expect(autumn / 3600_000).toBe(25)
   })
 
+  it('maps the hour the clocks skip in spring to the moment they change, never backwards', () => {
+    // 2027-03-28: 03:00 → 04:00 at 01:00 UTC
+    const day = '2027-03-28'
+    expect(kyivInstant(day, 179).toISOString()).toBe('2027-03-28T00:59:00.000Z')
+    for (const m of [180, 181, 210, 239, 240])
+      expect(kyivInstant(day, m).toISOString()).toBe('2027-03-28T01:00:00.000Z')
+    expect(toKyivIso(kyivInstant(day, 270))).toBe('2027-03-28T04:30:00+03:00')
+    let prev = -Infinity
+    for (const d of [day, '2027-10-31', '2026-11-05'])
+      for (let m = 0; m <= 1440; m++) {
+        const t = kyivInstant(d, m).getTime()
+        if (d !== '2027-10-31') expect(t).toBeGreaterThanOrEqual(prev)
+        prev = m === 1440 ? -Infinity : t
+      }
+    // the autumn day is unchanged: 03:00 is the second one, 02:59 a minute before the first
+    expect(toKyivIso(kyivInstant('2027-10-31', 180))).toBe('2027-10-31T03:00:00+02:00')
+    expect(toKyivIso(kyivInstant('2027-10-31', 179))).toBe('2027-10-31T02:59:00+03:00')
+  })
+
+  it('builds valid intervals around the skipped hour', () => {
+    const day = '2027-03-28'
+    // off until 03:30, on until 04:00, off again: 03:30 doesn't exist, so the two touch at 04:00
+    expect(
+      slotsToIntervals(day, [
+        { start: 0, end: 210, kind: 'off' },
+        { start: 240, end: 360, kind: 'off' },
+      ]),
+    ).toEqual([{ from: '2027-03-28T00:00:00+02:00', to: '2027-03-28T06:00:00+03:00', kind: 'off' }])
+    // different kinds stay apart, in order and without overlap
+    expect(
+      slotsToIntervals(day, [
+        { start: 120, end: 210, kind: 'off' },
+        { start: 210, end: 235, kind: 'maybe' },
+        { start: 240, end: 300, kind: 'maybe' },
+      ]),
+    ).toEqual([
+      { from: '2027-03-28T02:00:00+02:00', to: '2027-03-28T04:00:00+03:00', kind: 'off' },
+      { from: '2027-03-28T04:00:00+03:00', to: '2027-03-28T05:00:00+03:00', kind: 'maybe' },
+    ])
+  })
+
   it('gives the Kyiv calendar day', () => {
     // 23:30 UTC on Nov 4 is already Nov 5 in Kyiv
     expect(kyivDate(new Date('2026-11-04T23:30:00Z'))).toBe('2026-11-05')

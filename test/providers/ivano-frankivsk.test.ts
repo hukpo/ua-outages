@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import { parseQueueSchedules, withoutTypes } from '../../src/providers/ivano-frankivsk.js'
 import { ivanoFrankivskProvider } from '../../src/providers/ivano-frankivsk.js'
 import { fixture, mockFetch, expectUnpublished } from '../helpers.js'
@@ -63,6 +64,32 @@ describe('Prykarpattiaoblenergo', () => {
     expect(s.schedules['1.2']![0]!.intervals).toEqual([
       { from: '2025-11-25T22:00:00+02:00', to: '2025-11-26T00:00:00+02:00', kind: 'off' },
     ])
+  })
+
+  it('keeps a passed day on its own date: newest eventDate before today is stale, never today', () => {
+    const later = new Date('2025-11-27T09:00:00+02:00')
+    const s = parseQueueSchedules([JSON.parse(POPULATED)], later)
+    expect(s.schedules['4.2']!.map((d) => d.date)).toEqual(['2025-11-25'])
+    expect(assessFreshness(s, { now: later })).toMatchObject({
+      state: 'stale',
+      today: 'missing',
+      coveredThrough: '2025-11-25',
+    })
+    expect(assessFreshness(s, { now: later }).issues.map((i) => i.code)).toEqual(['behind', 'not-updated'])
+  })
+
+  it('takes the change time from scheduleApprovedSince, else createdAt, else none', () => {
+    const day = (stamps: Record<string, string>) =>
+      parseQueueSchedules([[{ eventDate: '25.11.2025', queues: { '1.1': [] }, ...stamps }]], new Date())
+        .updatedAt
+    expect(day({ createdAt: '24.11.2025 19:52', scheduleApprovedSince: '25.11.2025 07:10' })).toBe(
+      '2025-11-25T07:10:00+02:00',
+    )
+    expect(day({ createdAt: '24.11.2025 19:52' })).toBe('2025-11-24T19:52:00+02:00')
+    expect(day({ createdAt: '24.11.2025 19:52', scheduleApprovedSince: 'з 07:10' })).toBe(
+      '2025-11-24T19:52:00+02:00',
+    )
+    expect(day({})).toBeNull()
   })
 
   it('lists every group as unknown, not "no outages", when nothing is published', async () => {

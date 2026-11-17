@@ -60,6 +60,14 @@ Gotchas (from svitlo-widget): some houses return `[]` — the widget then tries 
 
 No explicit "updated at" for the schedule as a whole; use max `series[].updated_at` (or `created_at`) per day. Queues have `updated_at`.
 
+Measured 2026-11-17 (`research/freshness/CHANNELS-B.md`):
+
+- `updatedAt` = the newest `series[].updated_at` (UTC in the API). A real change time: all 147 rows of 17.11 had `2026-11-16T21:10:27Z` (23:10:27), two minutes after the operator's Telegram forecast for that day (23:08, `t.me/mk_energy_ua/22570`).
+- The API holds tomorrow before midnight (16.11 and 17.11 at 23:45 on 16.11).
+- Cloudflare caches the answer for 22 seconds (`cache-control: private, max-age=22`): not worth a cache-buster.
+- @mk_energy_ua posts the same list as text ~2 minutes earlier and links to the site for changes during the day; it is not read. The API is the region's one entry in `sources`.
+- Stale rule: each day is dated by its own `from`, so an answer with no day covering now gives old days only (`assessFreshness`: `behind`) or, with no active day at all, the 12 groups as `unknown`.
+
 ## Rate limits / failure modes
 
 - No rate limit seen. Cloudflare in front; the widget honours `Retry-After` on non-200 (suggests 429/503 do happen — UNVERIFIED).

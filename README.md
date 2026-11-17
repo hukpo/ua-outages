@@ -2,10 +2,11 @@
 
 TypeScript SDK for Ukrainian power outage schedules (графіки погодинних відключень).
 
-- **Schedules straight from the grid operators.** No aggregators or Telegram channels in between: each region reads its oblenergo's own API or page.
+- **Schedules straight from the grid operators.** No aggregators in between: each region reads the operator's own official channels (its API, its site, the files it publishes, its official Telegram channel), and where the operator publishes on several, all of them, taking each day from the one that has it first.
 - **Find a group by address.** Settlement, street and house in; the outage group ("черга") out.
 - **One shape for every region.** Intervals in Kyiv time with explicit offsets, DST-safe.
 - **Health check.** See in one call which sources still parse, so you notice when an operator changes its site.
+- **Stale data is detected, not served silently.** Every result says where it came from; `assessFreshness` tells whether it is current, and a failed fetch can fall back to the last good result, marked as such.
 - No runtime dependencies. Node 20+.
 
 **See it running: [hukpo.github.io/ua-outages](https://hukpo.github.io/ua-outages/).** A live map of Ukraine where every light is a house in one of the groups and goes dark when its group is scheduled off, plus a countdown for your group, calendar feeds, shared "power everywhere" windows for several addresses, and an archive. It is a static page rebuilt by GitHub Actions every 15 minutes from this SDK (`site/`, `.github/workflows/site.yml`).
@@ -30,49 +31,71 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 
 <!-- regions:start -->
 
-| id                | region                  | operator                                | SDK reads                                                      | schedule      | address       | notes                                                                                                            | schedule                                                                                                 | address lookup                                                                               |
-| ----------------- | ----------------------- | --------------------------------------- | -------------------------------------------------------------- | ------------- | ------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `kyiv`            | Київ                    | ДТЕК Київські електромережі (YASNO)     | app.yasno.ua API                                               | ✅            | ✅            |                                                                                                                  | [static.yasno.ua](https://static.yasno.ua/kyiv/outages)                                                  | [static.yasno.ua](https://static.yasno.ua/kyiv/outages)                                      |
-| `dnipro`          | Дніпропетровська (ДТЕК) | ДТЕК Дніпровські електромережі (YASNO)  | app.yasno.ua API                                               | ✅            | ✅            |                                                                                                                  | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                                | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                    |
-| `dnipro-cek`      | Дніпропетровська (ЦЕК)  | ЦЕК (YASNO)                             | app.yasno.ua API                                               | ✅            | ✅            |                                                                                                                  | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                                | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                    |
-| `odesa`           | Одеська                 | ДТЕК Одеські електромережі              | schedule page + /ua/ajax                                       | ✅            | ✅            |                                                                                                                  | [dtek-oem.com.ua](https://www.dtek-oem.com.ua/ua/shutdowns)                                              | [dtek-oem.com.ua](https://www.dtek-oem.com.ua/ua/shutdowns)                                  |
-| `kyiv-region`     | Київська                | ДТЕК Київські регіональні електромережі | schedule page + /ua/ajax (same provider as Odesa)              | ⚠️ code ready | ⚠️ code ready | the site answers automated clients with a bot check, so requests come back `blocked`; untested against live data | [dtek-krem.com.ua](https://www.dtek-krem.com.ua/ua/shutdowns)                                            | [dtek-krem.com.ua](https://www.dtek-krem.com.ua/ua/shutdowns)                                |
-| `donetsk`         | Донецька                | ДТЕК Донецькі електромережі             | schedule page + /ua/ajax (same provider as Odesa)              | ⚠️ code ready | ⚠️ code ready | the site answers automated clients with a bot check, so requests come back `blocked`; untested against live data | [dtek-dem.com.ua](https://www.dtek-dem.com.ua/ua/shutdowns)                                              | [dtek-dem.com.ua](https://www.dtek-dem.com.ua/ua/shutdowns)                                  |
-| `lviv`            | Львівська               | Львівобленерго                          | api.loe.lviv.ua, power-api.loe.lviv.ua                         | ✅            | ✅            |                                                                                                                  | [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)                                                      | [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)                                          |
-| `ternopil`        | Тернопільська           | Тернопільобленерго                      | api-poweron.toe.com.ua                                         | ✅            | ✅            | schedule read per group via a reference address                                                                  | [poweron.toe.com.ua](https://poweron.toe.com.ua/)                                                        | [poweron.toe.com.ua](https://poweron.toe.com.ua/)                                            |
-| `zakarpattia`     | Закарпатська            | Закарпаттяобленерго                     | api-outage-zakarpat-energy.inneti.net                          | ✅ / image    | ✅            | groups `unknown` while no picture is published; a published picture is reported as `unsupported`                 | [zakarpat.energy](https://zakarpat.energy/customers/break-in-electricity-supply/schedule/)               | [outage.zakarpat.energy](https://outage.zakarpat.energy/schedule_queues)                     |
-| `ivano-frankivsk` | Івано-Франківська       | Прикарпаттяобленерго                    | be-svitlo.oe.if.ua                                             | ✅            | ✅            | full address only, no autocomplete                                                                               | [svitlo.oe.if.ua](https://svitlo.oe.if.ua/)                                                              | [svitlo.oe.if.ua](https://svitlo.oe.if.ua/)                                                  |
-| `chernivtsi`      | Чернівецька             | Чернівціобленерго                       | schedule page + district directories                           | ✅            | ✅            | groups numbered 1–12                                                                                             | [oblenergo.cv.ua](https://oblenergo.cv.ua/shutdowns/)                                                    | [oblenergo.cv.ua](https://oblenergo.cv.ua/shutdowns-search/)                                 |
-| `rivne`           | Рівненська              | Рівнеобленерго                          | schedule page                                                  | ✅            | —             | addresses only in PDF                                                                                            | [roe.vsei.ua](https://www.roe.vsei.ua/disconnections)                                                    | —                                                                                            |
-| `volyn`           | Волинська               | Волиньобленерго                         | inneti archive API + table image (read by colour), lookup form | ✅ image      | ✅            | full address only, no autocomplete                                                                               | [energy.volyn.ua](https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/hrafik-vidkliuchen/) | [energy.volyn.ua](https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/cherga/) |
-| `khmelnytskyi`    | Хмельницька             | Хмельницькобленерго                     | page text, else archive table image (read by colour)           | ✅ text/image | ✅            |                                                                                                                  | [hoe.com.ua](https://hoe.com.ua/page/pogodinni-vidkljuchennja)                                           | [hoe.com.ua](https://hoe.com.ua/shutdown/queue)                                              |
-| `chernihiv`       | Чернігівська            | Чернігівобленерго                       | schedule poster (times read from the picture)                  | ✅ image      | —             | the schedule API and the lookup need a captcha; the same schedule is published as a poster                       | [chernihivoblenergo.com.ua](https://chernihivoblenergo.com.ua/files/other/schedule_groups.jpg)           | [interruptions.energy.cn.ua](https://interruptions.energy.cn.ua/interruptions)               |
-| `zhytomyr`        | Житомирська             | Житомиробленерго                        | schedule page + lookup form                                    | ✅            | ✅            |                                                                                                                  | [ztoe.com.ua](https://www.ztoe.com.ua/unhooking-search.php)                                              | [ztoe.com.ua](https://www.ztoe.com.ua/unhooking-search.php)                                  |
-| `kirovohrad`      | Кіровоградська          | Кіровоградобленерго                     | kiroe.com.ua JSON                                              | ✅ today      | ✅            |                                                                                                                  | [kiroe.com.ua](https://kiroe.com.ua/electricity-blackout)                                                | [kiroe.com.ua](https://kiroe.com.ua/electricity-blackout)                                    |
-| `cherkasy`        | Черкаська               | Черкасиобленерго                        | news API                                                       | ✅            | —             | lookup server has a broken TLS chain                                                                             | [cherkasyoblenergo.com](https://www.cherkasyoblenergo.com/off)                                           | [cabinet.cherkasyoblenergo.com](https://cabinet.cherkasyoblenergo.com/)                      |
-| `sumy`            | Сумська                 | Сумиобленерго                           | soe.com.ua/next-api                                            | ✅ today      | ✅            |                                                                                                                  | [soe.com.ua](https://www.soe.com.ua/consumers/shutdowns)                                                 | [soe.com.ua](https://www.soe.com.ua/consumers/shutdowns)                                     |
-| `poltava`         | Полтавська              | Полтаваобленерго                        | poe.pl.ua/customs                                              | ✅            | ✅            | buildings with several connections have no single group                                                          | [poe.pl.ua](https://www.poe.pl.ua/disconnection/power-outages/)                                          | [poe.pl.ua](https://www.poe.pl.ua/)                                                          |
-| `kharkiv`         | Харківська              | Харківобленерго                         | Drupal JSON:API (news)                                         | ✅            | —             | lookup needs a captcha                                                                                           | [oblenergo.kharkiv.ua](https://oblenergo.kharkiv.ua/uk)                                                  | [oblenergo.kharkiv.ua](https://oblenergo.kharkiv.ua/uk/gaoinfo)                              |
-| `zaporizhzhia`    | Запорізька              | Запоріжжяобленерго                      | news page + address sheets (Google Sheets)                     | ✅            | ✅            | lists per group                                                                                                  | [zoe.com.ua](https://www.zoe.com.ua/outage/)                                                             | [Telegram bot](https://t.me/esozoebot)                                                       |
-| `mykolaiv`        | Миколаївська            | Миколаївобленерго                       | off.energy.mk.ua API                                           | ✅            | ✅            |                                                                                                                  | [off.energy.mk.ua](https://off.energy.mk.ua/)                                                            | [off.energy.mk.ua](https://off.energy.mk.ua/)                                                |
+| id                | region                  | operator                                | SDK reads                                                                                                                             | schedule      | address        | notes                                                                                                                                                             | schedule page                                                                                            | lookup page                                                                                  |
+| ----------------- | ----------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `kyiv`            | Київ                    | ДТЕК Київські електромережі (YASNO)     | app.yasno.ua API                                                                                                                      | ✅            | ✅             |                                                                                                                                                                   | [static.yasno.ua](https://static.yasno.ua/kyiv/outages)                                                  | [static.yasno.ua](https://static.yasno.ua/kyiv/outages)                                      |
+| `dnipro`          | Дніпропетровська (ДТЕК) | ДТЕК Дніпровські електромережі (YASNO)  | app.yasno.ua API                                                                                                                      | ✅            | ✅             |                                                                                                                                                                   | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                                | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                    |
+| `dnipro-cek`      | Дніпропетровська (ЦЕК)  | ЦЕК (YASNO)                             | app.yasno.ua API + Telegram @cek_info                                                                                                 | ✅            | ✅             | the operator's channel is ahead of YASNO; addresses from YASNO                                                                                                    | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                                | [static.yasno.ua](https://static.yasno.ua/dnipro/outages)                                    |
+| `odesa`           | Одеська                 | ДТЕК Одеські електромережі              | schedule page + /ua/ajax                                                                                                              | ✅            | ✅             |                                                                                                                                                                   | [dtek-oem.com.ua](https://www.dtek-oem.com.ua/ua/shutdowns)                                              | [dtek-oem.com.ua](https://www.dtek-oem.com.ua/ua/shutdowns)                                  |
+| `kyiv-region`     | Київська                | ДТЕК Київські регіональні електромережі | /ua/ajax only (schedule, street list, houses); the schedule page is behind a bot check and is not read                                | ✅            | ✅             | needs two requests: the first is refused and hands out the CSRF cookie                                                                                            | [dtek-krem.com.ua](https://www.dtek-krem.com.ua/ua/shutdowns)                                            | [dtek-krem.com.ua](https://www.dtek-krem.com.ua/ua/shutdowns)                                |
+| `donetsk`         | Донецька                | ДТЕК Донецькі електромережі             | schedule page + /ua/ajax (same provider as Odesa)                                                                                     | ⚠️ code ready | ⚠️ code ready  | the site answers automated clients with a bot check on every route, so requests come back `blocked`; untested against live data                                   | [dtek-dem.com.ua](https://www.dtek-dem.com.ua/ua/shutdowns)                                              | [dtek-dem.com.ua](https://www.dtek-dem.com.ua/ua/shutdowns)                                  |
+| `lviv`            | Львівська               | Львівобленерго                          | api.loe.lviv.ua, power-api.loe.lviv.ua                                                                                                | ✅            | ✅             |                                                                                                                                                                   | [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)                                                      | [poweron.loe.lviv.ua](https://poweron.loe.lviv.ua/)                                          |
+| `ternopil`        | Тернопільська           | Тернопільобленерго                      | api-poweron.toe.com.ua                                                                                                                | ✅            | ✅             | schedule read per group via a reference address                                                                                                                   | [poweron.toe.com.ua](https://poweron.toe.com.ua/)                                                        | [poweron.toe.com.ua](https://poweron.toe.com.ua/)                                            |
+| `zakarpattia`     | Закарпатська            | Закарпаттяобленерго                     | Telegram @zakarpatenergyofficial + api-outage-zakarpat-energy.inneti.net: table picture (read by colour)                              | ✅ image      | ✅             | groups `unknown` while no picture is published; a picture counts only under a channel post that names its date                                                    | [zakarpat.energy](https://zakarpat.energy/customers/break-in-electricity-supply/schedule/)               | [outage.zakarpat.energy](https://outage.zakarpat.energy/schedule_queues)                     |
+| `ivano-frankivsk` | Івано-Франківська       | Прикарпаттяобленерго                    | be-svitlo.oe.if.ua                                                                                                                    | ✅            | ✅             | full address only, no autocomplete                                                                                                                                | [svitlo.oe.if.ua](https://svitlo.oe.if.ua/)                                                              | [svitlo.oe.if.ua](https://svitlo.oe.if.ua/)                                                  |
+| `chernivtsi`      | Чернівецька             | Чернівціобленерго                       | schedule page + Telegram @oe_cv_ua (change times), district directories                                                               | ✅            | ✅             | groups numbered 1–12                                                                                                                                              | [oblenergo.cv.ua](https://oblenergo.cv.ua/shutdowns/)                                                    | [oblenergo.cv.ua](https://oblenergo.cv.ua/shutdowns-search/)                                 |
+| `rivne`           | Рівненська              | Рівнеобленерго                          | schedule page + the two address lists (PDF)                                                                                           | ✅            | ✅ best effort | the lists are free text: `not-found` with the candidate groups when they don't settle an address                                                                  | [roe.vsei.ua](https://www.roe.vsei.ua/disconnections)                                                    | [roe.vsei.ua](https://www.roe.vsei.ua/disconnections)                                        |
+| `volyn`           | Волинська               | Волиньобленерго                         | inneti archive API: table image (read by colour), lookup form                                                                         | ✅ image      | ✅             | autocomplete for streets and houses; the settlement is typed in full                                                                                              | [energy.volyn.ua](https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/hrafik-vidkliuchen/) | [energy.volyn.ua](https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/cherga/) |
+| `khmelnytskyi`    | Хмельницька             | Хмельницькобленерго                     | schedule page + per-day news post + Telegram @khmelnytskoblenergo (text); archive table image (read by colour) for dates without text | ✅ text/image | ✅             |                                                                                                                                                                   | [hoe.com.ua](https://hoe.com.ua/page/pogodinni-vidkljuchennja)                                           | [hoe.com.ua](https://hoe.com.ua/shutdown/queue)                                              |
+| `chernihiv`       | Чернігівська            | Чернігівобленерго                       | schedule poster from the site + Telegram @chernigivoblenergo (times read from the picture), address list (PDF)                        | ✅ image      | ✅             | the schedule API and the online lookup need a captcha; the address list is dated 25.12.2025 and has no street types, so a house can come back with several groups | [chernihivoblenergo.com.ua](https://chernihivoblenergo.com.ua/files/other/schedule_groups.jpg)           | [interruptions.energy.cn.ua](https://interruptions.energy.cn.ua/interruptions)               |
+| `zhytomyr`        | Житомирська             | Житомиробленерго                        | ztoe.com.ua/gpv/api + schedule page, lookup form                                                                                      | ✅            | ✅             |                                                                                                                                                                   | [ztoe.com.ua](https://www.ztoe.com.ua/unhooking-search.php)                                              | [ztoe.com.ua](https://www.ztoe.com.ua/unhooking-search.php)                                  |
+| `kirovohrad`      | Кіровоградська          | Кіровоградобленерго                     | kiroe.com.ua JSON (today) + Telegram @SvitloKropyvnytskyiMisto (tomorrow, change times)                                               | ✅            | ✅             | tomorrow has no "possible" half hours until it becomes today                                                                                                      | [kiroe.com.ua](https://kiroe.com.ua/electricity-blackout)                                                | [kiroe.com.ua](https://kiroe.com.ua/electricity-blackout)                                    |
+| `cherkasy`        | Черкаська               | Черкасиобленерго                        | news API + Telegram @pat_cherkasyoblenergo, lookup backend                                                                            | ✅            | ✅             | the lookup asks the operator about a few of the house's accounts, one request at a time                                                                           | [cherkasyoblenergo.com](https://www.cherkasyoblenergo.com/off)                                           | [cherkasyoblenergo.com](https://www.cherkasyoblenergo.com/off)                               |
+| `sumy`            | Сумська                 | Сумиобленерго                           | soe.com.ua/next-api + sm.e-svitlo.com.ua (the operator's cabinet)                                                                     | ✅ today      | ✅             | tomorrow only once E-Svitlo's slot for it is filled (never seen filled: unverified)                                                                               | [soe.com.ua](https://www.soe.com.ua/consumers/shutdowns)                                                 | [soe.com.ua](https://www.soe.com.ua/consumers/shutdowns)                                     |
+| `poltava`         | Полтавська              | Полтаваобленерго                        | poe.pl.ua/customs                                                                                                                     | ✅            | ✅             | buildings with several connections have no single group                                                                                                           | [poe.pl.ua](https://www.poe.pl.ua/disconnection/power-outages/)                                          | [poe.pl.ua](https://www.poe.pl.ua/)                                                          |
+| `kharkiv`         | Харківська              | Харківобленерго                         | Drupal JSON:API (news) + Telegram @kharkivenergy                                                                                      | ✅            | —              | lookup needs a captcha                                                                                                                                            | [oblenergo.kharkiv.ua](https://www.oblenergo.kharkiv.ua/uk)                                              | [oblenergo.kharkiv.ua](https://www.oblenergo.kharkiv.ua/uk/gaoinfo)                          |
+| `zaporizhzhia`    | Запорізька              | Запоріжжяобленерго                      | news page, Telegram @Zaporizhzhyaoblenergo_news as the fallback; address sheets (Google Sheets)                                       | ✅            | ✅             | lists per group                                                                                                                                                   | [zoe.com.ua](https://www.zoe.com.ua/outage/)                                                             | [Telegram bot](https://t.me/esozoebot)                                                       |
+| `mykolaiv`        | Миколаївська            | Миколаївобленерго                       | off.energy.mk.ua API                                                                                                                  | ✅            | ✅             |                                                                                                                                                                   | [off.energy.mk.ua](https://off.energy.mk.ua/)                                                            | [off.energy.mk.ua](https://off.energy.mk.ua/)                                                |
 
-**АТ «Укрзалізниця»** is a distribution operator too: homes near stations and along the lines are wired to the railway's grid and get its own schedule, which differs from the oblenergo's. It has one region per oblast page on [uz.gov.ua](https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen/): `uz-kyiv`, `uz-kyiv-region`, `uz-dnipro`, … (`uz-<region id>`), and two branches each in Vinnytsia (`uz-vinnytsia`, `uz-vinnytsia-odesa`) and Sumy (`uz-sumy`, `uz-sumy-south`). Today's schedule only, read from the HTML table; a page with no table publishes nothing, so every group comes back `unknown` for today. The page also lists each group's addresses (no lookup yet).
+**АТ «Укрзалізниця»** is a distribution operator too: homes near stations and along the lines are wired to the railway's grid and get its own schedule, which differs from the oblenergo's. It has one region per oblast page on [uz.gov.ua](https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen/): `uz-kyiv`, `uz-kyiv-region`, `uz-dnipro`, … (`uz-<region id>`), and two branches each in Vinnytsia (`uz-vinnytsia`, `uz-vinnytsia-odesa`) and Sumy (`uz-sumy`, `uz-sumy-south`). The schedule is read from the HTML tables, each filed under the date written above it (usually today's, sometimes tomorrow's too); a table without a date is a `parse` error. When no table is for today, every group comes back `unknown` for today. The page has no change time, so `updatedAt` is null. The same page lists each group's addresses: address lookup and autocomplete work in 24 of the 26 regions (`uz-donetsk` and `uz-kherson` list none). A house inside a run like "1-31" whose side of the street the list doesn't settle is `not-found`.
 
 **Not covered**
 
-| region     | operator         | why                                   | schedule                                                    | address lookup                                                |
+| region     | operator         | why                                   | schedule page                                               | lookup page                                                   |
 | ---------- | ---------------- | ------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
 | Вінницька  | Вінницяобленерго | schedule and lookup behind Cloudflare | [voe.com.ua](https://www.voe.com.ua/disconnection/detailed) | [disconnection.voe.com.ua](https://disconnection.voe.com.ua/) |
 | Херсонська | Херсонобленерго  | no public schedule                    | [ksoe.com.ua](https://ksoe.com.ua/)                         | —                                                             |
 
-Луганська область and Crimea are not covered. "today" means the operator publishes only the current day. "⚠️ code ready" means the provider is implemented but the operator currently blocks automated requests. "image" means the schedule is read from the table picture the operator publishes.
+Луганська область and Crimea are not covered. "today" means the channels the SDK reads have shown only the current day. "⚠️ code ready" means the provider is implemented but the operator currently blocks automated requests. "image" means the schedule is read from the picture the operator publishes. "Telegram @…" is always the operator's own official channel, read from its public web preview (`t.me/s/…`).
 <!-- regions:end -->
 
-"Address" means the SDK can turn an address into a group. Zakarpattia publishes its schedule only as a picture: while none is published `getSchedules` lists its groups as `unknown` (not "no outages"); once one is, it throws `unsupported` with the picture's address. Its address lookup works either way.
+"Address" means the SDK can turn an address into a group. Zakarpattia publishes its schedule only as a picture, on its Telegram channel and through its API. While none is published `getSchedules` lists its groups as `unknown` (not "no outages"). The channel's picture is read under the date in its caption. The API's picture carries no date, so it is read only for a day the channel has posted too, as a cross-check; otherwise the `api` entry of `sources` has an `unsupported` error with the picture's address and the groups stay `unknown`. That the API serves the same table layout as the channel is unverified (no schedule has applied there since 17.10.2026). The address lookup works either way.
+
+### Which channel has a day first
+
+Operators don't publish everywhere at once. Chernihiv's site shows a day's poster only on the morning of that day, while its Telegram channel has it the evening before; Kirovohrad's site never shows tomorrow. So a region reads every official channel that carries the schedule and takes each day from the one that published it last. The ids are those in the result's `sources` (see [Freshness and failures](#freshness-and-failures)); the measurements are from November 2026, details per region in [`docs/sources`](docs/sources).
+
+| region         | `sources`                                       | who has what                                                                                                                            |
+| -------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `chernihiv`    | `site`, `telegram:@chernigivoblenergo`          | Telegram: tomorrow's poster the evening before and every change. The site: the day's poster at full size, from the morning of that day. |
+| `kirovohrad`   | `site`, `telegram:@SvitloKropyvnytskyiMisto`    | Telegram: tomorrow the evening before, and the time of every change. The site: today, with the "possible" half hours.                   |
+| `dnipro-cek`   | `api`, `telegram:@cek_info`                     | Telegram: tomorrow the evening before and every change. YASNO has lagged it by hours.                                                   |
+| `kharkiv`      | `site`, `telegram:@kharkivenergy`               | The same text; Telegram a few minutes earlier, the site post sometimes hours late.                                                      |
+| `cherkasy`     | `site`, `telegram:@pat_cherkasyoblenergo`       | The same text within minutes; the site has gone a night without the post Telegram had.                                                  |
+| `khmelnytskyi` | `site`, `news`, `telegram:@khmelnytskoblenergo` | Telegram and the per-day news post; the schedule page has shown only yesterday past midnight.                                           |
+| `zaporizhzhia` | `site`, `telegram:@Zaporizhzhyaoblenergo_news`  | The site has every version. Telegram repeats under half of them: used when the site is down, and for the time of a day's first post.    |
+| `chernivtsi`   | `site`, `telegram:@oe_cv_ua`                    | The site has the schedule and no change time; the time of the channel's newest post about a day is that time.                           |
+| `zhytomyr`     | `api`, `site`                                   | The API has a real change time and wins every day it has; the page stands in when the API fails.                                        |
+| `sumy`         | `site`, `e-svitlo`                              | The same schedule; the site's grid has no date, E-Svitlo's has, so it dates the grid.                                                   |
+| `zakarpattia`  | `telegram:@zakarpatenergyofficial`, `api`       | Not measured: no schedule has applied since 17.10.2026.                                                                                 |
+
+One entry: `kyiv`, `dnipro`, `mykolaiv` (`api`); `odesa`, `kyiv-region`, `donetsk`, `volyn` (`site`). No `sources`: `lviv`, `ternopil`, `ivano-frankivsk`, `poltava`, `rivne`, `uz-*`. These read one channel.
 
 ### Why some regions are missing
 
-Kyiv region and Donetsk (DTEK sites) answer automated clients with a bot check, so these providers report `blocked`. Vinnytsia keeps its data behind a bot check, and Kherson publishes no schedule, so they have no provider. This SDK does not try to get around access controls.
+Donetsk (a DTEK site) answers automated clients with a bot check on every route, so its provider reports `blocked`. Vinnytsia keeps its data behind a bot check, and Kherson publishes no schedule, so they have no provider. This SDK solves no challenge and imitates no browser.
+
+Kyiv region is a half-way case: its schedule page is behind the same bot check, but the site's own `/ua/ajax` endpoint, which the page calls, answers plain requests. The provider reads only that endpoint and takes the CSRF token from the cookie the endpoint sets. If the operator puts the check on `/ua/ajax` too, the region goes back to `blocked`.
 
 If an operator grants you access (an allowlisted server, an API key, a data-sharing agreement), pass a `fetch` that applies it. Providers make every request through it:
 
@@ -80,8 +103,8 @@ If an operator grants you access (an allowlisted server, an API key, a data-shar
 const outages = new OutageClient({
   fetch: (url, init) => {
     // e.g. route DTEK requests through the server the operator allowlisted for you
-    if (url.startsWith('https://www.dtek-krem.com.ua/'))
-      return fetch(url.replace('https://www.dtek-krem.com.ua', ALLOWLISTED_PROXY), init)
+    if (url.startsWith('https://www.dtek-dem.com.ua/'))
+      return fetch(url.replace('https://www.dtek-dem.com.ua', ALLOWLISTED_PROXY), init)
     return fetch(url, init)
   },
 })
@@ -95,14 +118,15 @@ The same option works for proxies, caching, logging and tests. When an operator 
 
 ### `new OutageClient(options?)`
 
-| option       | default                  |                                                                                                                                                                         |
-| ------------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cacheTtlMs` | `300000`                 | Reuse a region's schedule for this long. `0` turns caching off. Concurrent requests for one region share a single fetch (except calls with a `signal`, see Cancelling). |
-| `timeoutMs`  | `15000`                  | Per request.                                                                                                                                                            |
-| `retries`    | `1`                      | Extra attempts after a network error or a 5xx. A bot-check page is never retried, whatever its status.                                                                  |
-| `fetch`      | `globalThis.fetch`       | Bring your own (proxy, logging, tests).                                                                                                                                 |
-| `userAgent`  | `ua-outages (+repo url)` |                                                                                                                                                                         |
-| `providers`  | built-in                 | Replace or extend the regions.                                                                                                                                          |
+| option         | default                  |                                                                                                                                                                         |
+| -------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cacheTtlMs`   | `300000`                 | Reuse a region's schedule for this long. `0` turns caching off. Concurrent requests for one region share a single fetch (except calls with a `signal`, see Cancelling). |
+| `timeoutMs`    | `15000`                  | Per request.                                                                                                                                                            |
+| `retries`      | `1`                      | Extra attempts after a network error or a 5xx. A bot-check page is never retried, whatever its status.                                                                  |
+| `fetch`        | `globalThis.fetch`       | Bring your own (proxy, logging, tests).                                                                                                                                 |
+| `userAgent`    | `ua-outages (+repo url)` |                                                                                                                                                                         |
+| `providers`    | built-in                 | Replace or extend the regions.                                                                                                                                          |
+| `staleIfError` | `false`                  | Default for every schedule call: answer a failed fetch with the last good result, see [Freshness and failures](#freshness-and-failures).                                |
 
 ### Schedules
 
@@ -117,7 +141,7 @@ A `DaySchedule` is `{ date: 'YYYY-MM-DD', status, intervals }`:
 - `status` is `scheduled`, `no-outages`, `emergency` (the plan doesn't apply) or `unknown` (not published yet).
 - `intervals` are sorted and merged: `{ from, to, kind }`, where `kind` is `off` or `maybe` ("можливе відключення", switching time).
 
-`updatedAt` is when the operator last changed the schedule, when the source says so.
+`updatedAt` is when the operator last changed the schedule, when the source says so; it is null where the only stamp is one the page regenerates by itself (Rivne, the railway pages). `fetchedAt` is when the SDK read it. Days are dated by the date the source itself gives, never by the clock, so a page left on yesterday comes back as yesterday. Most regions also return `sources`, and a result served in place of a failed fetch has `stale` set: see [Freshness and failures](#freshness-and-failures).
 
 #### "No outages" vs "nothing published"
 
@@ -146,6 +170,17 @@ else if (day.intervals.length === 0)
 else showIntervals(day.intervals)
 ```
 
+**Upgrading from 0.3.x:** what a caller can notice in 0.4.0:
+
+- Results carry `sources` for most regions, and `stale` when served by `staleIfError`.
+- Every provider result is validated before it is returned: a malformed one now throws `parse` (see [Freshness and failures](#freshness-and-failures)).
+- `healthCheck`: the `staleAfterHours` default went from 72 to 36, and `stale` now follows `assessFreshness` (a source stuck on a past day is `stale` at once; an old `updatedAt` alone no longer is while today is published). Regions have `freshness`, `sources` and `degraded`; the report has `stale` and `degraded`.
+- YASNO (`kyiv`, `dnipro`, `dnipro-cek`): a `WaitingForSchedule` day is `unknown` with no intervals (its preliminary slots used to be returned), and `EmergencyShutdowns` on a date after today is `unknown`, not `emergency`.
+- More days: Kirovohrad returns tomorrow (from the operator's Telegram channel); Chernihiv returns tomorrow from the evening before; the railway pages return tomorrow's table when the page has one. Fewer where a source is behind: a railway table is filed under the date written above it, not under today, and Volyn's pictures dated before today are no longer read.
+- `updatedAt` is null where the old value was a stamp the page regenerates every half hour: Rivne always; Zhytomyr when its API's change time can't be read (the page's stamp is never used); Chernivtsi when the operator's channel has no post about the day (or can't be read).
+- Zakarpattia no longer throws `unsupported` once a picture is published: the picture is read (see [Regions](#regions)).
+- `capabilities.addressSearch` is now true for Chernihiv, Rivne, Cherkasy and 24 of the railway regions, and `capabilities.streetSearch` for Volyn too.
+
 #### Cancelling
 
 ```ts
@@ -159,9 +194,9 @@ Work shared with other callers keeps going for them: a call with a signal that i
 
 ### Schedules published as pictures
 
-Volyn publishes the schedule only as a table image, and Khmelnytskyi does when it doesn't post it as text on its schedule page (the text wins for its date). The SDK reads those itself: it decodes the PNG, finds the grid and classifies each cell by colour, with no dependencies. When an operator posts a text announcement as an image under the same date, it is skipped. A colour the SDK doesn't know is reported as a `parse` error instead of being guessed.
+Volyn and Zakarpattia publish the schedule only as a table image, and Khmelnytskyi did until it began posting text (its archive pictures are still read for a date that has no text; the text wins for its date). The SDK reads those itself: it decodes the PNG or JPEG, finds the grid and classifies each cell by colour, with no dependencies. When an operator posts a text announcement as an image under the same date, it is skipped. A colour the SDK doesn't know is reported as a `parse` error instead of being guessed.
 
-Chernihiv publishes a poster of twelve cards, one per group, with the off times written out ("00:00 - 02:30"). The SDK reads those too, without OCR: it decodes the JPEG, finds the orange cards, cuts each time line into glyphs and matches the digits against a model of the poster font, trained on hand-checked posters (`scripts/train-digits.ts`). The date comes from the poster header. A digit it isn't sure about, a time line it can't read or a date that isn't current gives a `parse` error, never a guess. On 30 older posters the model hadn't seen (Telegram copies at 40% of the original size), it read 24 exactly and refused the other 6. The original on the site is full size.
+Chernihiv publishes a poster of twelve cards, one per group, with the off times written out ("00:00 - 02:30"). The SDK reads those too, without OCR: it decodes the JPEG, finds the orange cards and matches each time line as a whole ("dd:dd-dd:dd") against a model of the poster font, built from hand-checked posters (`scripts/train-digits.ts`). The date comes from the poster header. A digit it isn't sure about, a time line it can't read or a date that isn't current gives a `parse` error, never a guess. The poster is read from two places: the site (full size, 1200 px wide) and the operator's Telegram channel (a 471 px copy, posted the evening before). Of the 36 hand-checked posters it reads 34 exactly and refuses 2 (one has a stray comma after a time, one has digits 9 px tall); none is misread. A poster in a new font, or with a typo in a time, is refused the same way until a few such posters are labelled and the model rebuilt. Changes the channel posts in words during the day ("З 6:00 до 8:00 додатково відключаються черги 1/1 та 1/2") are applied only where the wording is exact; otherwise the poster's times stay and `updatedAt` moves to the post.
 
 ### Address → group
 
@@ -183,6 +218,8 @@ People rarely know a street's official name, so matching is forgiving:
 
 `findGroup` picks a name on its own only when one match is clearly the best. Otherwise it throws `not-found` with suggestions, for example when "Соборна" is both a вулиця and a площа, or two villages share a name (pass `district` then). Some buildings belong to more than one group; you get those in `otherGroups`.
 
+Forgiving stops where another address begins. `findGroup` never takes a street whose name carries other numbers ("2-й провулок Миру" is not "Миру") or states another type ("вул. Миру" is not "просп. Миру"; a name without a type fits either), and never a house that differs by more than spelling: "12-А" is "12а", but "2/3" is not "23". Those are `not-found` with the closest names or numbers.
+
 Where the operator's lookup also says which emergency queues an address is in, the match carries them in `emergency` (omitted when the operator says nothing):
 
 ```ts
@@ -190,7 +227,7 @@ await outages.findGroup('sumy', { city: 'Конотоп', street: 'провул�
 // { region: 'sumy', group: '2.2', …, emergency: { gav: ['6'], sgav: ['2'], achr: ['3'] } }
 ```
 
-`gav` (ГАВ, the emergency schedule), `sgav` (СГАВ, the special one) and `achr` (АЧР, automatic load shedding by frequency) are numbered separately from ГПВ groups: "1" … "10", Lviv also "20", Mykolaiv also reserve queues "1(Р)". Values are distinct and sorted; a building with several accounts or connections can be in several. Regions that return them: Lviv, Ternopil, Zakarpattia (`chergGav`, `chergSgav`, `chergAchr`), Ivano-Frankivsk (ГАВ, СГАВ), Volyn ("Черга у ГАВ"), Khmelnytskyi (ГАВ, often empty), Sumy (ГАВ, АЧР, СГАВ), Poltava (ГАВ; "черга 0" counts as none) and Mykolaiv (ГАВ, СГАВ). The others publish no address → ГАВ mapping (Kharkiv says it can't by law), or hide it behind a captcha (Chernihiv) or a personal account number (Cherkasy).
+`gav` (ГАВ, the emergency schedule), `sgav` (СГАВ, the special one) and `achr` (АЧР, automatic load shedding by frequency) are numbered separately from ГПВ groups: "1" … "10", Lviv also "20", Mykolaiv also reserve queues "1(Р)". Values are distinct and sorted; a building with several accounts or connections can be in several. Regions that return them: Lviv, Ternopil, Zakarpattia (`chergGav`, `chergSgav`, `chergAchr`), Ivano-Frankivsk (ГАВ, СГАВ), Volyn ("Черга у ГАВ"), Khmelnytskyi (ГАВ, often empty), Sumy (ГАВ, АЧР, СГАВ), Poltava (ГАВ; "черга 0" counts as none), Mykolaiv (ГАВ, СГАВ) and Cherkasy (ГАВ, of the accounts asked). The others publish no address → ГАВ mapping (Kharkiv says it can't by law), or only one the SDK doesn't read: Chernihiv's online lookup is behind a captcha, and its ГАВ list is a separate PDF.
 
 #### Autocomplete
 
@@ -204,7 +241,15 @@ const houses = await outages.searchHouses('lviv', streets[0])
 const match = await outages.groupOf('lviv', houses[0], streets[0], city)
 ```
 
-Results come back ranked, best first, each with a `score` from 0 to 1. Most operators publish a whole directory: the SDK downloads it once and searches it locally, so later keystrokes cost nothing. For operators whose server does the searching (YASNO streets, Sumy, Khmelnytskyi), a misspelled query is also sent as word fragments, so a typo still finds the street. `capabilities.streetSearch` tells you whether a region supports autocomplete. Ivano-Frankivsk and Volyn only check a complete address, so there `findGroup` works but autocomplete doesn't.
+Results come back ranked, best first, each with a `score` from 0 to 1. Most operators publish a whole directory: the SDK downloads it once and searches it locally, so later keystrokes cost nothing. For operators whose server does the searching (YASNO streets, Sumy, Khmelnytskyi), a misspelled query is also sent as word fragments, so a typo still finds the street. `capabilities.streetSearch` tells you whether a region supports autocomplete. Ivano-Frankivsk only checks a complete address, so there `findGroup` works but autocomplete doesn't. Volyn has no settlement list (`searchCities` returns nothing): pass the settlement's exact name as text, `searchStreets('volyn', 'Вин', { city: { id: '', name: 'Луцьк' } })`, with at least three letters of the street; houses and the group then come from that answer.
+
+Some lookups read lists rather than ask a service, and say so when the list doesn't settle an address:
+
+- **Chernihiv**: the operator's address list (a PDF in force from 25.12.2025, no longer linked from the site but still served). Its groups matched the outage windows of 96% of 400 houses sampled in November 2026. It has no street types, so a number listed under "Миру" in two groups (вулиця and проспект) comes back with both (`otherGroups`). A house that isn't listed is `not-found`.
+- **Rivne**: the operator's two PDF lists are free text ("частково", "167-195 (непарні)"). A house or a range the list names, or a street or settlement listed whole in one group, gets an answer; anything else is `not-found` with the candidate groups and the operator's wording. About a quarter of the rows can only ever be candidates.
+- **Cherkasy**: the backend of the lookup on the operator's site, hosted with its customer cabinet. It answers per household account, so the SDK asks about up to 8 accounts of the house, one request at a time, and returns the most common group (`otherGroups` when the house is split). Account numbers are personal data: they stay in memory for that call only and are never returned, cached or put in an error. A house with no household accounts is `not-found`.
+- **Укрзалізниця**: the address table on each region's page. A house under several groups returns all of them; in a run like "1-31" the odd numbers are answered and an even one is `not-found`, since the list doesn't say.
+- **Kharkiv** has no lookup: the operator's needs a captcha.
 
 ### Emergency schedules (ГАВ / СГАВ)
 
@@ -257,6 +302,7 @@ stateAt(days, at?)       // power state at an instant
 intervalAt(days, at?)    // the interval covering an instant
 nextOutage(days, from?, { kinds?, includeCurrent? })  // joins outages across midnight
 minutesOf(day, kind?)    // total scheduled minutes
+assessFreshness(schedule, opts?) // is it current? see "Freshness and failures"
 normalizeGroup('Черга 3.1') // '3.1'
 fuzzyScore('Хрищатик', 'вул. Хрещатик') // 0..1, the matcher behind the search
 ```
@@ -265,33 +311,114 @@ fuzzyScore('Хрищатик', 'вул. Хрещатик') // 0..1, the matcher 
 
 ```ts
 const report = await outages.healthCheck({ address: true })
-// { ok, checkedAt, regions: [{ region, status: 'ok' | 'stale' | 'empty' | 'error', latencyMs, groups, updatedAt, message, address }] }
+// { ok, degraded, stale, checkedAt,
+//   regions: [{ region, status: 'ok' | 'stale' | 'empty' | 'error', latencyMs, groups, updatedAt, message,
+//               freshness, sources, degraded, address }] }
 ```
 
 - `empty`: the source works but publishes nothing right now (no groups, or every day `unknown`). Often there are no outages then, but the SDK can't tell.
-- `stale`: the schedule hasn't changed for `staleAfterHours` (default 72).
+- `stale`: the data is out of date: its `freshness.state` is `stale` (see below), and `message` says why. For the health check that means the source is stuck on a past day, or hasn't changed for `staleAfterHours` (default 36) while today isn't published. Regions whose `updatedAt` is null can only be caught by the first.
 - `error`: a network failure, a bot check (`blocked`), or a format change (`parse`).
+- `degraded: true` next to any status but `error`: one of the region's channels failed and the others still gave a result. `message` names the channel; `sources` has the details.
+- `freshness` is `assessFreshness` of what was fetched; `sources` is the schedule's `sources`.
 
-From the terminal: `npm run health` (`-- --address`, `-- --json`, `-- kyiv lviv`). The `Source health` workflow runs it daily.
+`report.ok` is false when a region is `error` or an address lookup failed. `report.stale` and `report.degraded` say whether any region is stale or degraded; with `healthCheck({ strict: true })` those make `ok` false too. Other options: `regions`, `staleAfterHours`, `tomorrowExpectedAt` (passed to `assessFreshness`), `concurrency` (default 6), `signal`. The health check always asks the operator: it uses neither the cache nor `staleIfError`.
+
+From the terminal: `npm run health` (`-- --address`, `-- --strict`, `-- --json`, `-- --skip a,b`, `-- kyiv lviv`). It prints one line per region with today's and tomorrow's coverage and the age of the data, and one line per entry of `sources`. Exit code 0: every source works; 1: a source or an address lookup is broken; 2 (only with `--strict`): nothing is broken, but something is stale or degraded.
+
+The `Source health` workflow (`.github/workflows/health.yml`) runs it every 30 minutes with `--address`, skipping `donetsk` (always `blocked`). Only broken sources and failed lookups open an issue; stale or degraded regions don't. A failing check is repeated after two minutes; if it still fails, the workflow opens an issue titled `Source health: <failing regions>` (the first five, then "+N more") with the failing part of the report, reuses that issue while the failure lasts (a comment when the set of failing regions changes), and closes it with a comment on the first green run. Its runners are outside Ukraine, so a source that blocks foreign addresses shows up as `blocked`.
+
+### Freshness and failures
+
+A schedule that parses is not necessarily current: a site can keep showing yesterday's table, a channel can be down while another works, an app can hold an object for hours. The SDK reports each of these instead of passing old data off as new.
+
+**Where a result came from.** Regions that read several official channels of the operator (site, API, Telegram channel) ask all of them and take each day from the one that published it last; a channel without a publication time loses to one with it, and a tie goes to the region's primary channel (the first entry). Such results carry `sources`, one entry per channel:
+
+```ts
+const s = await outages.getSchedules('chernihiv')
+s.sources
+// [{ id: 'site', url: 'https://…', ok: false, dates: [], updatedAt: null, error: { code: 'network', message: '…' } },
+//  { id: 'telegram:@chernigivoblenergo', url: 'https://t.me/s/…', ok: true, dates: ['2026-11-17'], updatedAt: '2026-11-16T23:18:48+02:00' }]
+```
+
+`dates` are the days that channel supplied to the result, `updatedAt` is when the operator published them there. A channel that failed has `ok: false` and the `error`; the call still succeeds while any channel answers, and throws the first channel's error when none does. `disagrees: true` marks a channel that has a different schedule for a day another channel won (usually it is just behind). When an operator calls a day's schedule off in a post (Kharkiv, Cherkasy, Khmelnytskyi, Zaporizhzhia), that is a publication too: if it is the newest, the day's status is `unknown` for every group (neither the old hours nor `no-outages`), the channel that cancelled has the date in its `dates`, and a channel still showing the schedule gets `disagrees`. Regions with one channel have one entry or omit `sources`; the ids per region are listed under [Which channel has a day first](#which-channel-has-a-day-first). `getSchedule` passes `sources` on.
+
+**Is it current?** `assessFreshness` is a pure function of a `RegionSchedule` or `GroupSchedule` and the clock:
+
+```ts
+import { assessFreshness } from 'ua-outages'
+
+const schedule = await outages.getSchedule('lviv', '3.1', { staleIfError: true })
+const f = assessFreshness(schedule, { tomorrowExpectedAt: '21:00' })
+// { state: 'fresh' | 'stale' | 'unpublished', today: 'published' | 'missing', tomorrow: 'published' | 'missing',
+//   coveredThrough: '2026-11-18', ageMinutes: 95, fetchedMinutesAgo: 0, issues: [{ code, message }] }
+if (f.state === 'stale') showWarning(f.issues.map((i) => i.message).join('; '))
+```
+
+`state` is `stale` when any stale-making issue is present, else `unpublished` when nothing is published, else `fresh`. "Published" means a day whose status isn't `unknown`; days are Kyiv calendar days. `today` / `tomorrow` say whether any group has that day, `coveredThrough` is the newest published date, `ageMinutes` is the time since `updatedAt` (null when the source doesn't say), `fetchedMinutesAgo` the time since `fetchedAt`.
+
+| issue code          | when                                                                                                                              | state         |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| `nothing-published` | No day of any group is published. Silence is not staleness, however long it lasts.                                                | `unpublished` |
+| `behind`            | Something is published, but nothing for today or later: the source is stuck on a past day.                                        | `stale`       |
+| `not-updated`       | Something is published, today isn't, and `updatedAt` is older than `staleAfterHours` (default 36).                                | `stale`       |
+| `last-good`         | The result has `stale` set: it is the last good one, served instead of a failed fetch.                                            | `stale`       |
+| `fetched-long-ago`  | `fetchedAt` is older than `fetchedStaleAfterMinutes` (default 30): you are holding an old object. Not listed next to `last-good`. | `stale`       |
+| `source-failed`     | Some entry of `sources` has `ok: false`. The result is degraded, but as fresh as its data.                                        | unchanged     |
+| `sources-disagree`  | Some entry of `sources` has `disagrees: true`.                                                                                    | unchanged     |
+| `tomorrow-missing`  | `tomorrowExpectedAt` (Kyiv "HH:MM") is given, it is past that time, and tomorrow isn't published.                                 | unchanged     |
+| `partial`           | Today is published for some groups and `unknown` (or absent) for others.                                                          | unchanged     |
+
+An old `updatedAt` alone is fine while today is covered (a schedule published two days ahead). `fresh` doesn't promise today is there: when only a later day is published, `state` is `fresh` and `today` is `missing`. Right after Kyiv midnight a source that still shows only yesterday is `behind` until the operator publishes the new day. Options: `now`, `staleAfterHours`, `fetchedStaleAfterMinutes`, `tomorrowExpectedAt`.
+
+**When the operator can't be read.** By default a failed fetch throws. With `staleIfError` the client answers with the region's last good result instead:
+
+```ts
+const outages = new OutageClient({ staleIfError: true }) // or per call; { maxAgeMs } to change the 6 h limit
+
+const s = await outages.getSchedules('sumy', { previous: storedSchedule })
+if (s.stale) {
+  // { since: '2026-11-17T08:02:11+02:00', error: { code: 'network', message: 'Cannot reach www.soe.com.ua' } }
+}
+```
+
+- It applies to `network`, `http`, `blocked` and `parse` errors. `unsupported`, `not-found` and a cancelled call are thrown as before.
+- The result is a copy of the last successful one with `stale: { since, error }`; `since` is its `fetchedAt`, which stays as it was. `assessFreshness` reports it as `last-good`, state `stale`.
+- The client remembers each region's last successful result. `previous` is one your app stored (across a restart, say); the one fetched later is used. A `previous` that isn't a valid schedule of that region is ignored.
+- It is used only while at most `maxAgeMs` old (default 6 h); after that the error is thrown.
+- A failure is never cached as a result. After answering with the last good result the client waits a minute (or `cacheTtlMs`, when shorter) before asking the operator again for calls with `staleIfError`; `fresh: true` asks at once, and calls without `staleIfError` always ask.
+- `healthCheck` never uses it.
+
+**Garbage is an error.** Before a result is cached or returned, the client checks it (`validateSchedule`, exported): `region` matches; `groups` are distinct and are exactly the keys of `schedules`; dates are real `YYYY-MM-DD` and distinct per group; statuses are the four known ones; every interval has ISO `from` < `to`, a kind of `off` or `maybe`, lies within its Kyiv day (ending at the next midnight is allowed, and the day is 23 or 25 hours long when the clocks change) and intervals are sorted and don't overlap; a `no-outages` day has no intervals; `updatedAt` is null or a time at most 24 h ahead of the clock. Anything else throws `OutageError('parse')` naming the region and the first violation, the same as a format change, and with `staleIfError` falls back the same way. Providers passed in `providers` are checked too.
 
 ### Errors
 
 Everything throws `OutageError` with a `code`:
 
-| code          | meaning                                                         |
-| ------------- | --------------------------------------------------------------- |
-| `network`     | DNS, timeout, connection reset                                  |
-| `http`        | non-2xx from the operator                                       |
-| `blocked`     | a firewall or bot check answered instead of the operator        |
-| `parse`       | the response arrived, but its format changed                    |
-| `unsupported` | unknown region, or the operator doesn't offer this              |
-| `not-found`   | unknown group, or the address couldn't be matched unambiguously |
+| code          | meaning                                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `network`     | DNS, timeout, connection reset                                                                |
+| `http`        | non-2xx from the operator                                                                     |
+| `blocked`     | a firewall or bot check answered instead of the operator                                      |
+| `parse`       | the response arrived, but its format changed, or what was read from it isn't a valid schedule |
+| `unsupported` | unknown region, or the operator doesn't offer this                                            |
+| `not-found`   | unknown group, or the address couldn't be matched unambiguously                               |
 
 ## How it works and its limits
 
-Each region is a provider in `src/providers/` that reads the operator's own source: a JSON API where one exists (YASNO, Mykolaiv, Sumy, …), otherwise the schedule page or the operator's news posts. Nothing goes around captchas or bot protection. When an operator puts one in front of its data, the SDK reports `blocked` instead.
+Each region is a provider in `src/providers/` that reads the operator's own channels: a JSON API where one exists (YASNO, Mykolaiv, Sumy, …), otherwise the schedule page, the operator's news posts, the files it publishes (posters, PDF address lists) or its official Telegram channel, read from the public preview at `t.me/s/<channel>`. The channel is read where the operator publishes there first or only there: Chernihiv's site shows a day's poster on the morning of that day, its channel the evening before. No third-party aggregator, bot or relay channel is read. A provider with several channels merges them with `mergeSources` (`src/providers/sources.ts`): all are read at once, each day comes from the channel that published it last, and one failing doesn't fail the region. Nothing goes around captchas or bot protection. When an operator puts one in front of its data, the SDK reports `blocked` instead.
 
-Notes on every source (endpoints, formats, quirks) are in [`docs/sources`](docs/sources).
+Notes on every source (endpoints, formats, quirks) are in [`docs/sources`](docs/sources), with the measurements behind the choice of channels.
+
+Known limits:
+
+- `donetsk` comes back `blocked`; `kyiv-region` works only while its `/ua/ajax` endpoint stays unchallenged; Vinnytsia and Kherson have no provider (see [Why some regions are missing](#why-some-regions-are-missing)).
+- No address lookup for Kharkiv (captcha) and for the railway's Donetsk and Kherson pages (no list); no autocomplete for Ivano-Frankivsk; no settlement list for Volyn.
+- Lookups from lists are as good as the lists: Chernihiv's is dated 25.12.2025 and has no street types, Rivne's are free text, Cherkasy's answer is a sample of the house's accounts (see [Autocomplete](#autocomplete)).
+- A Chernihiv poster in a new font or with a typo in a time fails that channel with `parse` instead of being misread; the other channel still answers when it has the day.
+- Text posts are read with patterns built from the operators' real wording. A schedule post that can't be read exactly fails its channel with `parse` (Kirovohrad, ЦЕК, Khmelnytskyi); a change in words that can't be applied leaves the earlier times (Chernihiv) or marks the groups it names `unknown` (ЦЕК).
+- Telegram shows when a post was made, not when it was edited: an edited post keeps its first time.
+- Not seen on live data yet, so unverified: a filled "tomorrow" slot of Sumy's E-Svitlo (until one is read, Sumy has today only); the picture Zakarpattia's API serves (if its layout differs from the channel's, that source reports `parse` and the channel still answers); how tomorrow appears in Zhytomyr's API (the reader takes whatever dates the rows carry).
 
 Operators change their sites without warning. Every provider is tested against real saved responses (`test/fixtures`), and `healthCheck` catches changes in production. If a region breaks, please open an issue with the `npm run health` output.
 
@@ -304,7 +431,7 @@ npm run test:live   # hits real servers
 npm run health -- --address
 ```
 
-Adding a region: implement `Provider` (`src/providers/provider.ts`) with `getSchedules` and, if the operator has a lookup, the address methods. Save real responses as fixtures, write tests next to the others, and register the provider in `src/providers/index.ts`.
+Adding a region: implement `Provider` (`src/providers/provider.ts`) with `getSchedules` and, if the operator has a lookup, the address methods. If the operator publishes on more than one channel, give each a reader and combine them with `mergeSources`. Save real responses as fixtures, write tests next to the others, and register the provider in `src/providers/index.ts`.
 
 ## Releasing
 

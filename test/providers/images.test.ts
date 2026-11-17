@@ -5,7 +5,8 @@ import { readScheduleTable } from '../../src/image/table.js'
 import { latestImages, textSchedules } from '../../src/providers/khmelnytskyi.js'
 import { latestGraphs } from '../../src/providers/volyn.js'
 import type { DaySchedule } from '../../src/types.js'
-import { fixture, fixtureBytes, mockFetch } from '../helpers.js'
+import { assessFreshness } from '../../src/freshness.js'
+import { expectUnpublished, fixture, fixtureBytes, mockFetch } from '../helpers.js'
 
 const NOW = new Date('2026-10-17T19:00:00+03:00')
 const hhmm = (d: DaySchedule) => d.intervals.map((i) => `${i.from.slice(11, 16)}-${i.to.slice(11, 16)}`)
@@ -128,7 +129,83 @@ describe('Volynoblenergo image schedule', () => {
     expect(hhmm(s.schedules['1.2']![0]!)).toEqual(['14:00-17:30'])
     expect(hhmm(s.schedules['3.1']![0]!)).toEqual(['11:00-14:00'])
     expect(hhmm(s.schedules['6.2']![0]!)).toEqual(['21:00-22:00'])
-    expect(s.updatedAt).toBe('2026-10-17T18:47:00+03:00')
+    // the upload time (true UTC in the archive), not the minute of `dateCreate`
+    expect(s.updatedAt).toBe('2026-10-17T18:47:23+03:00')
+    expect(s.sources).toEqual([
+      {
+        id: 'site',
+        url: 'https://energy.volyn.ua/spozhyvacham/perervy-u-elektropostachanni/hrafik-vidkliuchen/',
+        ok: true,
+        dates: ['2026-10-17'],
+        updatedAt: '2026-10-17T18:47:23+03:00',
+      },
+    ])
+  })
+
+  it('has tomorrow as soon as its picture is in the archive, the evening before', async () => {
+    // the archive as it stood on 17.10 at 22:15: the picture for 18.10 was uploaded at 22:12
+    const now = new Date('2026-10-17T22:15:00+03:00')
+    const { fetch, calls } = mockFetch([
+      { match: '/api/archive_gpv_graphs', body: fixture('volyn/archive_gpv_graphs-2026-10-17-2215.json') },
+      { match: '6ad3988b22570_GPV.png', body: fixtureBytes('volyn/gpv-2026-10-17-1847.png') },
+      { match: '6ad3c89bb9049_GPV.png', body: fixtureBytes('volyn/gpv-2026-10-18-2212.png') },
+    ])
+    const s = await new OutageClient({ fetch, now: () => now, cacheTtlMs: 0 }).getSchedules('volyn')
+    expect(s.schedules['1.1']!.map((d) => `${d.date} ${d.status}`)).toEqual([
+      '2026-10-17 scheduled',
+      '2026-10-18 scheduled',
+    ])
+    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['10:00-14:00'])
+    // the picture for 18.10 is all "наявне електропостачання"
+    for (const g of s.groups) expect(s.schedules[g]![1]!.intervals).toEqual([])
+    expect(s.updatedAt).toBe('2026-10-17T22:12:27+03:00')
+    expect(assessFreshness(s, { now })).toMatchObject({
+      state: 'fresh',
+      today: 'published',
+      tomorrow: 'published',
+    })
+    // one picture per date: the newest (of two for 18.10, seven for 17.10)
+    expect(calls.filter((c) => c.url.endsWith('.png'))).toHaveLength(2)
+  })
+
+  it('never presents a picture for a past date as today', async () => {
+    // the same archive a month later: its newest picture is for 18.10
+    const now = new Date('2026-11-17T09:00:00+02:00')
+    const { fetch, calls } = mockFetch([
+      { match: '/api/archive_gpv_graphs', body: fixture('volyn/archive_gpv_graphs-2026-10-17-2215.json') },
+    ])
+    const s = await new OutageClient({ fetch, now: () => now, cacheTtlMs: 0 }).getSchedules('volyn')
+    expectUnpublished(s, 12)
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-17'])
+    expect(s.updatedAt).toBeNull()
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: [] })
+    expect(assessFreshness(s, { now }).state).toBe('unpublished')
+    expect(calls).toHaveLength(1)
+  })
+
+  it('reports a date whose picture holds no table', async () => {
+    const { fetch } = mockFetch([
+      { match: '/api/archive_gpv_graphs', body: fixture('volyn/archive_gpv_graphs-2026-10-17.json') },
+      { match: '.png', body: fixtureBytes('khmelnytskyi/announcement-2026-10-17-1658.png') },
+    ])
+    await expect(
+      new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0 }).getSchedules('volyn'),
+    ).rejects.toMatchObject({ code: 'parse' })
+  })
+
+  it('uses the upload time, and the creation time only without it', () => {
+    const entry = (imageUrl: object) => ({
+      dateGraph: '2026-10-25T00:00:00+00:00',
+      // Kyiv wall time labelled +00:00, on the night the clocks go back
+      dateCreate: '2026-10-25T03:30:00+00:00',
+      imageUrl,
+    })
+    const at = (imageUrl: object) =>
+      latestGraphs([entry(imageUrl)], '2026-10-25')[0]!.images[0]!.at.toISOString()
+    expect(at({ contentUrl: '/a.png', uploadTimestamp: '2026-10-25T01:30:00+00:00' })).toBe(
+      '2026-10-25T01:30:00.000Z',
+    )
+    expect(at({ contentUrl: '/a.png' })).toMatch(/^2026-10-25T0[01]:30:00\.000Z$/)
   })
 
   it('takes the newest image per date', () => {

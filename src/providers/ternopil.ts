@@ -8,6 +8,7 @@ import {
   parseCherg,
   parsePowerOnTime,
   powerOnAddressSearch,
+  uncachedJson,
   type PowerOnBuilding,
 } from './poweron.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -98,7 +99,11 @@ export function ternopilProvider(): Provider {
       'group[]': group,
       time: key.replace(/\//g, ''),
     })
-    const data = await ctx.http.json(`${API}/a_gpv_g?${q}`, {
+    // Cloudflare caches this for up to two hours and its cache key ignores `X-debug-key`: two
+    // buildings asked through one URL get the first one's answer. `group[]` and `time` (the
+    // key's digits) are what keeps the groups apart, so they must stay in the URL; `_` (added
+    // by `uncachedJson`) then takes each call past the cache.
+    const data = await uncachedJson(ctx, `${API}/a_gpv_g?${q}`, {
       region,
       headers: { 'X-debug-key': base64Utf8(key) },
     })

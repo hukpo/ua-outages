@@ -11,6 +11,8 @@ import type { ProviderContext } from '../providers/provider.js'
  * Each post is a `.tgme_widget_message` block with `data-post="<channel>/<id>"`, the text in
  * `.tgme_widget_message_text` and the original post time in `<time datetime>`. An edited post
  * shows its latest text and the word "edited" in its meta line; the edit time is not exposed.
+ * A photo is an `<a class="tgme_widget_message_photo_wrap" style="…background-image:url('…')">`;
+ * an album is one post with several of them.
  */
 export interface TelegramPost {
   channel: string
@@ -21,12 +23,29 @@ export interface TelegramPost {
   /** Plain text: line breaks kept, tags dropped, entities decoded */
   text: string
   edited: boolean
+  /**
+   * Its pictures in order (one, or an album's), as the preview serves them: CDN links to a
+   * downscaled JPEG that expire after a while, so fetch them right away. Empty without photos;
+   * videos and link previews aren't included.
+   */
+  photos: string[]
+}
+
+export interface PreviewOptions {
+  /**
+   * Also return posts that have photos and no text (a schedule posted as a bare picture);
+   * their `text` is ''. Off by default: readers of announcements want only posts with words.
+   */
+  withPhotoOnly?: boolean
 }
 
 const PREVIEW = 'https://t.me/s/'
 
-/** One preview page → its posts with text, oldest first. Exported for tests. */
-export function parseTelegramPreview(html: string): TelegramPost[] {
+/**
+ * One preview page → its posts with text (and, with `withPhotoOnly`, the ones with only
+ * photos), oldest first. Exported for tests.
+ */
+export function parseTelegramPreview(html: string, opts: PreviewOptions = {}): TelegramPost[] {
   const posts: TelegramPost[] = []
   const starts = [...html.matchAll(/<div class="tgme_widget_message_wrap\b/g)].map((m) => m.index!)
   for (const [i, start] of starts.entries()) {
@@ -42,7 +61,8 @@ export function parseTelegramPreview(html: string): TelegramPost[] {
     if (!Number.isFinite(t)) continue
     const body = messageTextHtml(block)
     const text = body === null ? '' : htmlToText(body)
-    if (!text) continue
+    const photos = photoUrls(block)
+    if (!text && !(opts.withPhotoOnly && photos.length)) continue
     const channel = post[1]!
     const id = Number(post[2])
     posts.push({
@@ -52,10 +72,23 @@ export function parseTelegramPreview(html: string): TelegramPost[] {
       at: toKyivIso(new Date(t)),
       text,
       edited: /\bedited\b/.test(meta.replace(/<[^>]+>/g, ' ')),
+      photos,
     })
   }
   // the page is oldest first already; keep that order whatever happens to the markup
   return posts.sort((a, b) => a.id - b.id)
+}
+
+/** Picture links of a post, in page order; `&amp;` in the attribute decoded. */
+function photoUrls(block: string): string[] {
+  const urls: string[] = []
+  for (const m of block.matchAll(/<a\b[^>]*\bclass="tgme_widget_message_photo_wrap\b[^>]*>/g)) {
+    const url = /background-image:\s*url\(['"]?([^'")]+)['"]?\)/.exec(
+      m[0].replace(/&quot;|&#0?39;/g, "'"),
+    )?.[1]
+    if (url) urls.push(url.replace(/&amp;/g, '&'))
+  }
+  return urls
 }
 
 /** Inner HTML of the post's own text (not of a quoted reply), or null. */
@@ -117,6 +150,8 @@ export interface ReadChannelOptions {
   since: Date
   /** Pages of ~20 posts, default 5 */
   maxPages?: number
+  /** Also return posts with photos and no text, see `PreviewOptions` */
+  withPhotoOnly?: boolean
 }
 
 export interface ChannelRead {
@@ -159,7 +194,7 @@ export async function readChannelWindow(
     ctx.signal?.throwIfAborted()
     const url = `${PREVIEW}${encodeURIComponent(channel)}${before ? `?before=${before}` : ''}`
     const html = await ctx.http.text(url, { region: opts.region, headers: { Accept: 'text/html' } })
-    const posts = parseTelegramPreview(html)
+    const posts = parseTelegramPreview(html, { withPhotoOnly: opts.withPhotoOnly })
     // a page of photo-only posts has message blocks but no text: still a valid page
     const blocks = [...html.matchAll(/data-post="[^"/]+\/(\d+)"/g)].map((m) => Number(m[1]))
     if (!blocks.length) {

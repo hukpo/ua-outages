@@ -20,6 +20,9 @@ import { fixture, mockFetch } from './helpers.js'
 const IF_API = 'https://be-svitlo.oe.if.ua'
 const IF_EMPTY = fixture('ivano-frankivsk/schedule-by-queue.1.1.current-empty.json')
 const tick = () => new Promise((r) => setTimeout(r, 10))
+// markers for "which fetch won"; real timestamps, since the client validates what providers return
+const OLD = '2026-11-05T08:00:00+02:00'
+const NEW = '2026-11-05T09:00:00+02:00'
 
 /**
  * A fetch that never answers on its own: it records the call and settles only when its
@@ -298,6 +301,72 @@ describe('bot checks on error statuses', () => {
   })
 })
 
+describe('a body that fails after the headers arrived', () => {
+  const failing =
+    (error: unknown): FetchLike =>
+    async () =>
+      new Response(
+        new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode('partial'))
+            c.error(error)
+          },
+        }),
+      )
+
+  it('reports a timeout while reading the body as a network error, for text and bytes', async () => {
+    const h = new Http({ fetch: failing(new DOMException('timed out', 'TimeoutError')), timeoutMs: 300 })
+    for (const read of [
+      h.text('https://example.ua/x', { region: 'lviv' }),
+      h.bytes('https://example.ua/x', { region: 'lviv' }),
+    ]) {
+      const err = await read.catch((e) => e)
+      expect(err).toBeInstanceOf(OutageError)
+      expect(err).toMatchObject({ code: 'network', details: { region: 'lviv' } })
+      expect(err.message).toBe('example.ua did not finish answering in 300 ms')
+    }
+  })
+
+  it('reports a dropped connection the same way, and staleIfError covers it', async () => {
+    const h = new Http({ fetch: failing(new TypeError('terminated')) })
+    await expect(h.text('https://example.ua/x')).rejects.toMatchObject({
+      code: 'network',
+      message: 'example.ua dropped the connection',
+    })
+
+    let broken = false
+    const fetch: FetchLike = (url, init) =>
+      broken ? failing(new TypeError('terminated'))(url, init) : Promise.resolve(new Response('ok'))
+    const provider: Provider = {
+      info: {
+        id: 'lviv',
+        name: 'L',
+        operator: 'o',
+        website: 'w',
+        capabilities: { schedule: true, addressSearch: false },
+      },
+      getSchedules: async (ctx) => {
+        await ctx.http.text('https://example.ua/x', { region: 'lviv' })
+        return unpublished('lviv', ['1.1'], ctx.now())
+      },
+    }
+    const c = new OutageClient({ providers: [provider], fetch, cacheTtlMs: 0, staleIfError: true })
+    await c.getSchedules('lviv')
+    broken = true
+    expect((await c.getSchedules('lviv')).stale?.error.code).toBe('network')
+  })
+
+  it("still rejects with the signal's reason when the call is cancelled mid-body", async () => {
+    const ctrl = new AbortController()
+    const fetch: FetchLike = async () => new Response(new ReadableStream({ start() {} }))
+    const pending = new Http({ fetch }).withSignal(ctrl.signal).text('https://example.ua/x')
+    await tick()
+    ctrl.abort(new Error('user left'))
+    await expect(pending).rejects.toThrow('user left')
+    await expect(pending).rejects.not.toBeInstanceOf(OutageError)
+  })
+})
+
 // Regressions for what the independent (GPT) review of this change found
 describe('cancellation edge cases', () => {
   it('leaves no unhandled rejection when the abort lands while the fetch is failing', async () => {
@@ -337,8 +406,11 @@ describe('cancellation edge cases', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     release!()
     await tick()
-    // the 503 would normally be retried once; nobody waits for it, so it isn't
-    expect(calls).toHaveLength(1)
+    // the 503 would normally be retried once; nobody waits for it, so it isn't. Two requests were
+    // in flight when the caller left, the site's page and the channel's preview: one of each
+    expect(calls.filter((u) => u.includes('kiroe.com.ua'))).toHaveLength(1)
+    expect(calls.filter((u) => u.includes('t.me/s/'))).toHaveLength(1)
+    expect(calls).toHaveLength(2)
   })
 
   it('cancels the address lookup of a health check too', async () => {
@@ -415,12 +487,12 @@ describe('cancellation edge cases', () => {
     const older = client.getSchedules('sumy', { signal: new AbortController().signal })
     await new Promise((r) => setTimeout(r, 2))
     const newer = client.getSchedules('sumy', { fresh: true })
-    resolvers[1]!(schedule('NEW'))
+    resolvers[1]!(schedule(NEW))
     await newer
-    resolvers[0]!(schedule('OLD'))
+    resolvers[0]!(schedule(OLD))
     await older
     await tick()
-    expect((await client.getSchedules('sumy')).updatedAt).toBe('NEW')
+    expect((await client.getSchedules('sumy')).updatedAt).toBe(NEW)
   })
 
   it('on Node 20.0–20.2 (no AbortSignal.any) leaves no listeners on the caller signal once requests are over', async () => {
@@ -560,12 +632,12 @@ describe('cancellation while waiting on shared work', () => {
       const schedule = (updatedAt: string) => ({ ...unpublished('sumy', ['1.1'], new Date()), updatedAt })
       const older = client.getSchedules('sumy', { fresh: true, signal: new AbortController().signal })
       const newer = client.getSchedules('sumy', { fresh: true, signal: new AbortController().signal })
-      resolvers[1]!(schedule('NEW'))
+      resolvers[1]!(schedule(NEW))
       await newer
-      resolvers[0]!(schedule('OLD'))
+      resolvers[0]!(schedule(OLD))
       await older
       await Promise.resolve()
-      expect((await client.getSchedules('sumy')).updatedAt).toBe('NEW')
+      expect((await client.getSchedules('sumy')).updatedAt).toBe(NEW)
     } finally {
       spy.mockRestore()
     }

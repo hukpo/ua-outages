@@ -58,15 +58,28 @@ export function kyivMinuteOfDay(date: Date): number {
 
 /**
  * The instant at `minutes` past Kyiv midnight of `day` ("YYYY-MM-DD"). 1440 = next midnight.
- * Wall-clock minutes are mapped through the offset valid at that moment.
+ * Wall-clock minutes are mapped through the offset valid at that moment; a time the clocks skip
+ * in spring is the moment they change, so later minutes never map to earlier instants.
  */
 export function kyivInstant(day: string, minutes: number): Date {
   const [y, m, d] = day.split('-').map(Number) as [number, number, number]
   const guess = Date.UTC(y, m - 1, d, 0, minutes)
   // the offset may differ between the guess and the real instant around DST changes
-  let t = guess - kyivOffsetMinutes(new Date(guess)) * 60_000
-  t = guess - kyivOffsetMinutes(new Date(t)) * 60_000
-  return new Date(t)
+  const first = guess - kyivOffsetMinutes(new Date(guess)) * 60_000
+  const offset = kyivOffsetMinutes(new Date(first))
+  const t = guess - offset * 60_000
+  if (t === first || kyivOffsetMinutes(new Date(t)) === offset) return new Date(t)
+  // neither offset fits: the wall-clock time doesn't exist (03:00–03:59 on the spring day, when
+  // 03:00 becomes 04:00). It is the moment the clocks change, found between the two candidates
+  let lo = Math.min(first, t)
+  let hi = Math.max(first, t)
+  const after = kyivOffsetMinutes(new Date(hi))
+  while (hi - lo > 60_000) {
+    const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000
+    if (kyivOffsetMinutes(new Date(mid)) === after) hi = mid
+    else lo = mid
+  }
+  return new Date(hi)
 }
 
 /** ISO string with the Kyiv offset, e.g. "2026-11-05T08:00:00+02:00". */

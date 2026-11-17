@@ -3,7 +3,7 @@ import { compareGroups, makeDay, normalizeGroup } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
 import type { Provider } from './provider.js'
-import { parseUaDateTime } from './gpv.js'
+import { rivneAddresses } from './rivne-addresses.js'
 import { findTimeRanges } from './ua-text.js'
 
 /**
@@ -11,7 +11,11 @@ import { findTimeRanges } from './ua-text.js'
  * `#fetched-data-container`: one row per date, one cell per group with "HH:MM - HH:MM"
  * intervals, or "Очікується" while the day isn't published yet.
  *
- * The address lookup exists only as PDFs (free-form Excel exports), so there is no address search.
+ * Every row is dated by its own first cell, so a page that still shows an old day (after
+ * midnight the row of yesterday stays for a while) is never read as today.
+ *
+ * The address lists exist only as PDFs (free-form Excel exports); they are read in
+ * rivne-addresses.ts, which answers only what the text settles.
  */
 const SITE = 'https://www.roe.vsei.ua'
 
@@ -20,12 +24,13 @@ const INFO: ProviderInfo = {
   name: 'Рівненська область',
   operator: 'Рівнеобленерго',
   website: `${SITE}/disconnections`,
-  capabilities: { schedule: true, addressSearch: false },
+  capabilities: { schedule: true, addressSearch: true },
 }
 
 export function rivneProvider(): Provider {
   return {
     info: INFO,
+    ...rivneAddresses(INFO.id, INFO.operator),
     async getSchedules(ctx) {
       const html = await ctx.http.text(`${SITE}/disconnections`, { region: INFO.id })
       return parseDisconnections(html, ctx.now())
@@ -67,12 +72,13 @@ export function parseDisconnections(html: string, now: Date): RegionSchedule {
     groups.forEach((g, i) => (schedules[g!] ??= []).push(parseCell(date, cells[i + 1]!)))
   }
 
-  const updated = /Оновлено:\s*(\d{2}\.\d{2}\.\d{4}\s+\d{1,2}:\d{2})/.exec(html.slice(end))?.[1]
+  // "Оновлено: 17.11.2026 00:30" under the table (and the page's Last-Modified) moves every
+  // half hour by itself, also over a row that didn't change: not a change time, so there is none
   return {
     region,
     groups: Object.keys(schedules).sort(compareGroups),
     schedules,
-    updatedAt: parseUaDateTime(updated),
+    updatedAt: null,
     fetchedAt: toKyivIso(now),
   }
 }

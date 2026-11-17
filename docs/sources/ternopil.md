@@ -64,3 +64,12 @@ Base `https://api-poweron.toe.com.ua/api`:
 ## Emergency schedules (ГАВ)
 
 `building-names` also carries `chergGav` / `chergSgav` / `chergAchr` ("9", "Не входить"), returned in `emergency`. Live ГАВ status: @ternopiloblenerho (times in the text, "з 18.00"). See [emergency.md](emergency.md).
+
+## Freshness (measured 2026-11-17)
+
+- **One channel: the API.** @ternopiloblenerho only links to the site ("Оновлена інформація щодо ГПВ … змінено кількість черг"), no times. The API keeps the last version per day.
+- **CDN cache.** `cache-control: public, max-age=900, s-maxage=7200`; a repeated URL was `cf-cache-status: HIT`, `age: 508`. A change can stay hidden for up to 2 hours within a day (the `after`/`before` window makes the URL new each day). With `&_=<unix seconds>` every one of the twelve requests was `MISS` without an `age` header (17.11 00:44 by curl, 00:58 through the SDK). The provider adds it to every `a_gpv_g` request; an answer with `Age` > 600 s is asked for once more under another key, as for Lviv.
+- **The cache key ignores `X-debug-key`.** The same URL with another building's key returned the first building's cached body. The provider's requests differ in `group[]` and `time` (the key's digits), and that is the only thing that keeps one group from getting another's schedule out of the cache. Don't drop those parameters; `test/providers/ternopil.test.ts` pins them.
+- **`updatedAt`**: newest `dateCreate` (Kyiv time despite the `Z`), the operator's own time: 17.10 18:52:36 against the Telegram post of 18:52.
+- **Day**: `dateGraph` of each item, never the clock.
+- **Stale rule**: `behind` (newest `dateGraph` < today). `hydra:member: null` for every group = nothing published. When tomorrow appears is UNVERIFIED (one day of data in the last month).

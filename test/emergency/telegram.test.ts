@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Http } from '../../src/http.js'
-import { htmlToText, parseTelegramPreview, readChannel } from '../../src/emergency/telegram.js'
+import {
+  htmlToText,
+  parseTelegramPreview,
+  readChannel,
+  readChannelWindow,
+} from '../../src/emergency/telegram.js'
 import { fixture, mockFetch } from '../helpers.js'
 import { previewPage } from './preview.js'
 
@@ -77,5 +82,119 @@ describe('Telegram channel preview', () => {
     await expect(readChannel(ctx, 'nope', { region: 'zhytomyr', since: new Date(0) })).rejects.toMatchObject({
       code: 'parse',
     })
+  })
+})
+
+describe('Telegram channel preview: photos', () => {
+  const chernihiv = fixture('telegram/chernigivoblenergo-5697-5704.trimmed.html')
+  const zaporizhzhia = fixture('telegram/Zaporizhzhyaoblenergo_news-3604-3607.trimmed.html')
+  const CDN = /^https:\/\/cdn\d+\.telesco\.pe\/file\/[\w-]+\.jpg$/
+
+  it('lists the picture of a post with text', () => {
+    const posts = parseTelegramPreview(chernihiv)
+    expect(posts.map((p) => [p.id, p.photos.length])).toEqual([
+      [5697, 1],
+      [5698, 5],
+      [5703, 1],
+      [5704, 1],
+    ])
+    const p = posts.find((p) => p.id === 5703)!
+    expect(p.at).toBe('2026-11-12T21:56:08+02:00')
+    expect(p.text.length).toBeGreaterThan(20)
+    expect(p.photos[0]).toMatch(CDN)
+    expect(p.photos[0]).toMatch(/^https:\/\/cdn4\.telesco\.pe\/file\/IwokIjCZjQDKzH_6B9vJ1onw6RbzvBKy_/)
+  })
+
+  it('lists every picture of an album in order, and nothing that is not a photo', () => {
+    const album = parseTelegramPreview(chernihiv).find((p) => p.id === 5698)!
+    expect(album.photos).toHaveLength(5)
+    expect(new Set(album.photos).size).toBe(5)
+    for (const url of album.photos) expect(url).toMatch(CDN)
+    expect(album.photos.map((u) => u.slice(29, 37))).toEqual([
+      'TG9cG4d2',
+      'YhiH_uza',
+      'psfEyVUc',
+      'cEFhPN2c',
+      'DXfpsmkr',
+    ])
+    // avatars and reaction emoji are images too, but not the post's photos
+    expect(album.photos.some((u) => u.includes('emoji'))).toBe(false)
+    expect(album.text).not.toBe('')
+  })
+
+  it('gives posts without photos an empty list', () => {
+    const posts = parseTelegramPreview(zaporizhzhia)
+    expect(posts.map((p) => [p.id, p.photos])).toEqual([
+      [3604, []],
+      [3606, []],
+    ])
+    for (const p of parseTelegramPreview(fixture('telegram/cek_info-4315-4316.trimmed.html')))
+      expect(p.photos).toEqual([])
+  })
+
+  it('drops posts without text unless asked for photo-only ones', () => {
+    // the default, which the emergency readers rely on
+    expect(parseTelegramPreview(zaporizhzhia).map((p) => p.id)).toEqual([3604, 3606])
+    expect(parseTelegramPreview(zaporizhzhia, { withPhotoOnly: false }).map((p) => p.id)).toEqual([
+      3604, 3606,
+    ])
+    const all = parseTelegramPreview(zaporizhzhia, { withPhotoOnly: true })
+    expect(all.map((p) => p.id)).toEqual([3604, 3605, 3606, 3607])
+    const bare = all.find((p) => p.id === 3605)!
+    expect(bare).toMatchObject({
+      channel: 'Zaporizhzhyaoblenergo_news',
+      url: 'https://t.me/Zaporizhzhyaoblenergo_news/3605',
+      at: '2026-11-16T05:26:26+02:00',
+      text: '',
+      edited: false,
+    })
+    expect(bare.photos).toHaveLength(1)
+    expect(bare.photos[0]).toMatch(CDN)
+    // posts with text come out the same either way
+    expect(all.filter((p) => p.text)).toEqual(parseTelegramPreview(zaporizhzhia))
+  })
+
+  it('still drops a post with neither text nor photos', () => {
+    const html = previewPage('x', [{ id: 7, at: '2026-11-05T10:00:00Z', text: '' }])
+    expect(parseTelegramPreview(html, { withPhotoOnly: true })).toEqual([])
+  })
+
+  it('reads the link whatever the quoting, and decodes &amp;', () => {
+    const post = (style: string) =>
+      `<div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message" data-post="x/1">` +
+      `<a class="tgme_widget_message_photo_wrap" href="https://t.me/x/1" style="${style}"></a>` +
+      `<time datetime="2026-11-05T10:00:00+00:00"></time></div></div>`
+    const photos = (style: string) => parseTelegramPreview(post(style), { withPhotoOnly: true })[0]?.photos
+    expect(photos("width:10px;background-image:url('https://cdn.test/a.jpg?x=1&amp;y=2')")).toEqual([
+      'https://cdn.test/a.jpg?x=1&y=2',
+    ])
+    expect(photos('background-image: url(https://cdn.test/a.jpg)')).toEqual(['https://cdn.test/a.jpg'])
+    expect(photos('background-image:url(&quot;https://cdn.test/a.jpg&quot;)')).toEqual([
+      'https://cdn.test/a.jpg',
+    ])
+    // a photo wrap without a picture is no photo, so the textless post is dropped
+    expect(photos('width:10px')).toBeUndefined()
+  })
+
+  it('threads withPhotoOnly through readChannel and readChannelWindow', async () => {
+    const { fetch } = mockFetch([{ match: 't.me/s/Zaporizhzhyaoblenergo_news', body: zaporizhzhia }])
+    const ctx = { http: new Http({ fetch }), now: () => new Date('2026-11-16T12:00:00Z') }
+    const opts = { region: 'zaporizhzhia' as const, since: new Date('2026-11-15T00:00:00Z'), maxPages: 1 }
+    expect((await readChannel(ctx, 'Zaporizhzhyaoblenergo_news', opts)).map((p) => p.id)).toEqual([
+      3604, 3606,
+    ])
+    const withPhotos = await readChannelWindow(ctx, 'Zaporizhzhyaoblenergo_news', {
+      ...opts,
+      withPhotoOnly: true,
+    })
+    expect(withPhotos.posts.map((p) => p.id)).toEqual([3604, 3605, 3606, 3607])
+    expect(withPhotos.posts[1]!.photos).toHaveLength(1)
+    // only photo-only posts after `since` are returned, like any other
+    const late = await readChannel(ctx, 'Zaporizhzhyaoblenergo_news', {
+      ...opts,
+      since: new Date('2026-11-16T03:30:00Z'),
+      withPhotoOnly: true,
+    })
+    expect(late.map((p) => p.id)).toEqual([3607])
   })
 })

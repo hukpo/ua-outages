@@ -2,6 +2,21 @@
 
 Researched 2026-11-05. **No GPV is active today.** The schedule page has no schedule image. The most recent official GPV in the archive is 17.10.2026.
 
+## What the SDK reads (since 2026-11-17)
+
+Measured 17.11.2026, see `research/freshness/CHANNELS-A.md` and `research/aggregators/FRESHNESS.md`. The schedule has been text since November ("Підчерга 1.1 – 10:00-15:00; 18:00-21:00."); the image notes below describe October.
+
+| Source id                       | Channel                                                                                                                                                                                                                                         | Requests     |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `site`                          | `/page/pogodinni-vidkljuchennja` (text blocks, newest on top, split by `<hr>`), and the archive page's PNGs for dates it has no text for                                                                                                        | 2 (+ images) |
+| `news`                          | the list `/post/novini-kompaniji` → the per-day posts for today and later, picked by title (slugs vary: `prognoz-gpv-na-17-listopada`, `pogodinni-vidkljuchennja-na-15-listopada`, `prognoz-obmezhen-na-12-listopada`); same blocks as the page | 1 + ≤ 3      |
+| `telegram:@khmelnytskoblenergo` | `https://t.me/s/khmelnytskoblenergo`, posts since yesterday noon                                                                                                                                                                                | ≤ 2          |
+
+- **Which is first.** Telegram had 17.11 at 16.11 22:55 and the news post had it too, while the schedule page still showed only 16.11 at 05:30 on 17.11.
+- **Merge** (`mergeSources`): per date the newest publication wins. Telegram: the post time. Page and news post: the operator's own stamp, "(оновлено о 23:00, 15.11.2026)" or "(оновлено з 15:00, 16.11.2026)"; a day's first announcement has none (null), so Telegram's copy of it wins the date.
+- An update posted during its own day lists only the hours still ahead (an outage in progress is listed from its start; a group with nothing more is left out). The SDK therefore layers a day's posts oldest first (`layerPublications` in `src/providers/posts.ts`): a post published before the day is the whole day; a later one keeps the earlier outages before the minute it takes effect and replaces the rest. When it takes effect: "з 15:00" → 15:00; a stamp dated the day before → the whole day; on Telegram a bare "(16:00)" → that time when the post went out on the day, else the post time. A subgroup left out of an announcement has no outages (the operator lists only those that do).
+- **Failure modes**: any one or two of the three down → the rest answer, failures listed in `sources`; all down → the page's error. A block that names subgroups without a date or a readable line is a `parse` error of that source.
+
 ## Sites
 
 - Official site: https://hoe.com.ua/ (ASP.NET MVC, jQuery, no Cloudflare). A plain fetch works, with no cookies needed.

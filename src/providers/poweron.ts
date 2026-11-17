@@ -1,4 +1,5 @@
 import { OutageError } from '../errors.js'
+import type { RequestOptions } from '../http.js'
 import { normalizeGroup } from '../schedule.js'
 import { normalizeHouse } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
@@ -37,6 +38,37 @@ export function hydraList<T>(data: unknown, what: string, region: ProviderInfo['
       }
   }
   throw new OutageError('parse', `${what}: expected a list`, { region })
+}
+
+/** A CDN copy older than this (seconds, the `Age` header) is asked for again */
+export const MAX_CDN_AGE_S = 600
+
+/**
+ * `ctx.http.json` past the CDN. Lviv's and Ternopil's schedule APIs sit behind Cloudflare with
+ * `s-maxage=7200`: without this a change can stay hidden for two hours. A query parameter the
+ * backend ignores (`_=<unix seconds>`) makes every call a new cache key, which Cloudflare
+ * forwards to the origin (`cf-cache-status: MISS`, checked 2026-11-17 on both hosts). Should a
+ * copy older than `MAX_CDN_AGE_S` come back anyway, it is asked for once more under another key;
+ * what that returns is used as is, since an `Age` header can't be told to the caller.
+ */
+export async function uncachedJson<T = unknown>(
+  ctx: ProviderContext,
+  url: string,
+  opts: RequestOptions = {},
+): Promise<T> {
+  const stamp = Math.floor(ctx.now().getTime() / 1000)
+  const get = (tag: string) => ctx.http.raw(`${url}${url.includes('?') ? '&' : '?'}_=${tag}`, opts)
+  let res = await get(String(stamp))
+  if (Number(res.headers.get('age')) > MAX_CDN_AGE_S) res = await get(`${stamp}r`)
+  try {
+    return JSON.parse(res.body) as T
+  } catch (cause) {
+    throw new OutageError('parse', `${new URL(url).host} returned invalid JSON`, {
+      region: opts.region,
+      url,
+      cause,
+    })
+  }
 }
 
 /**

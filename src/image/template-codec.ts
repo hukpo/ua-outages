@@ -1,78 +1,119 @@
-import { GLYPH_H, GLYPH_W } from './glyphs.js'
+/**
+ * The poster reader's font model (src/image/digit-model.ts, built by scripts/train-digits.ts):
+ * for every typography the operator has used, an average picture of each character of the time
+ * lines and of the header date, at one fixed text height.
+ */
 
-/** Average glyph vector (see `glyphVector`) and width/height ratio of one digit */
-export interface DigitTemplate {
-  vector: Float32Array
-  aspect: number
-}
+/** Height every text line is resampled to before matching, px */
+export const LINE_H = 24
+/** Size of a whole-line picture (`LineTemplate`) */
+export const NOTE_W = 48
+export const NOTE_H = 8
 
 /**
- * Digit model for one glyph size: the average of each digit, plus a weight per cell that is
- * high where samples of the same digit agree (Fisher-style), so cells that tell 6 from 8 count
- * more than edge cells that wobble with JPEG noise.
+ * One character as its labelled samples show it, `width` × LINE_H, row by row: the average
+ * darkness (0..1) of every pixel and how much it varies from sample to sample. The pixels of a
+ * stroke's edge move with the sub-pixel position of the glyph and with JPEG noise, the ones
+ * that tell a 6 from an 8 don't; matching weighs each by its steadiness.
  */
-export interface DigitModel {
-  digits: Record<string, DigitTemplate>
+export interface GlyphTemplate {
+  width: number
+  pixels: Float32Array
+  /** Standard deviation per pixel */
+  spread: Float32Array
+  /** 1 / variance per pixel (derived, with a floor under the variance) */
   weights: Float32Array
+  /** Σ log variance (derived): what makes templates of different steadiness comparable */
+  bias: number
 }
 
-/** Stored form: float32 arrays as base64 */
+/** No pixel is trusted more than this: σ of 0.07 on the 0..1 darkness scale */
+const MIN_VARIANCE = 0.005
+/**
+ * Variance of a pixel that should be blank (between characters): the edge of a glyph leaks
+ * into it at small sizes
+ */
+export const GAP_VARIANCE = 0.04
+
+export function makeTemplate(width: number, pixels: Float32Array, spread: Float32Array): GlyphTemplate {
+  const weights = new Float32Array(pixels.length)
+  let bias = 0
+  for (let i = 0; i < pixels.length; i++) {
+    const v = Math.max(MIN_VARIANCE, spread[i]! ** 2)
+    weights[i] = 1 / v
+    bias += Math.log(v)
+  }
+  return { width, pixels, spread, weights, bias }
+}
+
+/** One typeface at one weight: its digits and punctuation */
+export type Font = Record<string, GlyphTemplate>
+
+/** A fixed line of words ("відключень", "не прогнозується") as one NOTE_W × NOTE_H picture */
+export interface LineTemplate {
+  /** Width / height of the line's ink */
+  aspect: number
+  vector: Float32Array
+}
+
+export interface PosterModel {
+  /** Fonts of the "HH:MM - HH:MM" lines, by typography name */
+  times: Record<string, Font>
+  /** Fonts of the header date "DD.MM.YYYY" */
+  dates: Record<string, Font>
+  /** The lines of a card without outages, top to bottom, by typography name */
+  notes: Record<string, LineTemplate[]>
+}
+
+type EncodedFont = Record<string, { width: number; pixels: string; spread: string }>
+/** Stored form: darkness as bytes, base64 */
 export interface EncodedModel {
-  digits: Record<string, { aspect: number; vector: string }>
-  weights: string
+  times: Record<string, EncodedFont>
+  dates: Record<string, EncodedFont>
+  notes: Record<string, { aspect: number; vector: string }[]>
 }
 
-const SIZE = GLYPH_W * GLYPH_H
-const toBase64 = (a: Float32Array) => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64')
-function fromBase64(s: string): Float32Array {
+const toBase64 = (a: Float32Array) =>
+  Buffer.from(Uint8Array.from(a, (v) => Math.round(Math.min(1, Math.max(0, v)) * 255))).toString('base64')
+function fromBase64(s: string, size: number): Float32Array {
   const b = Buffer.from(s, 'base64')
-  if (b.length !== SIZE * 4) throw new Error('digit model has the wrong size')
-  return new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.length))
+  if (b.length !== size) throw new Error('poster model: a template has the wrong size')
+  return Float32Array.from(b, (v) => v / 255)
 }
 
-export function encodeModel(m: DigitModel): EncodedModel {
-  const digits: EncodedModel['digits'] = {}
-  for (const [k, t] of Object.entries(m.digits))
-    digits[k] = { aspect: Math.round(t.aspect * 1000) / 1000, vector: toBase64(t.vector) }
-  return { digits, weights: toBase64(m.weights) }
-}
+const mapValues = <A, B>(o: Record<string, A>, f: (a: A) => B): Record<string, B> =>
+  Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v)]))
 
-export function decodeModel(m: EncodedModel): DigitModel {
-  const digits: Record<string, DigitTemplate> = {}
-  for (const [k, t] of Object.entries(m.digits))
-    digits[k] = { aspect: t.aspect, vector: fromBase64(t.vector) }
-  return { digits, weights: fromBase64(m.weights) }
-}
+const encodeFont = (f: Font): EncodedFont =>
+  mapValues(f, (g) => ({ width: g.width, pixels: toBase64(g.pixels), spread: toBase64(g.spread) }))
+const decodeFont = (f: EncodedFont): Font =>
+  mapValues(f, (g) =>
+    makeTemplate(g.width, fromBase64(g.pixels, g.width * LINE_H), fromBase64(g.spread, g.width * LINE_H)),
+  )
 
-/** Builds a model from labelled glyph samples. */
-export function trainModel(samples: { digit: string; vector: Float32Array; aspect: number }[]): DigitModel {
-  const sums: Record<string, { v: Float32Array; aspect: number; n: number }> = {}
-  for (const s of samples) {
-    const t = (sums[s.digit] ??= { v: new Float32Array(SIZE), aspect: 0, n: 0 })
-    s.vector.forEach((x, i) => (t.v[i]! += x))
-    t.aspect += s.aspect
-    t.n++
+export function encodeModel(m: PosterModel): EncodedModel {
+  return {
+    times: mapValues(m.times, encodeFont),
+    dates: mapValues(m.dates, encodeFont),
+    notes: mapValues(m.notes, (lines) =>
+      lines.map((l) => ({ aspect: Math.round(l.aspect * 1000) / 1000, vector: toBase64(l.vector) })),
+    ),
   }
-  const digits: Record<string, DigitTemplate> = {}
-  for (const d of Object.keys(sums).sort()) {
-    const t = sums[d]!
-    digits[d] = { vector: t.v.map((x) => x / t.n), aspect: t.aspect / t.n }
-  }
-  // within-digit variance per cell; the small constant keeps rare clean cells from dominating
-  const variance = new Float32Array(SIZE)
-  for (const s of samples)
-    s.vector.forEach((x, i) => (variance[i]! += (x - digits[s.digit]!.vector[i]!) ** 2 / samples.length))
-  return { digits, weights: variance.map((v) => 1 / (v + 0.01)) }
 }
 
-/** Distance of a glyph to a digit template under the model's cell weights */
-export function modelDistance(
-  model: DigitModel,
-  t: DigitTemplate,
-  vector: Float32Array,
-  aspect: number,
-): number {
-  let s = 0
-  for (let i = 0; i < SIZE; i++) s += model.weights[i]! * (vector[i]! - t.vector[i]!) ** 2
-  return (Math.sqrt(s) + Math.abs(Math.log(aspect / t.aspect))) / 10
+export function decodeModel(m: EncodedModel): PosterModel {
+  return {
+    times: mapValues(m.times, decodeFont),
+    dates: mapValues(m.dates, decodeFont),
+    notes: mapValues(m.notes, (lines) =>
+      lines.map((l) => ({ aspect: l.aspect, vector: fromBase64(l.vector, NOTE_W * NOTE_H) })),
+    ),
+  }
+}
+
+/** Average of equally sized pictures */
+export function mean(samples: readonly Float32Array[]): Float32Array {
+  const out = new Float32Array(samples[0]!.length)
+  for (const s of samples) for (let i = 0; i < out.length; i++) out[i]! += s[i]! / samples.length
+  return out
 }

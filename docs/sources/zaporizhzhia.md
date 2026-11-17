@@ -2,6 +2,22 @@
 
 Verified 2026-11-05 ~23:30 Kyiv. GPV active (schedules for 03–06.11 on the page, several intra-day updates for 05.11).
 
+## What the SDK reads (since 2026-11-17)
+
+Measured 17.11.2026, see `research/freshness/CHANNELS-A.md`.
+
+| Source id                              | Channel                                                                             | Role                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------- |
+| `site`                                 | `https://www.zoe.com.ua/outage/`, page 1 (~20 articles ≈ 2 days)                    | primary: the complete record |
+| `telegram:@Zaporizhzhyaoblenergo_news` | `https://t.me/s/Zaporizhzhyaoblenergo_news`, posts since yesterday noon (≤ 3 pages) | fallback                     |
+
+- **Which is first.** The site: 80 versions in 9 days, of which Telegram repeated 32, a median 3 min later (twice an older version 98 and 118 min late).
+- **`updatedAt`** is the "(оновлено HH:MM)" of the current article. The stamp has no date: it is that time on the day the article is about or on the evening before, whichever is the latest not after the article above it on the page (`stampTimes`). A day's first article has no stamp.
+- **Telegram is used only** (a) when the site can't be read, (b) for a date the site has nothing equal to, where the newer of the two wins, and (c) for the time of a day's first article, when its post has the same hours. A Telegram day equal to any other version of the site is dropped, so a late repeat never replaces a newer version.
+- Each update lists the whole day, so the newest version replaces the day (no layering here). A group left out of a post has no outages.
+- **Formats**: lines `1.1: 10:00 – 15:00, 23:30 – 24:00` (site and Telegram) and blocks `⚡ Черга 1.1` / `з 10:00 до 15:00` (Telegram), read by `parseGroupPost`: a block ends at the first line that isn't only times, so the trailing "Також з 00:00 до 24:00 … ГОП" sentence adds nothing to 6.2. ГАВ/СГАВ on/off posts and pictures are skipped.
+- **Failure modes**: site down → Telegram answers with today and later (possibly an older version than the site's); Telegram down → the site alone, a first article then has no time; both down → the site's error.
+
 ## URLs
 
 - Schedule page (WordPress archive): https://www.zoe.com.ua/outage/ (paginated `/outage/page/2/` … `/page/27/`)

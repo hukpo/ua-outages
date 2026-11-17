@@ -76,3 +76,11 @@ Body is `application/x-www-form-urlencoded` (the SPA builds `URLSearchParams`). 
 ## Emergency schedules (ГАВ)
 
 `schedule-by-search` also returns `current.gav.queue` / `current.sgav.queue`, returned in `emergency`. Live ГАВ status: @prykarpattyaoblenergo_official, which names queue numbers and changes ("Зміни в ГАВ станом на 21:00"). See [emergency.md](emergency.md).
+
+## Freshness (measured 2026-11-17)
+
+- **One channel: the API.** `cache-control: no-cache, no-store, max-age=0, must-revalidate`, `x-cache: Miss from cloudfront`: no CDN copy to worry about. @prykarpattyaoblenergo_official posts a picture and the hours ГПВ applies, no group times.
+- The API answers `[]` for every queue (nothing published since 17.10.2026), so nothing below could be observed on live data. UNVERIFIED: when tomorrow appears, and whether a passed day stays in the answer.
+- **`updatedAt`**: newest `scheduleApprovedSince` ("DD.MM.YYYY HH:mm", Kyiv) of the days, else `createdAt` when that field is missing or unreadable, else null.
+- **Day**: `eventDate` of each day, never the clock (`&date=` is ignored by the backend).
+- **Stale rule**: newest `eventDate` < today ⇒ `assessFreshness` says `behind` (stale); the old day keeps its own date. `[]` everywhere ⇒ `unpublished`.

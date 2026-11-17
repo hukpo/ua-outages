@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
 import { parseFilials, parseGpvFragment } from '../../src/providers/poltava.js'
 import { fixture, mockFetch } from '../helpers.js'
 
@@ -32,6 +33,27 @@ describe('Poltavaoblenergo', () => {
   it('reads both days and all groups', () => {
     expect(s.groups).toHaveLength(12)
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05', '2026-11-06'])
+  })
+
+  it('reads the operator\'s change time: the newest "Оновлено:" of the day blocks', async () => {
+    // the 5.11 block says "Оновлено: 5 листопада 2026 21:22", the 6.11 one "… 20:18"
+    expect(s.updatedAt).toBe('2026-11-05T21:22:00+02:00')
+    expect((await client().client.getSchedules('poltava')).updatedAt).toBe('2026-11-05T21:22:00+02:00')
+    const html = fixture('poltava/dynamicgpv-info-2026-11-05.trimmed.html')
+    // "Зараз 23:36" on the page is the render time, not a change time
+    expect(parseGpvFragment(html.replace(/Оновлено:/g, 'Станом на:'), NOW).updatedAt).toBeNull()
+    expect(parseGpvFragment(html.replace('21:22', '25:61'), NOW).updatedAt).toBe('2026-11-05T20:18:00+02:00')
+  })
+
+  it('never dates an old fragment today: every block carries its own date', () => {
+    const later = new Date('2026-11-08T09:00:00+02:00')
+    const old = parseGpvFragment(fixture('poltava/dynamicgpv-info-2026-11-05.trimmed.html'), later)
+    expect(old.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-05', '2026-11-06'])
+    expect(assessFreshness(old, { now: later })).toMatchObject({
+      state: 'stale',
+      today: 'missing',
+      coveredThrough: '2026-11-06',
+    })
   })
 
   it('matches the operator’s own list of off periods', () => {

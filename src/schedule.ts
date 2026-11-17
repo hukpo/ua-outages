@@ -38,11 +38,16 @@ export function slotsToIntervals(day: string, slots: readonly MinuteSlot[]): Int
     }
     let j = i
     while (j < 1440 && off[j] === v) j++
-    out.push({
-      from: toKyivIso(kyivInstant(day, i)),
-      to: toKyivIso(kyivInstant(day, j)),
-      kind: v === 2 ? 'off' : 'maybe',
-    })
+    const from = kyivInstant(day, i)
+    const to = kyivInstant(day, j)
+    const kind = v === 2 ? 'off' : 'maybe'
+    const last = out[out.length - 1]
+    // a span wholly inside the hour the clocks skip in spring (03:00–04:00) lasts no time at all,
+    // and the spans on either side of that hour then touch: one interval, not two
+    if (to > from) {
+      if (last && last.kind === kind && Date.parse(last.to) === from.getTime()) last.to = toKyivIso(to)
+      else out.push({ from: toKyivIso(from), to: toKyivIso(to), kind })
+    }
     i = j
   }
   return out

@@ -32,6 +32,7 @@ function fold(region: RegionId, items: ([string] | [string, string])[], now: str
       at: toKyivIso(new Date(p.at)),
       text: p.text,
       edited: false,
+      photos: [],
     }
   })
   return foldEvents(

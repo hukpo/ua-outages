@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
+import { assessFreshness } from '../../src/freshness.js'
+import type { FetchLike } from '../../src/http.js'
 import { lvivProvider, parseLvivMenu } from '../../src/providers/lviv.js'
 import { expectUnpublished, fixture, mockFetch } from '../helpers.js'
 
@@ -154,5 +156,48 @@ describe('Lvivoblenergo', () => {
     await expect(
       client().client.findGroup('lviv', { city: 'Львів', street: 'Городоцька', house: '219' }),
     ).rejects.toThrow(/not included/)
+  })
+
+  describe('CDN cache', () => {
+    it('asks with a cache-busting parameter, so Cloudflare cannot answer from its two-hour copy', async () => {
+      const { client: c, calls } = client()
+      await c.getSchedules('lviv')
+      expect(calls.map((x) => x.url)).toEqual([`${MENUS}&_=${Math.floor(NOW.getTime() / 1000)}`])
+    })
+
+    it('asks once more under another key when an old copy comes back anyway', async () => {
+      const urls: string[] = []
+      const fetch: FetchLike = async (url) => {
+        urls.push(url)
+        // the first answer is 764 s old (the value seen live without the parameter)
+        return new Response(fixture('lviv/menus.today-2026-10-17.hydra.json'), {
+          headers:
+            urls.length === 1 ? { age: '764', 'cf-cache-status': 'HIT' } : { 'cf-cache-status': 'MISS' },
+        })
+      }
+      const c = new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [lvivProvider()] })
+      const s = await c.getSchedules('lviv')
+      expect(urls).toHaveLength(2)
+      expect(urls[1]).not.toBe(urls[0])
+      expect(urls[1]).toMatch(/&_=\d+r$/)
+      expect(s.schedules['1.1']![0]!.date).toBe('2026-10-17')
+    })
+
+    it('does not ask twice for a young copy', async () => {
+      const { fetch, calls } = mockFetch([
+        { match: MENUS, body: fixture('lviv/menus.today-2026-10-17.hydra.json'), headers: { age: '11' } },
+      ])
+      const c = new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [lvivProvider()] })
+      await c.getSchedules('lviv')
+      expect(calls).toHaveLength(1)
+    })
+  })
+
+  it('never dates an old "Today" slot today: the day comes from the text', async () => {
+    // the 17.10 response read a month later (a CDN copy, a slot nobody cleared)
+    const later = new Date('2026-11-17T09:00:00+02:00')
+    const s = parseLvivMenu(JSON.parse(fixture('lviv/menus.today-2026-10-17.hydra.json')), later)
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-10-17'])
+    expect(assessFreshness(s, { now: later })).toMatchObject({ state: 'stale', today: 'missing' })
   })
 })

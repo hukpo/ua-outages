@@ -1,16 +1,18 @@
 import { OutageError } from '../errors.js'
 import { STANDARD_GROUPS } from '../image/table.js'
 import { makeDay, unpublished, type MinuteSlot } from '../schedule.js'
-import { toKyivIso } from '../time.js'
-import type { DaySchedule, RegionId, ProviderInfo, RegionSchedule } from '../types.js'
-import type { Provider } from './provider.js'
+import { kyivDate, toKyivIso } from '../time.js'
+import type { AddressQuery, DaySchedule, GroupId, RegionId, ProviderInfo, RegionSchedule } from '../types.js'
+import { SharedTask } from '../util.js'
+import type { Provider, ProviderContext } from './provider.js'
 import { findTimeRanges, findUaDate } from './ua-text.js'
+import { parseUzAddresses, uzAddressSearch, uzDirectory, type UzDirectory } from './uz-addresses.js'
 
 /**
  * АТ «Укрзалізниця» is itself a distribution system operator: homes near stations and along
  * the lines are wired to the railway's grid, not the oblenergo's, and get the railway's own
  * schedule, which differs from the oblenergo's. It publishes one page per oblast (and Kyiv)
- * with today's schedule and the addresses of each group.
+ * with the schedule and the addresses of each group (see `uz-addresses.ts`).
  *
  * The table comes in two layouts:
  * - time spans as columns ("Години відключення | 00-00 01-30 | …") and, under each span, the
@@ -20,6 +22,14 @@ import { findTimeRanges, findUaDate } from './ua-text.js'
  * Some oblasts are served by two railway branches with separate tables, headed
  * «в межах обслуговування РФ "Одеська залізниця"»; `branch` picks one. A page with no table
  * means no schedule applies.
+ *
+ * Freshness. The page has no update stamp and the server sends no `Last-Modified` or `ETag`,
+ * so `updatedAt` is null. The only date is the one written above each table ("17 листопада"),
+ * and every table is filed under its own: usually one, sometimes today's and tomorrow's. A
+ * table without any date is a `parse` error, never "today". When no table is for today, today
+ * is listed as `unknown`: a page left on yesterday's table says nothing about today. The one
+ * exception is a page that has moved on to a later day: the table this provider last read for
+ * today is kept for the rest of the day, since nothing took it back.
  */
 const BASE =
   'https://www.uz.gov.ua/about/activity/electropostachannia/electro_consumers/temporary_shutdown/grafikiobmezhen'
@@ -34,22 +44,104 @@ export interface UzOptions {
   branch?: string
 }
 
+/** Pages whose address section is missing (Kherson) or lists only dashes (Donetsk) */
+const NO_ADDRESSES: ReadonlySet<RegionId> = new Set<RegionId>(['uz-kherson', 'uz-donetsk'])
+
+/** Addresses for the health check, on pages whose lists have been the same for months */
+const SAMPLES: Partial<Record<RegionId, AddressQuery>> = {
+  'uz-kyiv': { city: 'Київ', street: 'Уманська', house: '5' },
+  'uz-lviv': { city: 'Львів', street: 'Двірцева', house: '1' },
+  'uz-vinnytsia-odesa': { city: 'Вапнярка', street: 'Українська', house: '21' },
+}
+
+/** The address lists change rarely; a schedule read refreshes the copy anyway */
+const DIRECTORY_TTL_MS = 6 * 3600_000
+
 export function uzProvider(opts: UzOptions): Provider {
   const url = `${BASE}/${opts.page}/`
+  const operator = opts.branch ? `Укрзалізниця, ${opts.branch} залізниця` : 'Укрзалізниця'
   const info: ProviderInfo = {
     id: opts.id,
     name: `${opts.oblast} (Укрзалізниця${opts.branch ? `, ${opts.branch} залізниця` : ''})`,
-    operator: opts.branch ? `Укрзалізниця, ${opts.branch} залізниця` : 'Укрзалізниця',
+    operator,
     website: url,
-    capabilities: { schedule: true, addressSearch: false },
+    capabilities: { schedule: true, addressSearch: !NO_ADDRESSES.has(opts.id) },
   }
+
+  // one download serves both the schedule and the address list under it
+  let page: { html: string; at: number } | null = null
+  let loading: SharedTask<string> | null = null
+  const download = (ctx: ProviderContext): Promise<string> => {
+    if (!loading || loading.aborted) {
+      const t = new SharedTask(async (signal) => {
+        const html = await ctx.http.withSignal(signal).text(url, { region: opts.id })
+        page = { html, at: Date.now() }
+        return html
+      })
+      loading = t
+      const done = () => {
+        if (loading === t) loading = null
+      }
+      t.promise.then(done, done)
+    }
+    return loading.join(ctx.signal)
+  }
+
+  let directory: { html: string; dir: UzDirectory | null } | null = null
+  const loadDirectory = async (ctx: ProviderContext) => {
+    const html = page && Date.now() - page.at < DIRECTORY_TTL_MS ? page.html : await download(ctx)
+    if (directory?.html !== html) {
+      const section = parseUzAddresses(html)
+      directory = { html, dir: section && uzDirectory(section.rows, opts.branch) }
+    }
+    return directory.dir
+  }
+
+  /** date → the day as last read, for a page that drops today's table when tomorrow's comes */
+  const seen = new Map<string, Record<GroupId, DaySchedule>>()
+
   return {
     info,
+    sampleAddress: SAMPLES[opts.id],
     async getSchedules(ctx) {
-      const html = await ctx.http.text(url, { region: opts.id })
-      return parseUzPage(html, ctx.now(), opts.id, opts.branch, url)
+      const html = await download(ctx)
+      return rememberToday(parseUzPage(html, ctx.now(), opts.id, opts.branch, url), seen, ctx.now())
     },
+    ...(info.capabilities.addressSearch ? uzAddressSearch(opts.id, operator, loadDirectory) : {}),
   }
+}
+
+/**
+ * Keeps each published day from today on, and puts back today's when the page now shows only
+ * a later day. A page with no table at all gets nothing back: that is the operator taking the
+ * schedule down. Exported for tests.
+ */
+export function rememberToday(
+  s: RegionSchedule,
+  seen: Map<string, Record<GroupId, DaySchedule>>,
+  now: Date,
+): RegionSchedule {
+  const today = kyivDate(now)
+  for (const date of seen.keys()) if (date < today) seen.delete(date)
+  const dates = [...new Set(Object.values(s.schedules).flatMap((days) => days.map((d) => d.date)))]
+  const published = dates.filter((date) =>
+    Object.values(s.schedules).some((days) => days.some((d) => d.date === date && d.status !== 'unknown')),
+  )
+  for (const date of published) {
+    if (date < today) continue
+    const day: Record<GroupId, DaySchedule> = {}
+    for (const g of s.groups) {
+      const d = s.schedules[g]!.find((x) => x.date === date)
+      if (d) day[g] = d
+    }
+    seen.set(date, day)
+  }
+  const kept = seen.get(today)
+  if (published.includes(today) || !kept || !published.some((d) => d > today)) return s
+  const schedules: Record<GroupId, DaySchedule[]> = {}
+  for (const g of s.groups)
+    schedules[g] = s.schedules[g]!.map((d) => (d.date === today && kept[g] ? kept[g] : d))
+  return { ...s, schedules }
 }
 
 interface Table {
@@ -81,17 +173,40 @@ export function parseUzPage(
 
   const tables = readTables(body, now)
   if (!tables.length) return empty(region, now)
-  const table = branch
-    ? tables.find((t) => t.branch?.includes(branch))
-    : (tables.find((t) => !t.branch) ?? tables[0])
-  if (!table) throw fail(`no table for the ${branch} branch`)
-  const date = table.date ?? tables.find((t) => t.date)?.date
-  if (!date) throw fail('no date above the table')
+  // a date heads the tables under it until the next one: both branches' tables of one day
+  let carried: string | null = null
+  for (const t of tables) {
+    if (t.date) carried = t.date
+    else t.date = carried
+  }
+  const any = tables.find((t) => t.date)?.date ?? null
+  const unbranched = tables.filter((t) => !t.branch)
+  const mine = branch
+    ? tables.filter((t) => t.branch?.includes(branch))
+    : unbranched.length
+      ? unbranched
+      : tables.slice(0, 1)
+  if (!mine.length) throw fail(`no table for the ${branch} branch`)
 
-  const slots = parseTable(table.rows)
-  if (!slots) throw fail('unknown table layout')
+  const today = kyivDate(now)
+  const days = new Map<string, Record<string, MinuteSlot[]>>()
+  for (const table of mine) {
+    const date = table.date ?? any
+    // never "today" by default: an undated table may be any day's
+    if (!date) throw fail('no date above the table')
+    if (days.has(date)) throw fail(`two tables for ${date}`)
+    const slots = parseTable(table.rows)
+    if (!slots) throw fail('unknown table layout')
+    days.set(date, slots)
+  }
+  // a page still on an earlier day says nothing about today
+  const dates = [...new Set([...days.keys(), today])].sort()
   const schedules: Record<string, DaySchedule[]> = {}
-  for (const g of STANDARD_GROUPS) schedules[g] = [makeDay(date, slots[g] ?? [])]
+  for (const g of STANDARD_GROUPS)
+    schedules[g] = dates.map((date) => {
+      const slots = days.get(date)
+      return slots ? makeDay(date, slots[g] ?? []) : { date, status: 'unknown', intervals: [] }
+    })
   return {
     region,
     groups: [...STANDARD_GROUPS],
