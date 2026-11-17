@@ -178,6 +178,7 @@ else showIntervals(day.intervals)
 - YASNO (`kyiv`, `dnipro`, `dnipro-cek`): a `WaitingForSchedule` day is `unknown` with no intervals (its preliminary slots used to be returned), and `EmergencyShutdowns` on a date after today is `unknown`, not `emergency`.
 - More days: Kirovohrad returns tomorrow (from the operator's Telegram channel); Chernihiv returns tomorrow from the evening before; the railway pages return tomorrow's table when the page has one. Fewer where a source is behind: a railway table is filed under the date written above it, not under today, and Volyn's pictures dated before today are no longer read.
 - `updatedAt` is null where the old value was a stamp the page regenerates every half hour: Rivne always; Zhytomyr when its API's change time can't be read (the page's stamp is never used); Chernivtsi when the operator's channel has no post about the day (or can't be read).
+- Volyn with nothing published returns its 12 groups with every day `unknown`, like the other regions (0.3.x returned `groups: []`). A caller that read an empty group list as "no schedule in force" has to read all-`unknown` days the same way.
 - Zakarpattia no longer throws `unsupported` once a picture is published: the picture is read (see [Regions](#regions)).
 - `capabilities.addressSearch` is now true for Chernihiv, Rivne, Cherkasy and 24 of the railway regions, and `capabilities.streetSearch` for Volyn too.
 
