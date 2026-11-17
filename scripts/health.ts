@@ -1,6 +1,7 @@
 /**
  * Live health check of every region: `npm run health`. Options after `--`:
  *   --address              also test each region's sample address lookup
+ *   --house-outage         also run getHouseOutage on the sample address where supported
  *   --strict               stale data and degraded regions (a channel down) fail the check too
  *   --json                 machine-readable output: the `HealthReport`
  *   --skip a,b             leave out regions known to be unreachable (e.g. behind bot protection)
@@ -8,7 +9,7 @@
  *
  * Exit codes:
  *   0  every source works (without --strict, stale and degraded regions are only shown)
- *   1  something is broken: a region is `error`, or an address lookup failed
+ *   1  something is broken: a region is `error`, or an address lookup or house outage check failed
  *   2  --strict only: nothing is broken, but a region is stale or degraded
  */
 import { OutageClient } from '../src/index.js'
@@ -24,9 +25,12 @@ const all = named.length ? named : client.regions().map((r) => r.id)
 const report = await client.healthCheck({
   regions: all.filter((r) => !skip.has(r)),
   address: args.includes('--address'),
+  houseOutage: args.includes('--house-outage'),
   strict,
 })
-const broken = report.regions.some((r) => r.status === 'error' || r.address?.ok === false)
+const broken = report.regions.some(
+  (r) => r.status === 'error' || r.address?.ok === false || r.houseOutage?.ok === false,
+)
 
 /** "3 h", "25 min", "2 d" */
 const age = (minutes: number) =>
@@ -51,9 +55,14 @@ else {
         ? `  address → ${r.address.group}`
         : `  address ❌ ${r.address.message}`
       : ''
+    const house = r.houseOutage
+      ? r.houseOutage.ok
+        ? `  house → ${r.houseOutage.kind ?? 'no outage'}`
+        : `  house ❌ ${r.houseOutage.message}`
+      : ''
     console.log(
       `${r.degraded && r.status === 'ok' ? '🟠' : icon[r.status]} ${r.region.padEnd(16)} ${(r.degraded ? `${r.status}*` : r.status).padEnd(6)} ${String(r.groups).padStart(3)} groups ${String(r.latencyMs).padStart(6)} ms` +
-        `${r.freshness ? `  ${coverage(r.freshness)}` : ''}${r.message ? `  — ${r.message}` : ''}${addr}`,
+        `${r.freshness ? `  ${coverage(r.freshness)}` : ''}${r.message ? `  — ${r.message}` : ''}${addr}${house}`,
     )
     // what the first line's message doesn't already say
     for (const i of r.freshness?.issues ?? [])

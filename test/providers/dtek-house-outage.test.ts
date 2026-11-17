@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OutageClient } from '../../src/client.js'
-import { houseOutage, type HomeRecord } from '../../src/providers/dtek.js'
+import { houseOutage, streetsByCity, type HomeRecord } from '../../src/providers/dtek.js'
 import type { FetchLike } from '../../src/http.js'
 
 const AT = new Date('2026-11-17T22:40:00+02:00')
@@ -42,7 +42,11 @@ const NOTHING: HomeRecord = {
  * A DTEK site's /ua/ajax: the first POST without a token is refused with the CSRF cookie, then
  * `getStreets` and `getHomeNum` answer from `streets` / `houses`.
  */
-function dtekSite(code: string, streets: Record<string, string[]>, houses: Record<string, HomeRecord>) {
+function dtekSite(
+  code: string,
+  streets: Record<string, string[]> | string[],
+  houses: Record<string, HomeRecord>,
+) {
   const ajax = `https://www.dtek-${code}.com.ua/ua/ajax`
   const cookie = encodeURIComponent(
     `${'a'.repeat(64)}a:2:{i:0;s:${`_csrf-dtek-${code}`.length}:"_csrf-dtek-${code}";i:1;s:32:"${TOKEN}";}`,
@@ -184,8 +188,8 @@ describe('getHouseOutage', () => {
     ).rejects.toMatchObject({ code: 'not-found' })
   })
 
-  it('Kyiv: the site lists one city, so none is needed', async () => {
-    const site = dtekSite('kem', { 'м. Київ': ['вул. Хрещатик'] }, { '6': UNDER_REPAIR })
+  it('Kyiv: the site lists its streets without a city (an array, as dtek-kem sends it), so none is needed', async () => {
+    const site = dtekSite('kem', ['вул. Ростиславська', 'вул. Хрещатик'], { '6': UNDER_REPAIR })
     const client = new OutageClient({ fetch: site.fetch, now: () => AT, cacheTtlMs: 0 })
     const s = await client.getHouseOutage('kyiv', { street: 'Хрещатик', house: '6' })
     expect(s).toMatchObject({
@@ -211,5 +215,16 @@ describe('getHouseOutage', () => {
     await expect(
       client.getHouseOutage('dnipro-cek', { city: 'Дніпро', street: 'Робоча', house: '1' }),
     ).rejects.toMatchObject({ code: 'unsupported' })
+  })
+})
+
+describe('streetsByCity', () => {
+  it("a site's settlement map as is; Kyiv's flat list under its one city; anything else a parse error", () => {
+    expect(streetsByCity({ 'м. Ірпінь': ['вул. Західна'] }, 'krem')).toEqual({
+      'м. Ірпінь': ['вул. Західна'],
+    })
+    expect(streetsByCity(['вул. Хрещатик', 5], 'kem')).toEqual({ 'м. Київ': ['вул. Хрещатик'] })
+    expect(() => streetsByCity(['вул. Х'], 'oem')).toThrow(/without settlements/)
+    expect(() => streetsByCity('x', 'kem')).toThrow(/unexpected/)
   })
 })

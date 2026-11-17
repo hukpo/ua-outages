@@ -10,6 +10,8 @@ export type {
 } from './client.js'
 export { OutageError, isOutageError } from './errors.js'
 export { assessFreshness } from './freshness.js'
+export { decideHouseStatus } from './house-status.js'
+export type { HouseStatusInputs } from './house-status.js'
 export type { FreshnessOptions } from './freshness.js'
 export { fuzzyScore, rankByName } from './fuzzy.js'
 export type { NameKind } from './fuzzy.js'
