@@ -52,6 +52,8 @@ export interface Announcement {
   area: string | null
   /** A cancellation written into an earlier apply post ("UPD: … скасовано"); its time is unknown */
   edited: boolean
+  /** apply: said to last at least until then ("до кінця доби"); ISO, Kyiv offset */
+  until?: string | null
 }
 
 export interface Dialect {
@@ -86,8 +88,18 @@ const OBLASTS = new RegExp(
 /** The sentence names oblasts and none is `home`. Exported for tests. */
 export function aboutElsewhere(sentence: string, home: RegExp | undefined): boolean {
   if (!home) return false
-  const named = sentence.match(OBLASTS)
+  // "скасовані в усіх регіонах, окрім Харківщини": said about everyone but those named after it
+  const [said, except] = splitExcept(sentence)
+  if (except && home.test(except)) return true
+  const named = said.match(OBLASTS)
   return !!named?.length && !named.some((n) => home.test(n))
+}
+
+const EXCEPT = new RegExp(`${NOT_L}(?:окрім|крім|за\\s+винятком)${END_L}`, 'iu')
+/** A sentence, and what it leaves out ("…, крім Харківської та Сумської областей") */
+function splitExcept(sentence: string): [string, string | null] {
+  const m = EXCEPT.exec(sentence)
+  return m ? [sentence.slice(0, m.index), sentence.slice(m.index)] : [sentence, null]
 }
 
 const SGAV = new RegExp(
@@ -122,14 +134,25 @@ const INSTEAD = new RegExp(
 const CANCEL = new RegExp(
   [
     `скасован${L}*`,
+    // the present tense, ЦЕК 17.11.2026: "скасовуються ЕКСТРЕНІ ВІДКЛЮЧЕННЯ‼️ Повертаємося до ГПВ"
+    `скасову${L}+`,
+    `відміня(?:ю|є)ться`,
     // the noun only as news: "Повідомляємо про скасування", "команда … про скасування ГАВ"
     `${NOT_L}про\\s+скасування`,
     `скасувати`,
-    `припинен${L}*`,
+    // not "припинено електропостачання споживачів 1 та 2 черг ГАВ": that is the outage itself
+    `припинен${L}*${END_L}(?!\\s+(?:електропостач|постачан|розподіл|живлен|подач))`,
+    `припиня(?:є|ю)ться`,
     `завершен${L}*`,
-    `${NOT_L}знято${END_L}`,
+    `закінчи(?:лась|лася|лось|лося|лись|лися)`,
+    `${NOT_L}знят(?:о|і)${END_L}`,
+    `скасувал(?:о|а|и)${END_L}`,
+    `відмінил(?:о|а|и)${END_L}`,
+    `${NOT_L}відбій${END_L}`,
     `відмінен${L}*`,
     `відміну`,
+    // the noun as the whole news, Kirovohrad 17.11.2026: "В 14:05 відміна дії графіку ГАВ"
+    `${NOT_L}відміна\\s+(?:дії\\s+)?(?:граф${L}*\\s+)?(?:с?гав${END_L}|аварійн|екстрен)`,
     `відмінити`,
     `деактивован${L}*`,
     `деактивац${L}*`,
@@ -144,8 +167,17 @@ const CANCEL = new RegExp(
  * будь-який момент", "скасовано не буде", "Скасування ГАВ залежить від…", "Після скасування ГАВ
  * будуть діяти ГПВ", "скасувати … не вдається".
  */
+const STEM = `(?:скасов|скасув|відмін|припин|заверш|знят|деактив)`
 const NOT_A_CANCEL = new RegExp(
   [
+    // "будуть відмінені після стабілізації", "буде відміна ГАВ", "очікується скасування"
+    `${NOT_L}(?:будуть|буде|можуть|може|мають|має|планують|планується|можливе|можливо|можлива|очікується|очікуємо|чекаємо)\\s+(?:бути\\s+)?(?:${L}+\\s+){0,3}?${STEM}${L}*`,
+    // "Відміна дії графіку ГАВ не планується", "відмінено не буде"
+    `${STEM}${L}*\\s+(?:${L}+\\s+){0,4}?не\\s+(?:буд|план|очіку|передбач)${L}*`,
+    // "Відміна ГАВ очікується після стабілізації", "Відміна графіків … залежить від …"
+    `${NOT_L}відмін(?:а|и|у)\\s+(?:${L}+\\s+){0,4}?(?:залеж|відбуд|можлив|очіку|буде)${L}*`,
+    // "скасовуватимуться поступово"
+    `(?:скасову|відміня|припиня)ватим${L}*`,
     `до\\s+окрем${L}*\\s+(?:вказівк|розпоряджен|команд)${L}*(?:\\s+(?:${L}+\\s+){0,3}?(?:про|щодо)\\s+(?:їх\\s+|його\\s+)?скасуван${L}*)?`,
     `(?:будуть|буде|можуть|може|мають|має|планують|планується|можливе|можливо)\\s+(?:бути\\s+)?(?:${L}+\\s+){0,2}?скасов${L}*`,
     `(?:скасов|скасув)${L}*\\s+не\\s+буд${L}*`,
@@ -157,6 +189,22 @@ const NOT_A_CANCEL = new RegExp(
   ].join('|'),
   'giu',
 )
+/**
+ * A cancel in a weak form (the present tense, the noun, the infinitive) next to words of waiting
+ * or of a condition is not news: "Про скасування ГАВ повідомимо додатково", "Команда про
+ * скасування поки не надходила", "скасовуються лише за командою Укренерго", "Щойно ситуація
+ * стабілізується, графіки скасовуються". A participle ("скасовано після стабілізації") is.
+ */
+const WAITING = new RegExp(
+  `повідомимо|поінформуємо|проінформуємо|не\\s+надход|${NOT_L}нема(?:є)?${END_L}|чекаємо|очіку${L}*|орієнтовно|після\\s+стабілізац|${NOT_L}щойно${END_L}|${NOT_L}(?:лише|тільки|виключно)\\s+(?:за|після|по)${END_L}|у\\s+міру|поступово`,
+  'iu',
+)
+const DONE = new RegExp(
+  `скасован|відмінен|припинен|завершен|${NOT_L}знят(?:о|і)${END_L}|деактивован|скасувал|відмінил|закінчи(?:лась|лася|лось|лося|лись|лися)|замінено`,
+  'iu',
+)
+/** "Завтра скасовуються екстрені відключення", "завтра повертаємось до графіків": not today */
+const TOMORROW = new RegExp(`${NOT_L}(?:завтра|післязавтра)${END_L}`, 'iu')
 /**
  * ГПВ cancelled: "Графіки погодинних відключень скасовано, натомість застосовано графіки
  * аварійних", "ГПВ відмінено та застосовано ГАВ". The cancel is about ГПВ; what follows may
@@ -218,7 +266,7 @@ const DOCS = new RegExp(
  * false "cancelled" hides a real emergency, a missed one ends with the TTL).
  */
 const NEGATED = new RegExp(
-  `${NOT_L}не\\s+(?:${L}+\\s+){0,2}?(?:скасов|скасув|відмін|деактив|припин|застосов|запровадж|введ|вводя|вводи|діют|діє|діял|трива|задіян)${L}*`,
+  `${NOT_L}не\\s+(?:${L}+\\s+){0,2}?(?:скасов|скасув|відмін|деактив|припин|поверта|застосов|запровадж|введ|вводя|вводи|діют|діє|діял|трива|задіян)${L}*`,
   'giu',
 )
 const NEG = String.raw`(?<!не\s)(?<!не\s\s)`
@@ -232,13 +280,19 @@ const APPLY = new RegExp(
     `будуть\\s+застосовуватися`,
     `замінено\\s+на\\s+(?:граф${L}*\\s+)?аварійн${L}*`,
     `запроваджен${L}*`,
+    `запроваджу(?:ється|ються)`,
+    `запроваджуємо`,
+    `застосовуємо`,
     `введен${L}*`,
+    `уведен${L}*`,
+    `вводимо`,
     `ввести`,
     `вводиться`,
     `вводяться`,
     `задіян${L}*`,
     `${NEG}діють`,
     `${NEG}діє`,
+    `${NEG}діятимуть`,
     `тривають`,
     `триває`,
     `продовжу${L}*\\s+діяти`,
@@ -267,7 +321,10 @@ const ADD = new RegExp(`${NOT_L}(?:додатково|ще)${END_L}`, 'iu')
 const AGAIN = new RegExp(`${NOT_L}(?:знову|повторно)${END_L}`, 'iu')
 
 /** DTEK: "Київ: повертаємось до графіків" cancels without naming the emergency */
-const BACK_TO_SCHEDULES = new RegExp(`поверта${L}*\\s+до\\s+(?:${L}+\\s+){0,2}?граф`, 'iu')
+const BACK_TO_SCHEDULES = new RegExp(
+  `поверта${L}*\\s+до\\s+(?:${L}+\\s+){0,2}?(?:граф|погодинн|гпв${END_L})`,
+  'iu',
+)
 
 const SCHEDULE_ON = new RegExp(
   [
@@ -328,7 +385,7 @@ function stripNonQueueNumbers(s: string): string {
   return s
     .replace(/\d{1,2}\.\d{1,2}\.\d{2,4}/g, ' ')
     .replace(/\d{1,2}\s*год\.?\s*\d{1,2}\s*хв\.?/giu, ' ')
-    .replace(/\d{1,2}[:.]\d{1,2}/g, ' ')
+    .replace(/\d{1,2}(?:\.|:\s?)\d{1,2}/g, ' ')
     .replace(
       new RegExp(
         `\\d{1,2}\\s+(?:січня|лютого|березня|квітня|травня|червня|липня|серпня|вересня|жовтня|листопада|грудня)${END_L}`,
@@ -495,9 +552,29 @@ function termOf(s: string, dialect: Dialect): EmergencyKind | null {
 
 /** "…, діють графіки погодинних відключень": the verb is about ГПВ, not the emergency */
 const ABOUT_GPV = new RegExp(
-  `${NOT_L}(?:діють|діє|діятимуть|застосован${L}*|застосову${L}*|запроваджен${L}*|введен${L}*|вводяться|продовжу${L}*\\s+діяти)\\s+(?:${L}+\\s+)?(?:граф${L}*\\s+)?(?:погодинн|гпв|стабілізаційн|підчерг)${L}*`,
+  [
+    `${NOT_L}(?:діють|діє|діятимуть|застосован${L}*|застосову${L}*|запроваджен${L}*|введен${L}*|вводяться|продовжу${L}*\\s+діяти)\\s+(?:в\\s+дію\\s+)?(?:${L}+\\s+)?(?:граф${L}*\\s+)?(?:погодинн|гпв|стабілізаційн|підчерг)${L}*`,
+    // the noun first: "ГАВ скасовано, ГПВ діють", "графіки погодинних відключень діють згідно з …"
+    `(?:граф${L}*\\s+(?:погодинн|стабілізаційн)${L}*(?:\\s+(?:відключ|вимкн)${L}*)?|${NOT_L}гпв${END_L})\\s+(?:${L}+\\s+){0,2}?(?:діють|діє|діятимуть|застосован${L}*|застосову${L}*|введен${L}*)`,
+    // "ГАВ скасовано, діють графіки": the schedules that are left are the hourly ones
+    `${NOT_L}(?:діють|діятимуть)\\s+графіки${END_L}(?!\\s+аварійн)`,
+  ].join('|'),
   'giu',
 )
+/**
+ * When it was applied, said inside a cancel: "ГАВ, які були застосовані о 12:30, скасовано",
+ * "Скасовано ГАВ, введені сьогодні о 12:30", "відміна дії графіку ГАВ, введеного о 12:00". The
+ * clause has to say when, and not name the schedule: "ГПВ скасовано, введені ГАВ" applies.
+ */
+const WHEN_APPLIED = new RegExp(
+  [
+    `,\\s*(?:як(?:і|ий|а|е)|що)\\s+(?:(?:було|були|була)\\s+)?(?:застосован|введен|уведен|запроваджен)${L}*[^,]*(?:,|$)`,
+    `,\\s*(?:застосован|введен|уведен|запроваджен)(?:і|их|ого|ий|а|ої|им)\\s+(?:сьогодні|вчора|раніше|зранку|вранці|о|об|з)${END_L}[^,]*(?:,|$)`,
+  ].join('|'),
+  'giu',
+)
+const withoutWhenApplied = (s: string) =>
+  s.replace(WHEN_APPLIED, (m) => (GAV.test(m) || SGAV.test(m) || EXTRA.test(m) || AVAR.test(m) ? m : ' , '))
 
 /** The sentence without what doesn't happen: negated verbs, conditional or future cancels */
 const unhedged = (s: string) => s.replace(NOT_A_CANCEL, ' ').replace(NEGATED, ' ')
@@ -537,24 +614,27 @@ const candidate = (s: string, dialect: Dialect) =>
 function hitOf(s: string, index: number, dialect: Dialect, posted: Date): Hit | null {
   if (!candidate(s, dialect)) return null
   const core = withoutPurpose(s)
-  if (notNow(core, posted)) return null
+  if (notNow(withoutWhenApplied(core), posted)) return null
   const kind = termOf(core, dialect)
   const said = asserted(core)
   if (!kind) {
     // DTEK: "Київщина: повертаємось до графіків відключень" ends an emergency without naming it
-    if (dialect.dtek && BACK_TO_SCHEDULES.test(said) && !/аварі/iu.test(s))
+    if (dialect.dtek && BACK_TO_SCHEDULES.test(said) && !/аварі/iu.test(s) && !TOMORROW.test(core))
       return { sentence: s, index, kind: 'emergency', action: 'cancel' }
     return null
   }
   // tested before the ГПВ wording is stripped: that wording is what makes it a cancel
   const cancels = CANCEL.test(said) || INSTEAD.test(unhedged(core))
-  const applies = APPLY.test(said)
+  // "завтра скасовуються", "про скасування повідомимо додатково": no news of now
+  if (cancels && (TOMORROW.test(core) || (WAITING.test(core) && !DONE.test(said)))) return null
+  const applies = APPLY.test(withoutWhenApplied(said))
   // both in one sentence: in force ("скасовано …, натомість застосовано ГАВ"); a false "cancelled"
   // is the worse mistake. "Замість аварійних діють графіки погодинних" is a cancel: the apply verb
   // there is about ГПВ and was stripped.
   if (cancels && !applies) return { sentence: s, index, kind, action: 'cancel' }
   if (applies) return { sentence: s, index, kind, action: 'apply' }
-  if (BACK_TO_SCHEDULES.test(said)) return { sentence: s, index, kind, action: 'cancel' }
+  if (BACK_TO_SCHEDULES.test(said) && !TOMORROW.test(core))
+    return { sentence: s, index, kind, action: 'cancel' }
   return null
 }
 
@@ -565,11 +645,20 @@ const TIME_RES: RegExp[] = [
   /(?<date>\d{2}\.\d{2}\.\d{4})\s+з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/giu,
   /(?:^|[\s(])з\s+(?<h>\d{1,2})\s*год\.?\s*(?<m>\d{1,2})\s*хв/giu,
   // "з 10:35", "О 9:44", "об 11:12", "В 06:10", "у 19:00", "станом на 22:02", "з 18.00"
-  /(?:^|[\s(])(?:з|о|об|в|у|станом\s+на|на)\s+(?<h>\d{1,2})(?<sep>[:.])(?<m>\d{2})(?![\d.]\d)/giu,
+  /(?:^|[\s(])(?:з|о|об|в|у|станом\s+на|на)\s+(?<h>\d{1,2})(?:(?<sep>\.)|:\s?)(?<m>\d{2})(?![\d.]\d)/giu,
 ]
 
 /** Words of the future: "будуть застосовуватися", "буде введено", "діятимуть" */
 const FUTURE = new RegExp(`${NOT_L}(?:буде|будуть)${END_L}|${L}+тимуть${END_L}|${L}+тиметься${END_L}`, 'iu')
+/**
+ * The present tense announces too: "З 18:00 скасовуються графіки аварійних відключень" posted at
+ * 14:00 is tonight, not last night. Not as far ahead as the future tense: "з 21:00
+ * застосовуються ГАВ" posted at 02:00 is a late report.
+ */
+const PRESENT = new RegExp(
+  `${NOT_L}(?:скасову|застосову|запроваджу)(?:ється|ються)${END_L}|${NOT_L}(?:вводиться|вводяться)${END_L}|${NOT_L}(?:припиня|відміня)(?:є|ю)ться${END_L}`,
+  'iu',
+)
 
 /** "YYYY-MM-DD" `days` later (earlier when negative) */
 function shiftDay(day: string, days: number): string {
@@ -608,7 +697,7 @@ function timeIn(text: string, posted: Date): Date | null {
       date ??= kyivDate(posted)
       let at = kyivInstant(date, h * 60 + min)
       if (!explicit) {
-        const ahead = FUTURE.test(text) ? 20 * 3600_000 : 3 * 3600_000
+        const ahead = (FUTURE.test(text) ? 20 : PRESENT.test(text) ? 8 : 3) * 3600_000
         const diff = at.getTime() - posted.getTime()
         // the day before or after by the Kyiv calendar: around a DST switch a day isn't 24 h
         if (diff > ahead) at = kyivInstant(shiftDay(date, -1), h * 60 + min)
@@ -623,17 +712,20 @@ function timeIn(text: string, posted: Date): Date | null {
 // --- area ---
 
 const DISTRICTS = new RegExp(
-  `(?:^|\\s)(?:у|в)\\s+((?:частині\\s+)?(?:\\p{Lu}${L}+(?:ському|цькому|зькому|ського|цького|зького)(?:,\\s*|\\s+(?:і|та|й)\\s+))*\\p{Lu}${L}+(?:ському|цькому|зькому|ського|цького|зького)\\s+район(?:ах|ів|і|у))`,
+  `(?:^|\\s)[УуВв]\\s+((?:частині\\s+)?(?:\\p{Lu}${L}+(?:ському|цькому|зькому|ського|цького|зького)(?:,\\s*|\\s+(?:і|та|й)\\s+))*\\p{Lu}${L}+(?:ському|цькому|зькому|ського|цького|зького)\\s+район(?:ах|ів|і|у))`,
   'u',
 )
 const PART = new RegExp(
-  `(?:^|\\s)(?:у|в)\\s+((?:північн|південн|східн|західн|центральн)${L}*\\s+(?:частині|районах)\\s+\\p{Lu}${L}+(?:\\s+област${L}*)?)`,
+  `(?:^|\\s)[УуВв]\\s+((?:північн|південн|східн|західн|центральн)${L}*\\s+(?:частині|районах)\\s+\\p{Lu}${L}+(?:\\s+област${L}*)?)`,
   'u',
 )
 
+/** "у м. Полтава", "по м. Суми": one city of the region */
+const CITY = new RegExp(`(?:^|\\s)(?:[УуВв]|[Пп]о)\\s+(м\\.\\s*\\p{Lu}${L}+(?:-\\p{Lu}${L}+)?)`, 'u')
+
 /** The part of the region named in a sentence ("у Ніжинському і Прилуцькому районах"). Exported for tests. */
 export function districtArea(sentence: string): string | null {
-  return DISTRICTS.exec(sentence)?.[1] ?? PART.exec(sentence)?.[1] ?? null
+  return DISTRICTS.exec(sentence)?.[1] ?? PART.exec(sentence)?.[1] ?? CITY.exec(sentence)?.[1] ?? null
 }
 
 // --- the post ---
@@ -643,18 +735,86 @@ export function districtArea(sentence: string): string | null {
  * is the post time; times in the text ("з 10:35") are read against it.
  */
 export function classifyPost(text: string, posted: Date, dialect: Dialect = {}): Announcement | null {
+  return classifyPostAll(text, posted, dialect)[0] ?? null
+}
+
+/**
+ * Everything one post announces: what `classifyPost` gives, then what it says about the other
+ * schedule. Poltava 16.11.2026: "ГАВ скасовано! О 21:07 скасовано ГАВ (6-10 черги. О 20:45
+ * відміна СГАВ." lifts a part of ГАВ and all of СГАВ; "Застосовано ГАВ та СГАВ" starts both.
+ */
+export function classifyPostAll(text: string, posted: Date, dialect: Dialect = {}): Announcement[] {
+  const found = classifyMain(text, posted, dialect)
+  if (!found) return []
+  const { announcement: main, hits, upd } = found
+  // "UPD: аварійні відключення скасовані. … запроваджено (СпецГАВ)": the old text under an edit
+  // announces nothing; and a cancel of "аварійні відключення" ends every kind already
+  if (upd || main.kind === 'emergency' || (main.action !== 'apply' && main.action !== 'cancel')) return [main]
+  const other: EmergencyKind = main.kind === 'gav' ? 'sgav' : 'gav'
+  // a sentence of its own about the other schedule…
+  const hit = hits.find((h) => h.kind === other && !bothNamed(h.sentence))
+  if (hit) {
+    const cut = hit.action === 'cancel' ? beforeGpv(hit.sentence) : hit.sentence
+    const q = extractQueues(cut, other === 'gav' ? (dialect.fullVolume ?? null) : null)
+    return [
+      main,
+      {
+        ...base(hit.action, other, [cut], text, posted, dialect, false),
+        queues: q.list,
+        count: q.count,
+        all: q.all,
+        partial: hit.action === 'cancel' && !q.all && (!!q.list || q.count !== null),
+      },
+    ]
+  }
+  // …or both named in the decisive one, with no queues to tell apart: "Скасовано ГАВ і СГАВ"
+  const decisive = hits.find((h) => h.action === main.action)
+  if (decisive && bothNamed(decisive.sentence) && !main.queues && main.count === null)
+    return [main, { ...main, kind: other }]
+  return [main]
+}
+
+const bothNamed = (s: string) => SGAV.test(s) && GAV.test(s.replace(SGAV_ALL, ' '))
+
+/** A cancel sentence up to what it says about ГПВ: "ГАВ скасовано, з 16:00 діють погодинні … в обсязі 1,5 черги" */
+const GPV_TAIL = new RegExp(
+  `[,;]?\\s*(?:(?:та|і|й|а|натомість)\\s+)?(?:з\\s+\\d{1,2}[:.]\\d{2}\\s+)?(?:діють|діє|діятимуть|застосован${L}*|застосову${L}*|введен${L}*|вводяться)\\s+(?:в\\s+дію\\s+)?(?:${L}+\\s+){0,2}?(?:погодинн|гпв${END_L}|стабілізаційн)`,
+  'iu',
+)
+const beforeGpv = (s: string) => {
+  const m = GPV_TAIL.exec(s)
+  return m && m.index > 0 ? s.slice(0, m.index) : s
+}
+
+/** A line of its own that edits the post: "UPD: ГАВ скасовано", "ОНОВЛЕНО: …" */
+const UPD_LINE = /^[^\p{L}\d]*(?:UPD|ОНОВЛЕНО)(?![\p{L}])/iu
+
+function classifyMain(
+  text: string,
+  posted: Date,
+  dialect: Dialect,
+): { announcement: Announcement; hits: Hit[]; upd: boolean } | null {
+  const done = (announcement: Announcement | null, hits: Hit[] = [], upd = false) =>
+    announcement ? { announcement, hits, upd } : null
   const all = sentences(text)
   if (!all.length) return null
   // "❓ Чому застосовуються графіки…", "Нагадаємо, СГАВ — це…": explanations, not announcements
   if (EXPLAINER.test(all[0]!) || /^[^\n]*\?\s*(?:\n|$)/u.test(text.trim())) return null
-  // "UPD: … скасовано" on top of an apply post: the post is now a cancellation
-  const upd = /^\W*UPD\b/iu.test(text.trim())
   const hits = all.map((s, i) => hitOf(s, i, dialect, posted)).filter((h): h is Hit => !!h)
   const update = all.some((s) => UPDATE.test(s))
+  // "UPD: … скасовано" on top of an apply post: the post is now a cancellation
+  let upd = UPD_LINE.test(all[0]!)
 
   // the "UPD" line comes first; "UPD." may stand as a sentence of its own
   let first = upd ? hits.find((h) => h.index <= 1) : hits[0]
   if (upd && !first) first = hits[0]
+  // …or under the text it edits: "Застосовано ГАВ.\nUPD: ГАВ скасовано."
+  const updAt = upd ? -1 : all.findIndex((x, i) => i > 0 && UPD_LINE.test(x))
+  const below = updAt > 0 ? hits.find((h) => h.index >= updAt && h.action === 'cancel') : undefined
+  if (below) {
+    first = below
+    upd = true
+  }
   // "ГАВ: вимкнено 6 та 7 черги": the queues off now, as a change
   if (!first && !update) {
     const off = all.find(
@@ -671,12 +831,12 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
       // 1, 2, 3 та 4 черги скоро будуть заживлені.": the other lines say what else is off and on
       const swap = swapOf(all, null)
       const queues = sortQueues([...named, ...swap.off]).filter((q) => !swap.on.includes(q))
-      return {
+      return done({
         ...base('update', kind, [off], text, posted, dialect, false),
         queues,
         restored: swap.on.length ? swap.on : null,
         count: queues.length,
-      }
+      })
     }
   }
   if (!first && !update) {
@@ -694,7 +854,7 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
       // not the headline: an incidental mention ("Нагадуємо, що ГАВ …") is not news
       if (all.indexOf(head) > 2) return null
     }
-    return base(action, kind, [head], text, posted, dialect, upd)
+    return done(base(action, kind, [head], text, posted, dialect, upd))
   }
 
   if (update && (!first || first.action === 'apply')) {
@@ -702,12 +862,12 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
     const { off, on } = swapOf(all, dialect.fullVolume ?? null)
     if (off.length || on.length) {
       const a = base('update', kind, all, text, posted, dialect, false)
-      return {
+      return done({
         ...a,
         queues: off.length ? off : null,
         restored: on.length ? on : null,
         count: off.length || null,
-      }
+      })
     }
   }
   if (!first) return null
@@ -719,9 +879,17 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
   }
 
   // the sentences that say the same thing as the decisive one carry its details
-  const same = hits.filter((h) => h.action === first.action).map((h) => h.sentence)
+  // (not those about the other schedule: "О 21:07 скасовано ГАВ (6-10 черги. О 20:45 відміна СГАВ")
+  const akin = (h: Hit) => h.kind === first.kind || h.kind === 'emergency' || first.kind === 'emergency'
+  const same = hits
+    .filter((h) => h.action === first.action && akin(h))
+    // a cancel's queues and time are not those of the ГПВ it gives way to
+    .map((h) => (first.action === 'cancel' ? beforeGpv(h.sentence) : h.sentence))
   const kind = kindOf(first, hits, text)
   const a = base(first.action, kind, same, text, posted, dialect, upd)
+  // an edit under the text says "скасовано" of what the text applied, there
+  if (below && hits[0] && hits[0] !== below)
+    a.area = dialect.area ? dialect.area(text, hits[0].sentence) : districtArea(hits[0].sentence)
   // "в повному обсязі" is a known number of queues only for ГАВ
   const q = extractQueues(same.join('. '), kind === 'gav' ? (dialect.fullVolume ?? null) : null)
   const named = q.list ?? null
@@ -738,7 +906,8 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
   if (announcement.action === 'cancel') {
     const { on } = swapOf(same, null)
     if (on.length) Object.assign(announcement, { queues: on, count: on.length, partial: true, all: false })
-    else if (new RegExp(`${NOT_L}частково${END_L}`, 'iu').test(same.join(' ')) && !announcement.partial)
+    // (said anywhere in the post: "Дію ГАВ скасовано.\nЧастково, для 1 та 2 черг.")
+    else if (new RegExp(`${NOT_L}частково${END_L}`, 'iu').test(all.join(' ')) && !announcement.partial)
       // part of it, without saying which: still on (the TTL ends it)
       Object.assign(announcement, { partial: true, queues: null, count: null, all: false })
   }
@@ -761,7 +930,10 @@ export function classifyPost(text: string, posted: Date, dialect: Dialect = {}):
       }
     }
   }
-  return announcement
+  // "Застосовано ГАВ до кінця доби": not over before midnight, whatever the silence after it
+  if (announcement.action === 'apply' && new RegExp(`до\\s+кінця\\s+(?:доби|дня)`, 'iu').test(same.join(' ')))
+    announcement.until = toKyivIso(kyivInstant(shiftDay(kyivDate(new Date(announcement.at)), 1), 0))
+  return done(announcement, hits, upd)
 }
 
 function kindOf(first: Hit, hits: Hit[], text: string): EmergencyKind {
@@ -888,13 +1060,18 @@ export function classifyUkrenergo(text: string, posted: Date, oblast: string): A
       if (stem.test(only[1]!)) return ukr('apply', text, posted)
       return ukr('cancel', text, posted)
     }
-    if (!stem.test(s)) continue
+    // "скасовано в усіх областях, крім Харківської": not said about the ones left out
+    const [about] = splitExcept(s)
+    if (!stem.test(about)) continue
     // "можуть бути застосовані", "у разі …", "вчора": nothing in force now
     if (notNow(withoutPurpose(s), posted)) continue
     // past tense ("зранку застосовувалися") says nothing about now
     if (new RegExp(`застосовувал${L}*|діяли${END_L}`, 'iu').test(s)) continue
     const said = asserted(s)
-    if (CANCEL.test(said)) return ukr('cancel', text, posted)
+    if (CANCEL.test(said)) {
+      if (TOMORROW.test(s) || (WAITING.test(s) && !DONE.test(said))) continue
+      return ukr('cancel', text, posted)
+    }
     if (APPLY.test(said) || /вимушен/iu.test(said)) return ukr('apply', text, posted)
   }
   return null
