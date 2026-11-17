@@ -380,6 +380,15 @@ export function accidentHouses(row: PowerOnAccident): string[] {
     .filter((h) => h && /\d/.test(h))
 }
 
+/**
+ * The group a ГПВ row's note names: "3,1" (Zhytomyr, 17.11.2026 23:15), "ГПВ-6.1" (the same
+ * list, 18.11.2026 00:47). Anything else is a dispatcher's words, not a group. Exported for tests.
+ */
+export function groupInNote(note: string | null | undefined): GroupId | null {
+  const m = /^\s*(?:ГПВ\s*[-–:]?\s*)?(\d{1,2}[.,]\d)\s*$/iu.exec(note ?? '')
+  return m ? parseCherg(m[1]) : null
+}
+
 /** Which outages come first when several rows list a house */
 const KIND_RANK: Record<HouseOutageKind, number> = {
   emergency: 0,
@@ -492,8 +501,8 @@ export function powerOnOutages(opts: PowerOnOutageOptions) {
       )
       const hit = currentAccident(rows, house.number, ctx.now(), opts.trustOffset)
       if (!hit) return null
-      // a ГПВ row is per group; its note is that group ("3,1")
-      const noted = hit.outage.kind === 'scheduled' ? parseCherg(hit.row.koment) : null
+      // a ГПВ row is per group; its note is that group
+      const noted = hit.outage.kind === 'scheduled' ? groupInNote(hit.row.koment) : null
       return {
         region,
         address: { city: city?.name ?? hit.row.city?.name, street: street.name, house: house.number },
