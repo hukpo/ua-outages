@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { assessFreshness } from '../../src/freshness.js'
-import { parseFilials, parseGpvFragment } from '../../src/providers/poltava.js'
+import { parseFilials, parseGpvFragment, poltavaOutage } from '../../src/providers/poltava.js'
 import { expectUnpublished, fixture, mockFetch } from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:40:00+02:00')
@@ -103,5 +103,70 @@ describe('Poltavaoblenergo', () => {
         house: '1',
       }),
     ).rejects.toThrow(/several connections/)
+  })
+})
+
+describe('Poltava getHouseOutage: the status line of the address', () => {
+  const RESULT = JSON.parse(fixture('poltava/result-11389-1004324-house-10.json'))[0]
+
+  it('a ГПВ outage, with its start and expected end', () => {
+    expect(poltavaOutage(RESULT)).toEqual({
+      kind: 'scheduled',
+      reason:
+        'зареєстрована перерва в електропостачанні внаслідок застосування графіку погодинних відключень (ГПВ) 05.11.2026 р. з 23 годин(и) 00 хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 06.11.2026 р. о 02 годин(и) 00 хвилин(и).',
+      scheduleApplies: true,
+      from: '2026-11-05T23:00:00+02:00',
+      to: '2026-11-06T02:00:00+02:00',
+    })
+  })
+
+  it('"не зареєстровано перерв": none', () => {
+    const none = JSON.parse(fixture('poltava/result-gav-message-samples.json'))
+    const rows = Object.values(none).flatMap((v) => (v as { response?: unknown[] }).response ?? [])
+    const quiet = rows.find((r) => (r as { message_type?: number }).message_type === 0)
+    expect(quiet).toBeDefined()
+    expect(poltavaOutage(quiet as never)).toBeNull()
+    expect(poltavaOutage({ fn_accident_message: '', message_type: 0 })).toBeNull()
+  })
+
+  it('wording not seen yet is `other`, never a guessed emergency', () => {
+    const gav = {
+      fn_accident_message:
+        'зареєстрована перерва в електропостачанні внаслідок застосування графіку аварійних відключень (ГАВ) 17.11.2026 р. з 10 годин(и) 40 хвилин(и).',
+      message_type: 5,
+      accident_str: '17.11.2026 10:40',
+    }
+    expect(poltavaOutage(gav)).toMatchObject({
+      kind: 'other',
+      reason: gav.fn_accident_message,
+      scheduleApplies: null,
+      from: '2026-11-17T10:40:00+02:00',
+      to: null,
+    })
+    expect(poltavaOutage({ message_type: 3 })).toMatchObject({ kind: 'other', reason: 'message_type 3' })
+  })
+
+  it('reads the same answer as findGroup, once per house while it is fresh', async () => {
+    const { client: c, calls } = client()
+    expect(c.region('poltava').capabilities.houseOutage).toBe(true)
+    const address = { city: 'Полтава', street: 'Європейська', house: '10' }
+    expect(await c.getHouseOutage('poltava', address)).toMatchObject({
+      region: 'poltava',
+      address: { city: 'місто Полтава', street: 'вул. Європейська', house: '10' },
+      kind: 'scheduled',
+      groups: ['1.1'],
+      url: 'https://www.poe.pl.ua/disconnection/power-outages/',
+    })
+    await c.getHouseOutage('poltava', address)
+    expect(calls.filter((x) => x.url.includes('disconnectinforesult'))).toHaveLength(1)
+    await expect(
+      client('poltava/result-11389-1004324-house-1-multiple-connections.json').client.getHouseOutage(
+        'poltava',
+        {
+          ...address,
+          house: '1',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'not-found' })
   })
 })

@@ -450,7 +450,8 @@ export class OutageClient {
   /**
    * Whether a house is off right now and why, from the operator's own record of the address
    * (`capabilities.houseOutage`: DTEK's sites, the PowerOn lists of Lviv, Ternopil, Zakarpattia
-   * and Zhytomyr). `null` when the operator lists no outage there.
+   * and Zhytomyr, Mykolaiv's outage feed, Sumy's and Poltava's per-address status). `null` when
+   * the operator lists no outage there.
    *
    * This is the only place that sees per-house emergency outages: while a region as a whole is
    * back on the schedule (`getEmergency` is `inactive`), some houses can still be off under

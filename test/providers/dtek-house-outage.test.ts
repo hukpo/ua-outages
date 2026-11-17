@@ -207,7 +207,7 @@ describe('getHouseOutage', () => {
   it('regions without per-house status say so', async () => {
     const client = new OutageClient({ fetch: async () => new Response('{}'), now: () => AT })
     expect(client.region('dnipro-cek').capabilities.houseOutage).toBe(false)
-    expect(client.region('poltava').capabilities.houseOutage).toBe(false)
+    expect(client.region('khmelnytskyi').capabilities.houseOutage).toBe(false)
     await expect(
       client.getHouseOutage('dnipro-cek', { city: 'Дніпро', street: 'Робоча', house: '1' }),
     ).rejects.toMatchObject({ code: 'unsupported' })
