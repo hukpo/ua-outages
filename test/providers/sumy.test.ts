@@ -347,10 +347,38 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
   })
 
   it('reads the site alone when E-Svitlo is down, dated by the clock', async () => {
-    const s = await (await setup({ answers: null })).client.getSchedules('sumy')
+    const now = new Date('2026-11-17T01:00:00+02:00')
+    const s = await (await setup({ answers: null, now })).client.getSchedules('sumy')
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-17'])
     expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-17'] })
     expect(s.sources![1]).toMatchObject({ id: 'e-svitlo', ok: false, error: { code: 'http' } })
+  })
+
+  it("just after midnight, E-Svitlo down: a grid changed yesterday isn't dated today", async () => {
+    // "Оновлено: 16.11.2026 22:49" read at 00:10 on 17.11: the evening's schedule for the 17th,
+    // or the 16th's grid the endpoint still serves; the stamp is the same for both
+    for (const at of ['2026-11-17T00:10:00+02:00', '2026-11-17T00:59:00+02:00']) {
+      const s = await (await setup({ answers: null, now: new Date(at) })).client.getSchedules('sumy')
+      expectUnpublished(s, 12)
+      expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-17'])
+      expect(s.sources).toMatchObject([
+        { id: 'site', ok: true, dates: [] },
+        { id: 'e-svitlo', ok: false },
+      ])
+      expect(s.updatedAt).toBeNull()
+    }
+    // a grid changed after midnight is today's whatever the minute
+    const changed = JSON.parse(SITE_17)
+    for (const e of changed.data) if (e.last_update) e.last_update = 'Оновлено: 17.11.2026 00:05'
+    const s = await (
+      await setup({
+        site: JSON.stringify(changed),
+        answers: null,
+        now: new Date('2026-11-17T00:10:00+02:00'),
+      })
+    ).client.getSchedules('sumy')
+    expect(s.schedules['1.1']!.map((d) => [d.date, d.status])).toEqual([['2026-11-17', 'scheduled']])
+    expect(s.updatedAt).toBe('2026-11-17T00:05:00+02:00')
   })
 
   it('refuses to date a grid last changed before yesterday when nothing else dates it', async () => {
