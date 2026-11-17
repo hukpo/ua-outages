@@ -90,6 +90,17 @@ describe('2. negations, conditions and the future are not cancellations', () => 
   it('real cancellations still are', () => {
     expect(read('poltava', POSTS['poltavaOE/4456']!.text)).toMatchObject({ action: 'cancel' })
     expect(read('dnipro-cek', POSTS['cek_info/4316']!.text)).toMatchObject({ action: 'cancel' })
+    // cek_info/4419, 17.11.2026: the present tense, read as "emergency outages in force" for hours
+    expect(
+      read(
+        'dnipro-cek',
+        '📢 Шановні споживачі м. ДНІПРО‼️\n\nПопереджаємо, що за командою диспетчерського центру НЕК "Укренерго" скасовуються ЕКСТРЕНІ ВІДКЛЮЧЕННЯ‼️ Повертаємося до ГРАФІКІВ ПОГОДИННИХ ВІДКЛЮЧЕНЬ‼️',
+      ),
+    ).toMatchObject({ action: 'cancel' })
+    // the future and the conditional still don't cancel
+    expect(
+      read('kharkiv', 'Аварійні відключення будуть скасовуватись після стабілізації ситуації.'),
+    ).not.toMatchObject({ action: 'cancel' })
     expect(read('kharkiv', 'Застосування графіків аварійних відключень припинено.')).toMatchObject({
       action: 'cancel',
     })
