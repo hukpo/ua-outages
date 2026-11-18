@@ -4,7 +4,7 @@ import type { PostAnalysis, PostEvent, PostInput } from '../ai/types.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { readChannelWindow } from '../emergency/telegram.js'
 import { addDays, kyivDate, kyivInstant, kyivMinuteOfDay, toKyivIso } from '../time.js'
-import type { DaySchedule, GroupId, RegionId, RegionSchedule } from '../types.js'
+import type { DaySchedule, DayStatus, GroupId, RegionId, RegionSchedule } from '../types.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead } from './sources.js'
 import { OutageError } from '../errors.js'
@@ -59,6 +59,14 @@ export interface Publication {
    * listed slots are added to what they had, `null` makes them not known; the rest stay as they were
    */
   add?: boolean
+  /**
+   * What a group this publication doesn't list means (see `PostsOptions.omitted`); the fold's
+   * default when absent. Sources differ: ЦЕК lists only the groups that have outages, an API
+   * every group
+   */
+  omitted?: 'unknown' | 'none'
+  /** A whole day's groups whose status isn't `scheduled` ("no outages", emergency) */
+  status?: Record<string, DayStatus>
 }
 
 /**
@@ -91,14 +99,24 @@ export function layerPublications(
    * nothing named is not known, and one only a correction or a window named is not known either
    */
   based: boolean
+  /** Status of a group the whole day gave one other than `scheduled`, while nothing changed it */
+  status: Record<string, DayStatus>
+  /** What a group the whole day didn't list means */
+  omitted: 'unknown' | 'none'
 } {
   let cur: Record<string, MinuteSlot[] | null> = {}
   let cancelled = false
   let based = false
+  let status: Record<string, DayStatus> = {}
+  let baseOmitted = omitted
   for (const pub of pubs) {
+    const omitted = pub.omitted ?? baseOmitted
+    // a group the publication changes is scheduled hours from then on
+    for (const g of Object.keys(pub.groups)) delete status[g]
     if (pub.cancelled) {
       cur = {}
       cancelled = true
+      status = {}
       continue
     }
     if (pub.add) {
@@ -120,9 +138,12 @@ export function layerPublications(
       cur = { ...pub.groups }
       cancelled = false
       based = true
+      status = { ...pub.status }
+      baseOmitted = pub.omitted ?? baseOmitted
       continue
     }
     if (!based || cancelled) {
+      status = {}
       // part of a day with no whole day under it (or after a cancellation): the hours outside it
       // aren't known, and a day is whole or not known, so every group it or anything before named
       // is not known
@@ -160,7 +181,7 @@ export function layerPublications(
     }
     cur = next
   }
-  return { groups: cur, cancelled, based }
+  return { groups: cur, cancelled, based, status, omitted: baseOmitted }
 }
 
 /** What the posts say about one date */
