@@ -5,8 +5,9 @@ import { decodePng, isPng, MAX_IMAGE_PIXELS, type RgbaImage } from './png.js'
 /**
  * Makes a picture cheap to send to an image processor without losing what matters on it.
  * Vision models bill by pixels (Claude: ⌈w/28⌉·⌈h/28⌉ tokens), so the picture is scaled down to
- * `maxLongEdge` after trimming plain margins; a small one (a Telegram preview of a dense grid) is
- * blown up by a whole factor towards `minLongEdge`, pixel for pixel, so thin cells stay sharp. Pure JS on the bundled decoders; a
+ * `maxLongEdge` after trimming plain margins; a thin one (a Telegram preview of a dense grid,
+ * 800×210) is blown up by a whole factor until its short side reaches `minShortEdge`, pixel for
+ * pixel, so thin cells stay sharp. Pure JS on the bundled decoders; a
  * picture they can't read (a progressive JPEG) is sent as it is, and the API scales it itself.
  *
  * Only margins of one flat colour are trimmed: headers and logos stay, since the date is often
@@ -17,10 +18,11 @@ export interface CompactOptions {
   /** Long edge in px after scaling down */
   maxLongEdge: number
   /**
-   * Scale a smaller picture up by a whole factor (nearest neighbour) while its long edge stays
-   * within this; default none. Vision models read thin grid cells better that way
+   * A picture whose short side is below this is scaled up by a whole factor (nearest neighbour)
+   * until it isn't, its long edge kept within 2048 px; default none. Vision models read a thin
+   * grid's cells better that way
    */
-  minLongEdge?: number
+  minShortEdge?: number
   /** Trim flat margins, default true */
   trim?: boolean
 }
@@ -49,10 +51,7 @@ export function compactImage(bytes: Uint8Array, opts: CompactOptions): CompactIm
   }
   const original = { width: img.width, height: img.height, bytes: bytes.length }
   const trimmed = opts.trim === false ? img : trimMargins(img)
-  const scaled = upscale(
-    downscale(trimmed, opts.maxLongEdge),
-    Math.min(opts.minLongEdge ?? 0, opts.maxLongEdge),
-  )
+  const scaled = upscale(downscale(trimmed, opts.maxLongEdge), opts.minShortEdge ?? 0)
   if (scaled === img && jpeg) return { ...asIs(bytes, 'image/jpeg', original), compacted: false }
   const out = encodePng(scaled)
   // the source was already smaller than the re-encoded copy, and nothing was cut or scaled
@@ -151,9 +150,14 @@ export function trimMargins(img: RgbaImage): RgbaImage {
   return { width: nw, height: nh, data: out }
 }
 
-/** Nearest-neighbour scaling up by the largest whole factor that keeps the long edge within `minLongEdge` */
-export function upscale(img: RgbaImage, minLongEdge: number): RgbaImage {
-  const f = Math.floor(minLongEdge / Math.max(img.width, img.height))
+/** Nearest-neighbour scaling up by a whole factor until the short side reaches `minShortEdge` */
+export function upscale(img: RgbaImage, minShortEdge: number, maxLongEdge = 2048): RgbaImage {
+  const short = Math.min(img.width, img.height)
+  if (short >= minShortEdge) return img
+  const f = Math.min(
+    Math.ceil(minShortEdge / short),
+    Math.floor(maxLongEdge / Math.max(img.width, img.height)),
+  )
   if (f < 2) return img
   const w = img.width * f
   const h = img.height * f

@@ -7,7 +7,7 @@
  *   npm run eval -- --backend openai --model <id>                 needs OPENAI_API_KEY
  *
  * Options: --only text|image, --filter <substring of the case name>, --tag <tag>, --sample N,
- * --long-edge 800,1100 (image sweep), --min-edge 1600 (scale small pictures up towards it), --concurrency 4, --effort low|medium|high,
+ * --long-edge 800,1100 (image sweep), --min-short-edge 400 (scale thin pictures up until their short side reaches it), --concurrency 4, --effort low|medium|high,
  * --record (save the raw answers to test/fixtures/ai/<backend>/ for the CI replay tests),
  * --price-in / --price-out ($ per 1M tokens, for the cost line).
  *
@@ -30,7 +30,7 @@ import type {
 } from '../src/ai/types.js'
 import { validateImageReading, validatePostAnalysis } from '../src/ai/validate.js'
 import { mapLimit } from '../src/util.js'
-import { canon, diffEvents, diffImage, readsPhotos } from '../eval/score.js'
+import { canon, diffEvents, diffImage, photosMatter, readsPhotos } from '../eval/score.js'
 import { claudeCliImage, claudeCliText, codexCliImage, codexCliText } from './cli-processors.js'
 
 const { values: args } = parseArgs({
@@ -41,7 +41,7 @@ const { values: args } = parseArgs({
     filter: { type: 'string' },
     tag: { type: 'string' },
     'long-edge': { type: 'string' },
-    'min-edge': { type: 'string' },
+    'min-short-edge': { type: 'string' },
     concurrency: { type: 'string', default: '4' },
     effort: { type: 'string' },
     record: { type: 'boolean', default: false },
@@ -93,7 +93,7 @@ async function processors(
 ): Promise<{ text: TextProcessor; image: ImageProcessor; tag: string }> {
   const model = args.model
   const effort = args.effort as 'low' | 'medium' | 'high' | undefined
-  const minEdge = args['min-edge'] ? Number(args['min-edge']) : undefined
+  const minEdge = args['min-short-edge'] ? Number(args['min-short-edge']) : undefined
   switch (args.backend) {
     case 'claude-cli':
       return {
@@ -126,7 +126,7 @@ async function processors(
       const o = { client, model, reasoningEffort: effort }
       return {
         text: openaiTextProcessor(o),
-        image: openaiImageProcessor({ ...o, maxLongEdge: edge, minLongEdge: minEdge }),
+        image: openaiImageProcessor({ ...o, maxLongEdge: edge, minShortEdge: minEdge }),
         tag: `openai-${model}`,
       }
     }
@@ -265,7 +265,7 @@ async function main() {
       try {
         const got = await ai.analyzePost(c.input.regions[0]!.id, c.input)
         const diffs = diffEvents(expected.events, got.events)
-        if (readsPhotos(expected) !== readsPhotos(got))
+        if (photosMatter(c.input) && readsPhotos(expected) !== readsPhotos(got))
           diffs.push(`reads the photos: want ${readsPhotos(expected)} got ${readsPhotos(got)}`)
         if (args.verbose && diffs.length) diffs.push(`got: ${JSON.stringify(got.events.map(canon))}`)
         return { ...base, ok: !diffs.length, diffs }

@@ -89,6 +89,20 @@ export function diffImage(exp: ImageReading, got: ImageReading): string[] {
 }
 
 /**
+ * The channels whose photos the SDK reads (`readPicturePosts`: Chernihiv, Zakarpattia, Sumy).
+ * Elsewhere the photos are never opened, so whether a post's photos are a schedule changes nothing
+ * and isn't scored
+ */
+export const PICTURE_CHANNELS: ReadonlySet<string> = new Set([
+  'chernigivoblenergo',
+  'zakarpatenergyofficial',
+  'SumyEnergo',
+])
+
+export const photosMatter = (input: { source: { kind: string; channel?: string } }) =>
+  input.source.kind === 'telegram' && PICTURE_CHANNELS.has(input.source.channel ?? '')
+
+/**
  * What `photosAreSchedules` decides in the SDK: whether a post's photos are read as the schedule
  * (`readPicturePosts`): they are when the post says so or announces a schedule whose hours aren't
  * in its text

@@ -132,6 +132,25 @@ describe('validateImageReading', () => {
     intervals: [{ from: '08:00', to: '12:00', kind: 'off' }],
   }))
 
+  it('reads intervals as the short strings the schema asks for, "?" a possible outage', () => {
+    const short = STANDARD_GROUPS.map((queue) => ({ queue, intervals: ['08:00-12:00', '?16:00 – 18:30'] }))
+    const r = validateImageReading(
+      { isSchedule: true, kind: 'gpv', date: '2026-11-17', statedAt: null, schedule: short },
+      input,
+    )
+    expect(r.schedule[0]!.intervals).toEqual([
+      { from: '08:00', to: '12:00', kind: 'off' },
+      { from: '16:00', to: '18:30', kind: 'maybe' },
+    ])
+    const bad = STANDARD_GROUPS.map((queue) => ({ queue, intervals: ['8 to 12'] }))
+    expect(() =>
+      validateImageReading(
+        { isSchedule: true, kind: 'gpv', date: '2026-11-17', statedAt: null, schedule: bad },
+        input,
+      ),
+    ).toThrow(/not HH:MM-HH:MM/)
+  })
+
   it('needs every queue of the region, once', () => {
     const ok = validateImageReading(
       { isSchedule: true, kind: 'gpv', date: '2026-11-17', statedAt: null, schedule: full },

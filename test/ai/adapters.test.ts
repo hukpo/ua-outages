@@ -79,7 +79,7 @@ function openai(
           output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(answer) }] }],
           output_text: JSON.stringify(answer),
           usage: { input_tokens: 12, input_tokens_details: { cached_tokens: 8 }, output_tokens: 6 },
-          service_tier: req.service_tier,
+          service_tier: req.service_tier ?? 'default',
           ...reply,
         }
       },
@@ -157,7 +157,7 @@ describe('ua-outages/openai', () => {
     expect(p.id).toBe(`openai:gpt-6-luna:low:${PROMPT_VERSION}`)
     expect(await p.analyzePost(post, {})).toEqual({
       value: answer,
-      usage: { inputTokens: 12, cachedInputTokens: 8, outputTokens: 6, tier: 'flex' },
+      usage: { inputTokens: 12, cachedInputTokens: 8, outputTokens: 6, tier: 'default' },
     })
     const req = requests[0]!
     expect(req).toMatchObject({
@@ -165,22 +165,7 @@ describe('ua-outages/openai', () => {
       instructions: TEXT_SYSTEM,
       text: { format: { type: 'json_schema', name: 'post_analysis', schema: TEXT_SCHEMA, strict: true } },
       reasoning: { effort: 'low' },
-      service_tier: 'flex',
     })
-  })
-
-  it('runs on flex, at half the price, and falls back to standard when flex has no capacity', async () => {
-    const busy = Object.assign(new Error('Resource Unavailable'), { status: 429 })
-    const { client, requests } = openai((req) => (req.service_tier === 'flex' ? busy : null))
-    const r = await openaiTextProcessor({ client, model: 'm' }).analyzePost(post, {})
-    expect(requests.map((q) => q.service_tier)).toEqual(['flex', 'auto'])
-    expect(r.usage?.tier).toBe('auto')
-    // standard only: no fallback needed, and a 429 there is an error
-    const std = openai(busy)
-    await expect(
-      openaiTextProcessor({ client: std.client, model: 'm', serviceTier: 'auto' }).analyzePost(post, {}),
-    ).rejects.toMatchObject({ code: 'http' })
-    expect(std.requests).toHaveLength(1)
   })
 
   it('sends the picture as a data URL', async () => {
@@ -190,7 +175,7 @@ describe('ua-outages/openai', () => {
       requests[0]!.input as { content: { type: string; image_url?: string; detail?: string }[] }[]
     )[0]!.content
     const p = openaiImageProcessor({ client, model: 'gpt-6-luna' })
-    expect([p.maxLongEdge, p.minLongEdge]).toEqual([1600, 1600])
+    expect([p.maxLongEdge, p.minShortEdge]).toEqual([1000, 400])
     expect(content[0]).toEqual({
       type: 'input_image',
       detail: 'high',

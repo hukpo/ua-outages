@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { diffEvents, diffImage, readsPhotos } from '../../eval/score.js'
+import { diffEvents, diffImage, photosMatter, readsPhotos } from '../../eval/score.js'
 import type { ImageInput, ImageReading, PostAnalysis, PostInput, PostRegion } from '../../src/ai/types.js'
 import { validateImageReading, validatePostAnalysis } from '../../src/ai/validate.js'
 
@@ -30,7 +30,10 @@ function scoreText(name: string, answer: unknown): boolean {
   try {
     const got = validatePostAnalysis(answer, c.input)
     const want = validatePostAnalysis(c.expected, c.input)
-    return !diffEvents(want.events, got.events).length && readsPhotos(want) === readsPhotos(got)
+    return (
+      !diffEvents(want.events, got.events).length &&
+      (!photosMatter(c.input) || readsPhotos(want) === readsPhotos(got))
+    )
   } catch {
     return false
   }

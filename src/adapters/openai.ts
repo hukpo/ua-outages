@@ -39,23 +39,22 @@ export interface OpenAIProcessorOptions {
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
   /** Default 16000 */
   maxOutputTokens?: number
-  /**
-   * `service_tier`, default `flex`: the same model at half the price, answering slower. When
-   * flex has no capacity (429), the call is made again on the standard tier, so a schedule is
-   * never left unread for want of it. `auto` for standard processing only
-   */
-  serviceTier?: 'flex' | 'auto' | 'default' | 'priority'
+  /** `service_tier`; default the account's own (standard) */
+  serviceTier?: 'auto' | 'default' | 'flex' | 'priority'
 }
 
 export interface OpenAIImageProcessorOptions extends OpenAIProcessorOptions {
   /**
-   * Long edge the picture is scaled down to before it is sent, px; default 1600. OpenAI bills a
-   * picture by its size after scaling the short side to 768 px itself, so a larger one costs
-   * little more and keeps small cells legible
+   * Long edge the picture is scaled down to before it is sent, px; default 1000. OpenAI bills a
+   * picture by its pixels (~1 token per 800), and 1000 px is the least that keeps the half-hour
+   * cells of Volyn's table legible
    */
   maxLongEdge?: number
-  /** A smaller picture is scaled up by a whole factor towards this, px; default 1600, 0 for none */
-  minLongEdge?: number
+  /**
+   * A picture with a shorter short side is scaled up by a whole factor, pixel for pixel, px;
+   * default 400 (Zakarpattia's 800×210 grid goes as 1600×420), 0 for none
+   */
+  minShortEdge?: number
   /** Run the cheap "is it a schedule?" check on bare photos, default true */
   check?: boolean
   /** `detail` of the image input, default `high` */
@@ -76,30 +75,20 @@ async function ask(
   call: CallOptions,
 ): Promise<ProcessorResult> {
   // the instructions and schema come first and never change: OpenAI caches that prefix itself
-  const create = (tier: NonNullable<OpenAIProcessorOptions['serviceTier']>) =>
-    o.client.responses.create(
+  let res: OpenAI.Responses.Response
+  try {
+    res = await o.client.responses.create(
       {
         model: o.model,
         instructions: system,
         input: [{ role: 'user', content }],
         max_output_tokens: o.maxOutputTokens ?? 16000,
         text: { format: { type: 'json_schema', name, schema, strict: true } },
-        service_tier: tier,
+        ...(o.serviceTier ? { service_tier: o.serviceTier } : {}),
         ...(o.reasoningEffort ? { reasoning: { effort: o.reasoningEffort } } : {}),
       },
-      // flex answers slower: 15 min before giving up, as the docs advise
-      { signal: call.signal, ...(tier === 'flex' ? { timeout: 15 * 60_000 } : {}) },
+      { signal: call.signal },
     )
-  const tier = o.serviceTier ?? 'flex'
-  let res: OpenAI.Responses.Response
-  try {
-    try {
-      res = await create(tier)
-    } catch (e) {
-      // flex out of capacity (429, not billed): the standard tier, once
-      if (tier !== 'flex' || (e as { status?: unknown })?.status !== 429 || call.signal?.aborted) throw e
-      res = await create('auto')
-    }
   } catch (e) {
     throw vendorError(VENDOR, e, call.signal)
   }
@@ -151,8 +140,8 @@ const imageItem = (input: ImageInput, detail: 'low' | 'high' | 'auto') =>
 export function openaiImageProcessor(o: OpenAIImageProcessorOptions): ImageProcessor {
   return {
     id: `openai:${o.model}:${o.reasoningEffort ?? 'default'}:${o.detail ?? 'high'}:${PROMPT_VERSION}`,
-    maxLongEdge: o.maxLongEdge ?? 1600,
-    minLongEdge: o.minLongEdge ?? 1600,
+    maxLongEdge: o.maxLongEdge ?? 1000,
+    minShortEdge: o.minShortEdge ?? 400,
     readImage: (input, call) =>
       ask(
         o,

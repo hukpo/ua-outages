@@ -13,7 +13,7 @@ Posts and pictures are read by AI processors you plug in, instead of patterns an
 - Every answer is validated (`validatePostAnalysis`, `validateImageReading`): times and dates must exist and be near the post, queues must exist in the region, a schedule picture must give every queue. A failed answer is `parse`, never a guess.
 - Each post and picture is parsed once: answers are cached by a hash of the processor id and the whole input (a picture by its bytes), concurrent callers share one call, failed answers are remembered for 30 min. `MemoryProcessorCache` is the default; pass your own to persist.
 - Pictures are compacted before they are sent (`compactImage`, pure JS): scaled down to a long edge of 800 px by default (`maxLongEdge` per processor; 1600 px for `openaiImageProcessor`), flat margins trimmed, and a small one blown up by a whole factor, pixel for pixel, towards `minLongEdge` (1600 px for `openaiImageProcessor`, off otherwise) so thin grid cells stay legible. Bare photos are checked cheaply on a 256 px copy before a full read; a post's photos are read only when its text says they are the schedule.
-- `openaiTextProcessor` / `openaiImageProcessor` run on the `flex` service tier by default (`serviceTier`; half the price, slower), falling back to standard for a call when flex has no capacity. `ProcessorUsage` gains `cachedInputTokens` and `tier`.
+- `ProcessorUsage` reports `cachedInputTokens` and the vendor's service `tier`.
 - `RegionInfo.capabilities.requires`: the processors a region's schedule needs.
 - `OutageError` code `config`: a processor is needed and none is configured.
 - `TelegramPost.replyTo`: the post a reply quotes. A post reaches the text processor as one unit with it (Zaporizhzhia 17.11: 3629 explains 3628's cancel).

@@ -5,7 +5,7 @@
  * the same validation as any processor's.
  */
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -157,7 +157,13 @@ async function codex(
 function codexUsage(jsonl: string): { inputTokens: number; outputTokens: number } | undefined {
   for (const line of jsonl.split('\n').reverse()) {
     if (!line.includes('"turn.completed"')) continue
-    const u = JSON.parse(line).usage as { input_tokens: number; output_tokens: number }
+    const u = JSON.parse(line).usage as {
+      input_tokens: number
+      cached_input_tokens: number
+      output_tokens: number
+      reasoning_output_tokens: number
+    }
+    if (process.env.CODEX_USAGE_LOG) appendFileSync(process.env.CODEX_USAGE_LOG, JSON.stringify(u) + '\n')
     const base = Number(process.env.CODEX_BASELINE_TOKENS ?? 0)
     return { inputTokens: Math.max(0, u.input_tokens - base), outputTokens: u.output_tokens }
   }
@@ -174,13 +180,13 @@ export function codexCliText(model = 'gpt-6.1-terra', effort?: string): TextProc
 export function codexCliImage(
   model = 'gpt-6.1-terra',
   maxLongEdge?: number,
-  minLongEdge?: number,
+  minShortEdge?: number,
   effort?: string,
 ): ImageProcessor {
   return {
     id: `codex-cli:${model}:${effort ?? 'default'}:${PROMPT_VERSION}`,
     maxLongEdge,
-    minLongEdge,
+    minShortEdge,
     readImage: (input, o) =>
       codex(model, effort, IMAGE_SYSTEM, IMAGE_SCHEMA, imagePrompt(input), o.signal, input),
     isSchedule: (input, o) =>

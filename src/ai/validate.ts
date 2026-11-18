@@ -100,10 +100,20 @@ function emergencyQueueList(raw: string[], regions: readonly PostRegion[], what:
   return [...new Set(out)]
 }
 
-/** Intervals of one queue: real times, `from < to`, sorted and not overlapping once merged per kind */
+const SPAN = /^(\?)?\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})$/
+
+/**
+ * Intervals of one queue: real times, `from < to`. Each is "HH:MM-HH:MM" ("?…" for a possible
+ * outage), as the schema asks, or {from, to, kind}, as prompts before p9 did
+ */
 function intervals(v: unknown, what: string): ClockInterval[] {
   return arr(v, what).map((x, i) => {
-    const o = obj(x, `${what}[${i}]`)
+    let o: Record<string, unknown>
+    if (typeof x === 'string') {
+      const m = SPAN.exec(x.trim())
+      if (!m) return fail(`${what}[${i}]: "${x}" is not HH:MM-HH:MM`)
+      o = { from: m[2], to: m[3], kind: m[1] ? 'maybe' : 'off' }
+    } else o = obj(x, `${what}[${i}]`)
     const from = clockMinutes(o.from)
     const to = clockMinutes(o.to, true)
     if (from >= to) fail(`${what}[${i}]: ${o.from}–${o.to} doesn't go forward`)
@@ -175,6 +185,9 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
     // the hours may be in the post's picture
   }
 
+  // "9,10,1,2 знеструмлюємо; 3-6 будуть заживлені" read as a change or as a start with those
+  // queues: the state machine adds the queues and drops the restored ones either way
+  const effective: EventAction = emergency && action === 'change' && queues.length ? 'start' : action
   const allQueues = emergency ? bool(o.allQueues ?? false, `${w}.allQueues`) : false
   const additive = bool(o.additive ?? false, `${w}.additive`)
   const again = bool(o.again ?? false, `${w}.again`)
@@ -183,7 +196,7 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
   // compare equal: the emergency fields of a ГПВ event, "all queues" on a cancel naming none
   return {
     kind,
-    action,
+    action: effective,
     regions,
     area,
     date,
