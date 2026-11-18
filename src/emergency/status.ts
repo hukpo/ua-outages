@@ -127,12 +127,16 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   const tracks = new Map<string, Track>()
   /** The newest cancel that had nothing running to end (the apply was before the window) */
   let orphanCancel: EmergencyEvent | null = null
+  /** The newest word posted after a cancel announced for later, taking effect before it */
   let lastUnclear: EmergencyEvent | null = null
   /**
-   * The tracks an unread post may have changed, until a word posted after it about each of them:
-   * ГАВ (with the unnamed ones) and СГАВ apart, so a СГАВ cancel says nothing about a ГАВ in doubt
+   * What such a word leaves in doubt, until a word posted after it about each: ГАВ (with the
+   * unnamed ones) and СГАВ apart, so a СГАВ cancel says nothing about a ГАВ in doubt
    */
   const doubt = new Set<'main' | 'sgav'>()
+  /** The newest post that couldn't be read, and what it may have changed (the same way) */
+  let lastUnread: EmergencyEvent | null = null
+  const unreadDoubt = new Set<'main' | 'sgav'>()
   const groupsOf = (k: EmergencyKind): ('main' | 'sgav')[] =>
     k === 'emergency' ? ['main', 'sgav'] : k === 'sgav' ? ['sgav'] : ['main']
 
@@ -266,24 +270,32 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
           Date.parse(a.at) < c.at &&
           Date.parse(e.posted) > c.posted,
       )
-    if (a.action === 'unclear' || overtaken) {
-      // a post that can't be read may end what runs as well as start something: the state is
-      // not known until a word that can be read, and it doesn't keep an episode alive either.
-      // In doubt: what runs, ГАВ in any case (what an unread post most often starts), and СГАВ
-      // where the operator announces it
+    if (overtaken) {
+      // a reminder or the cancel called off: not known once the cancel's time has come
       lastUnclear = e
-      if (overtaken) for (const g of groupsOf(a.kind)) doubt.add(g)
-      else {
-        doubt.add('main')
-        if (usesSgav) doubt.add('sgav')
-      }
+      for (const g of groupsOf(a.kind)) doubt.add(g)
       for (const t of tracks.values()) if (t.active) for (const g of groupsOf(t.kind)) doubt.add(g)
+      continue
+    }
+    if (a.action === 'unclear') {
+      // a post that can't be read (yet: it is asked again on a later poll) may have ended what runs
+      // or started something: the state stays as the posts before it make it, flagged, and it
+      // doesn't keep an episode alive. What it may have changed: what runs, ГАВ in any case (what
+      // an unread post most often starts), and СГАВ where the operator announces it
+      lastUnread = e
+      unreadDoubt.add('main')
+      if (usesSgav) unreadDoubt.add('sgav')
+      for (const t of tracks.values()) if (t.active) for (const g of groupsOf(t.kind)) unreadDoubt.add(g)
       continue
     }
     // a word posted after the unread one settles its kinds; one posted before it but taking
     // effect later ("об 11:00 вводяться", posted 10:40) doesn't
-    if (lastUnclear && Date.parse(e.posted) >= Date.parse(lastUnclear.posted))
-      for (const g of groupsOf(a.kind)) doubt.delete(g)
+    for (const [last, set] of [
+      [lastUnclear, doubt],
+      [lastUnread, unreadDoubt],
+    ] as const)
+      if (last && Date.parse(e.posted) >= Date.parse(last.posted))
+        for (const g of groupsOf(a.kind)) set.delete(g)
 
     if (a.action === 'cancel') {
       const kinds: EmergencyKind[] =
@@ -386,14 +398,18 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
 
   const message = (e: EmergencyEvent | null) =>
     e ? { text: e.text.slice(0, MESSAGE_MAX), url: e.url, at: e.posted } : null
+  // a newer post that couldn't be read yet: the state below, flagged (it lapses with the TTL)
+  const unread =
+    lastUnread && unreadDoubt.size && now < lapse(timeOf(lastUnread)) ? message(lastUnread)! : null
   const status = (s: Omit<EmergencyStatus, 'region' | 'source' | 'fetchedAt'>): EmergencyStatus => ({
     region: opts.region,
     ...s,
+    ...(unread ? { unread } : {}),
     source: opts.source,
     fetchedAt,
   })
 
-  // the newest word can't be read: say so rather than guess (it expires with the TTL)
+  // a word that may have called off a cancel announced for later: not known (it expires with the TTL)
   if (lastUnclear && doubt.size && now < lapse(timeOf(lastUnclear)))
     return status({
       state: 'unknown',

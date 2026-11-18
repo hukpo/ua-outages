@@ -466,6 +466,12 @@ export interface EmergencyStatus {
   inferred: boolean
   /** The newest announcement this status is based on */
   message: { text: string; url: string | null; at: string } | null
+  /**
+   * A newer post that couldn't be read yet (the AI answer failed, or its readings disagree): the
+   * state is as the posts before it make it, and may be behind until it reads (asked again on a
+   * later poll). Show it with a warning and a link to the post
+   */
+  unread?: { text: string; url: string | null; at: string }
   source: 'telegram' | 'api' | 'yasno' | 'ukrenergo'
   fetchedAt: string
 }

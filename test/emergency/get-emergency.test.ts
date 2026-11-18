@@ -612,11 +612,12 @@ describe('posts read wrong by the 0.4 regex classifier', () => {
       now: () => new Date('2026-11-17T15:00:00+02:00'),
       textProcessor: text,
     }).getEmergency('kirovohrad')
-    // 1835 (СГАВ cancelled) can't be read: it may end the СГАВ from 10:12 as well as not, so the
-    // state is not known (neither "inactive" nor kept alive by it)
+    // 1835 (СГАВ cancelled) can't be read yet: the state is as the posts before it make it (the
+    // СГАВ from 10:12), flagged with 1835, which is read again on the next poll
     expect(s).toMatchObject({
-      state: 'unknown',
-      message: { url: 'https://t.me/SvitloKropyvnytskyiMisto/1835' },
+      state: 'active',
+      kind: 'sgav',
+      unread: { url: 'https://t.me/SvitloKropyvnytskyiMisto/1835' },
     })
   })
 })

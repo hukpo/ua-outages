@@ -45,7 +45,7 @@ async function fold(region: RegionId, items: [string, string, PostEvent[], PostE
 const gav = (o: Partial<PostEvent> & Pick<PostEvent, 'action'>) =>
   ev({ kind: 'gav', regions: ['zaporizhzhia'], ...o })
 
-describe('an unread post: in doubt until a word posted after it', () => {
+describe('an unread post: the state before it, flagged until a word posted after it', () => {
   it('an apply announced for later, posted before the unread post, does not settle it', async () => {
     const s = await fold(
       'zaporizhzhia',
@@ -59,7 +59,7 @@ describe('an unread post: in doubt until a word posted after it', () => {
       ],
       '2026-11-18T11:05:00+02:00',
     )
-    expect(s.state).toBe('unknown')
+    expect(s).toMatchObject({ state: 'active', queues: ['1', '2'], unread: { url: 'https://t.me/x/2' } })
   })
 
   it('a СГАВ cancel says nothing about a ГАВ in doubt; a ГАВ cancel does', async () => {
@@ -72,13 +72,14 @@ describe('an unread post: in doubt until a word posted after it', () => {
       [...items, ['СГАВ скасовано', '2026-11-18T10:00:00+02:00', [gav({ kind: 'sgav', action: 'cancel' })]]],
       '2026-11-18T10:30:00+02:00',
     )
-    expect(sgav.state).toBe('unknown')
+    expect(sgav).toMatchObject({ state: 'active', unread: { url: 'https://t.me/x/2' } })
     const cancel = await fold(
       'zaporizhzhia',
       [...items, ['ГАВ скасовано', '2026-11-18T10:00:00+02:00', [gav({ action: 'cancel' })]]],
       '2026-11-18T10:30:00+02:00',
     )
     expect(cancel.state).toBe('inactive')
+    expect(cancel.unread).toBeUndefined()
   })
 })
 
@@ -245,7 +246,7 @@ describe('round 3', () => {
       ],
       '2026-11-18T09:30:00+02:00',
     )
-    expect(s.state).toBe('unknown')
+    expect(s).toMatchObject({ state: 'active', kind: 'gav', unread: { url: 'https://t.me/x/2' } })
   })
 
   it('"1-5 ввімкнені" while only the count was known: fewer', async () => {

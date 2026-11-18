@@ -274,7 +274,7 @@ Many operators publish for people, not programs: a Telegram post "ГПВ на 17
 
 - **Text processor**: a post (its own text, the post it replies to, how many photos it has, the regions its channel covers) → typed events: `gpv` / `gav` / `sgav` / `emergency` / `other`, `start` / `cancel` / `change`, the time, the queues with their hours, the area, the day it is about (`PostInput` → `PostAnalysis`).
 - **Image processor**: a picture (with its caption) → whether it is a schedule, its date, and each queue's `off` / `maybe` hours (`ImageInput` → `ImageReading`).
-- **Checked, never guessed**: a time like "25:10", a date that doesn't exist or is days away from the post, a queue the region doesn't have, a schedule picture missing a queue — the whole answer is refused (`parse`). A post that can't be read never ends an emergency, and a schedule source whose newest post can't be read fails rather than show an older version.
+- **Checked, never guessed**: a time like "25:10", a date that doesn't exist or is days away from the post, a queue the region doesn't have, a schedule picture missing a queue — the whole answer is refused (`parse`). A post that can't be read never ends or extends anything: the schedule or emergency state stays as the posts before it make it, flagged (`sources[].unread`, `EmergencyStatus.unread`, with the post) so an app can warn that it may have changed, and the post is read again after 10 minutes.
 
 Ready-made processors, each a separate entry point on structured outputs (JSON schemas). The libraries are optional peer dependencies: install the one you use. The SDK holds no key: you pass your own client or model.
 

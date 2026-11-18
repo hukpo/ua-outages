@@ -48,7 +48,8 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
   tested on are in the eval set (`eval/text/`, tag `regression`), including the two it got
   wrong in November 2026: Kropyvnytskyi 1834 «В 14:05 відміна дії графіку ГАВ» and Zaporizhzhia
   3629, an explainer replying to the 3628 cancel. A post whose answer fails validation is an
-  "unclear" event: `unknown` while it is the newest word, never an end.
+  "unclear" event: never an end; the state stays as before it, flagged in `unread` while it is the
+  newest word about its kind.
 - **Folding** (`src/emergency/status.ts`): ГАВ, СГАВ and unnamed emergency shutdowns are followed
   separately, one episode per area (null = whole region); a cancel for an area ends that area, a
   whole-region cancel ends all, and an area cancel with only a whole-region episode on (ЦЕК 09.11:
@@ -86,8 +87,8 @@ EmergencyShutdowns` is active. YASNO not showing it ends nothing by itself (`upd
   channels by time). Its national posts are read by the text processor once for all five, each
   event naming the oblasts it is about ("Волинській області", "на Закарпатті", "Рівненщині");
   "аварійні відключення продовжують діяти лише у Харківській області" cancels it for the
-  others; "можуть бути застосовані" is nothing. A post the processor reads as unclear makes the
-  state unknown and never extends an episode.
+  others; "можуть бути застосовані" is nothing. A post the processor can't read leaves the state
+  as it was, flagged (`unread`), and never extends an episode.
 
 Not used: Poltava's `dynamic-unloading-info.php` (start times only, end is a 23:59 placeholder,
 misses re-applications: the channel is better), Mykolaiv `outage-queue/by-type/1` `enabled`
