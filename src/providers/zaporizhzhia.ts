@@ -8,10 +8,11 @@ import {
   daysToSource,
   gpvEvents,
   groundTimeless,
-  markUnread,
+  assembleDays,
   postsToDays,
   readChannelPosts,
-  unreadOf,
+  textPublications,
+  textUnread,
   type PostDay,
 } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
@@ -183,10 +184,16 @@ async function readZoe(ctx: ProviderContext, html: string): Promise<SiteRead> {
     analyzed.map((a, i) => ({ date: each[i]?.[0] ?? null, stamp: stampOf(a) })),
     now,
   )
-  const days = postsToDays(analyzed, INFO.id, now, SITE_POSTS)
   // an article above the newest one read fine for its day may be the current version of it: that
-  // day is not known (only a whole day newer on the page stands in for it)
-  markUnread(days, analyzed, unreadOf(analyzed, INFO.id, now, SITE_POSTS), SITE_POSTS)
+  // day is flagged (only a whole day newer on the page stands in for it)
+  const days = assembleDays(
+    analyzed,
+    textPublications(analyzed, INFO.id, now, SITE_POSTS),
+    textUnread(analyzed, INFO.id, now, SITE_POSTS),
+    INFO.id,
+    now,
+    SITE_POSTS,
+  )
   return {
     read: daysToSource(days, { ...POSTS, publishedAt: (day) => times[day.post] ?? null }),
     versions: each.flatMap((e) => (e ? [{ date: e[0], content: contentOf(e[0], e[1]) }] : [])),

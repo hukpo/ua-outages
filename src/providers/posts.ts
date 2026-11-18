@@ -1,4 +1,4 @@
-import { analyzeAll, channelInputs, unreadDays, type Analyzed } from '../ai/posts.js'
+import { analyzeAll, channelInputs, type Analyzed } from '../ai/posts.js'
 import { toSlots } from '../ai/map.js'
 import type { PostAnalysis, PostEvent, PostInput } from '../ai/types.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
@@ -221,37 +221,6 @@ export const gpvEvents = (a: PostAnalysis, region: RegionId): PostEvent[] =>
 export const hasSchedule = (a: PostAnalysis, region: RegionId) => gpvEvents(a, region).length > 0
 
 /**
- * The days a read post gives a whole new version of (a list, or a cancellation): what can stand
- * in for an unread post about the same day (see `unreadDays`). A correction (`change`)
- * or a post whose hours are elsewhere can't. `pictures`: a post announcing its picture counts
- * (the picture reader has its hours)
- */
-export function scheduleDates(
-  a: Analyzed,
-  region: RegionId,
-  now: Date,
-  opts: PostsOptions & { pictures?: boolean } = {},
-): string[] {
-  if (!a.analysis) return []
-  const day = opts.timeless
-    ? kyivDate(now)
-    : kyivDate(new Date(Date.parse(a.input.publishedAt) || now.getTime()))
-  return gpvEvents(a.analysis, region).flatMap((e) => {
-    const date = e.date ?? day
-    if (e.action === 'cancel') return [date]
-    if (e.action !== 'start') return []
-    // hours in the picture: only a caption that names its day says which day it is (the picture
-    // may be for tomorrow); the picture reader counts the pictures themselves
-    if (!e.schedule.length && !(opts.pictures && e.dateNamed)) return []
-    // only a whole day stands in for an unread post: "з 14:00 до 18:00", or a list posted during
-    // its day that replaces only the hours ahead, leaves the rest as the unread post may have made it
-    if (e.at || e.until) return []
-    if (opts.updates === 'layer' && opts.layerFrom !== 'stated' && !opts.timeless && date === day) return []
-    return [date]
-  })
-}
-
-/**
  * Analysed posts → what they say per date, for yesterday and later, dates sorted. Posts are
  * ranked by `publishedAt`; among posts with the same time, the one earlier in the list is newer.
  * Only `gpv` events count: a "start" or "change" lists queues and hours, a "cancel" calls the
@@ -267,7 +236,10 @@ export function postsToDays(
   now: Date,
   opts: PostsOptions = {},
 ): Map<string, PostDay> {
-  return daysOf(textPublications(analyzed, region, now, opts), opts)
+  return daysOf(
+    untilFurtherNotice(textPublications(analyzed, region, now, opts), analyzed, region, now, opts),
+    opts,
+  )
 }
 
 /** One publication about one date, with the post it came from (its index) and time (ms, NaN unknown) */
@@ -330,7 +302,7 @@ export function textPublications(
       })
     }
   })
-  return untilFurtherNotice(out, analyzed, region, now, opts)
+  return out
 }
 
 /**
@@ -395,8 +367,135 @@ export function daysOf(pubs: readonly DatedPublication[], opts: PostsOptions = {
 }
 
 /**
- * Posts through the text processor, then `postsToDays`. The source fails when a post newer than
- * every schedule read couldn't be read itself (it may be the newest schedule).
+ * A publication that is the whole day (a list or picture for all of it, or a cancellation): the
+ * only thing that stands in for a newer post about the day that couldn't be read. A correction
+ * (`add`), a window, or an update for the hours ahead don't. The one place this is decided
+ */
+export const isWhole = (p: Publication): boolean =>
+  !!p.cancelled || (!p.add && p.from <= 0 && (p.to ?? 1440) >= 1440)
+
+/** A post (by index) that couldn't be read, and the days it may be about */
+export interface UnreadItem {
+  post: number
+  days: string[]
+  error: OutageError
+}
+
+/** The days a post that couldn't be read may be about: its own and the next; on a page without times, yesterday to tomorrow */
+export function unreadCandidates(input: PostInput, now: Date, opts: PostsOptions = {}): string[] {
+  const today = kyivDate(now)
+  if (opts.timeless) return [addDays(today, -1), today, addDays(today, 1)]
+  const day = kyivDate(new Date(Date.parse(input.publishedAt) || now.getTime()))
+  return [day, addDays(day, 1)]
+}
+
+/**
+ * What a text reader can't read: posts whose answer failed, and the newest schedule post of a
+ * day whose hours are elsewhere (a picture, a link) for a reader without pictures (`blind`)
+ */
+export function textUnread(
+  analyzed: readonly Analyzed[],
+  region: RegionId,
+  now: Date,
+  opts: PostsOptions = {},
+  { blind = true }: { blind?: boolean } = {},
+): UnreadItem[] {
+  const out: UnreadItem[] = []
+  analyzed.forEach((a, post) => {
+    if (a.error) {
+      const error =
+        a.error instanceof OutageError
+          ? a.error
+          : new OutageError('parse', String(a.error), { region, url: a.input.url })
+      out.push({ post, days: unreadCandidates(a.input, now, opts), error })
+      return
+    }
+    if (!a.analysis || !blind) return
+    for (const e of gpvEvents(a.analysis, region)) {
+      if (e.action === 'cancel' || e.schedule.length) continue
+      const d =
+        e.date ??
+        (opts.timeless ? kyivDate(now) : kyivDate(new Date(Date.parse(a.input.publishedAt) || now.getTime())))
+      out.push({
+        post,
+        days: [d],
+        error: new OutageError(
+          'parse',
+          `${a.input.url}: the newest schedule post for ${d} has its hours outside its text`,
+          {
+            region,
+            url: a.input.url,
+          },
+        ),
+      })
+    }
+  })
+  return out
+}
+
+/** Which of two posts (by index) is newer: by time, then message id; on a page without times, the higher on the page */
+export function newerThan(analyzed: readonly Analyzed[], opts: PostsOptions = {}) {
+  const rank = (i: number): [number, number] => {
+    const input = analyzed[i]?.input
+    if (!input || opts.timeless) return [-i, 0]
+    return [Date.parse(input.publishedAt) || 0, seqOf(input, i)]
+  }
+  return (a: number, b: number) => {
+    const [x, y] = [rank(a), rank(b)]
+    return x[0] > y[0] || (x[0] === y[0] && x[1] > y[1])
+  }
+}
+
+/**
+ * The days (today and later) an unread post may have changed that no newer whole publication
+ * stands in for: day → the item. The first item found per day is kept
+ */
+export function resolveUnread(
+  items: readonly UnreadItem[],
+  pubs: readonly DatedPublication[],
+  newer: (a: number, b: number) => boolean,
+  now: Date,
+): Map<string, UnreadItem> {
+  const today = kyivDate(now)
+  const out = new Map<string, UnreadItem>()
+  for (const item of items)
+    for (const d of item.days)
+      if (
+        d >= today &&
+        !out.has(d) &&
+        !pubs.some((p) => p.date === d && isWhole(p.pub) && newer(p.post, item.post))
+      )
+        out.set(d, item)
+  return out
+}
+
+/**
+ * Publications and what couldn't be read → days: the publications layered (see `daysOf`), and a
+ * day an unread post may have changed flagged (`PostDay.unread`): it stays as read, or, with
+ * nothing read for it, is added as not known. Every post reader goes through here
+ */
+export function assembleDays(
+  analyzed: readonly Analyzed[],
+  pubs: DatedPublication[],
+  items: readonly UnreadItem[],
+  region: RegionId,
+  now: Date,
+  opts: PostsOptions = {},
+): Map<string, PostDay> {
+  const all = untilFurtherNotice(pubs, analyzed, region, now, opts)
+  const unread = resolveUnread(items, all, newerThan(analyzed, opts), now)
+  const days = daysOf(all, opts)
+  for (const [d, item] of unread) {
+    const day = days.get(d)
+    const at = opts.timeless ? NaN : Date.parse(analyzed[item.post]?.input.publishedAt ?? '')
+    days.set(d, day ? { ...day, unread: item.error } : unreadDay(at, item.post, item.error))
+  }
+  return new Map([...days.entries()].sort(([a], [b]) => a.localeCompare(b)))
+}
+
+/**
+ * Text posts through the text processor, then `assembleDays`. A post that can't be read (yet)
+ * leaves the days it may be about as read, flagged
  */
 export async function readSchedulePosts(
   ctx: ProviderContext,
@@ -406,9 +505,14 @@ export async function readSchedulePosts(
 ): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[] }> {
   const now = ctx.now()
   const analyzed = groundTimeless(await analyzeAll(ctx, region, inputs), region, opts)
-  // a day whose newest post can't be read (yet) stays as the posts read make it, flagged
-  const days = postsToDays(analyzed, region, now, opts)
-  markUnread(days, analyzed, unreadOf(analyzed, region, now, opts), opts)
+  const days = assembleDays(
+    analyzed,
+    textPublications(analyzed, region, now, opts),
+    textUnread(analyzed, region, now, opts),
+    region,
+    now,
+    opts,
+  )
   return { days, analyzed }
 }
 
@@ -434,71 +538,6 @@ export function groundTimeless(analyzed: Analyzed[], region: RegionId, opts: Pos
         }
       : a,
   )
-}
-
-/**
- * The days that can't be shown, and why: a post about them couldn't be read (see `unreadDays`),
- * or the newest schedule post for one has its hours elsewhere (a picture, a link), which a text
- * reader can't show, and the post before it is no longer the schedule
- */
-export function unreadOf(
-  analyzed: readonly Analyzed[],
-  region: RegionId,
-  now: Date,
-  opts: PostsOptions = {},
-): Map<string, OutageError> {
-  const unread = unreadDays(analyzed, (a) => scheduleDates(a, region, now, opts), now, !!opts.timeless)
-  const dayOf = (a: Analyzed, e: PostEvent) =>
-    e.date ??
-    (opts.timeless ? kyivDate(now) : kyivDate(new Date(Date.parse(a.input.publishedAt) || now.getTime())))
-  const rank = (a: Analyzed, i: number) => (opts.timeless ? -i : Date.parse(a.input.publishedAt))
-  const withHours = analyzed.flatMap((a, i) =>
-    scheduleDates(a, region, now, opts).map((d) => ({ d, r: rank(a, i) })),
-  )
-  analyzed.forEach((a, i) => {
-    if (!a.analysis) return
-    for (const e of gpvEvents(a.analysis, region)) {
-      if (e.action === 'cancel' || e.schedule.length) continue
-      const d = dayOf(a, e)
-      if (d < kyivDate(now) || unread.has(d) || withHours.some((h) => h.d === d && h.r > rank(a, i))) continue
-      unread.set(
-        d,
-        new OutageError(
-          'parse',
-          `${a.input.url}: the newest schedule post for ${d} has its hours outside its text`,
-          {
-            region,
-            url: a.input.url,
-          },
-        ),
-      )
-    }
-  })
-  return unread
-}
-
-/**
- * Flags the days of `errors` (date → why) in `days` as having a newer post that couldn't be read;
- * a day nothing read is about is added, not known. True when any was flagged
- */
-export function markUnread(
-  days: Map<string, PostDay>,
-  analyzed: readonly Analyzed[],
-  errors: Map<string, OutageError>,
-  opts: PostsOptions = {},
-): boolean {
-  for (const [d, error] of errors) {
-    const post = analyzed.findIndex((a) => a.input.url === error.details?.url)
-    const at = opts.timeless || post < 0 ? NaN : Date.parse(analyzed[post]!.input.publishedAt)
-    const day = days.get(d)
-    days.set(d, day ? { ...day, unread: error } : unreadDay(at, Math.max(post, 0), error))
-  }
-  if (errors.size) {
-    const sorted = [...days.entries()].sort(([a], [b]) => a.localeCompare(b))
-    days.clear()
-    for (const [d, v] of sorted) days.set(d, v)
-  }
-  return errors.size > 0
 }
 
 /** One date's groups → a `DaySchedule` per group of the region */

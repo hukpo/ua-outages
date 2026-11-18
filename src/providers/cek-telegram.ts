@@ -4,7 +4,7 @@ import { makeDay, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
 import { OutageError } from '../errors.js'
-import { daysOf, textPublications, unreadOf } from './posts.js'
+import { assembleDays, textPublications, textUnread } from './posts.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead, SourceSpec } from './sources.js'
 
@@ -73,7 +73,6 @@ export async function cekDays(
 ): Promise<Map<string, CekDay>> {
   const region = 'dnipro-cek'
   const now = ctx.now()
-  const recent = kyivInstant(addDays(kyivDate(now), -1), 0).getTime()
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const all = await analyzeAll(ctx, region, channelInputs(sorted, region))
   // town lists aren't the region's
@@ -83,13 +82,14 @@ export async function cekDays(
   const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer', layerFrom: 'stated' } as const
   // a post that couldn't be read (yet), or "графік оновлено, дивіться на сайті": the day stays
   // as read before it, flagged; it is read again on the next poll
-  // only recent posts (since yesterday) matter: an older one is about days gone
-  const postedAt = (url: unknown) =>
-    Date.parse(analyzed.find((a) => a.input.url === url)?.input.publishedAt ?? '')
-  const unread = [...unreadOf(analyzed, region, now, opts)].filter(
-    ([d, e]) => d >= kyivDate(new Date(recent)) && postedAt(e.details?.url) >= recent,
+  const days = assembleDays(
+    analyzed,
+    textPublications(analyzed, region, now, opts),
+    textUnread(analyzed, region, now, opts),
+    region,
+    now,
+    opts,
   )
-  const days = daysOf(textPublications(analyzed, region, now, opts), opts)
   const out = new Map<string, CekDay>()
   for (const [date, day] of days) {
     const groups: Record<GroupId, MinuteSlot[] | null> = {}
@@ -98,21 +98,11 @@ export async function cekDays(
       groups[g] = day.cancelled ? null : (day.groups[g] ?? (day.groups[g] === null || !day.based ? null : []))
     out.set(date, {
       at: day.at,
-      url: analyzed[day.post]!.input.url,
+      url: analyzed[day.post]?.input.url ?? '',
       groups,
       ...(day.cancelled ? { cancelled: true } : {}),
+      ...(day.unread ? { unread: day.unread.message } : {}),
     })
-  }
-  for (const [d, error] of unread) {
-    const day = out.get(d)
-    if (day) day.unread = error.message
-    else
-      out.set(d, {
-        at: NaN,
-        url: String(error.details?.url ?? ''),
-        groups: Object.fromEntries(CEK_GROUPS.map((g) => [g, null])),
-        unread: error.message,
-      })
   }
   // back to the hourly schedule after an emergency: the list stands again as of that post
   for (const { input, analysis } of analyzed) {

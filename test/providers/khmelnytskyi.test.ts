@@ -419,7 +419,8 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     )
     const { s } = await schedules([PAGE, ARCHIVE, LIST, ...NEWS, CHANNEL], NIGHT, text)
     expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
-    expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-16')
+    // a page without times: the block may be about any day it still shows, today on
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-17')
     // the news post has the same blocks
     expect(s.sources![1]).toMatchObject({ id: 'news', ok: true })
   })

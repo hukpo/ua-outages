@@ -1,4 +1,4 @@
-import { analyzeAll, channelInputs, unreadDays, type Analyzed } from '../ai/posts.js'
+import { analyzeAll, channelInputs, type Analyzed } from '../ai/posts.js'
 import { postRegion } from '../ai/regions.js'
 import type { ImageReading, PostAnalysis, PostRegion } from '../ai/types.js'
 import type { TelegramPost } from '../emergency/telegram.js'
@@ -11,12 +11,12 @@ import { toSlots } from '../ai/map.js'
 import { clockMinutes } from '../ai/validate.js'
 import { hourlySchedule, readingToDay } from './image-schedule.js'
 import {
-  daysOf,
+  assembleDays,
   gpvEvents,
-  markUnread,
-  scheduleDates,
+  isWhole,
   textPublications,
-  untilFurtherNotice,
+  textUnread,
+  type UnreadItem,
   type DatedPublication,
   type PostDay,
   type PostsOptions,
@@ -92,11 +92,6 @@ export async function readPicturePosts(
   const analyzed: Analyzed[] = posts.map(
     (p) => byUrl.get(p.url) ?? { input: channelInputs([p], region)[0]!, analysis: null, error: null },
   )
-  const unreadCaptions = unreadDays(
-    analyzed,
-    (a) => scheduleDates(a, region, now, { ...opts, pictures: true }),
-    now,
-  )
 
   // CDN links expire: the pictures are fetched right after the page, and only those that matter
   const wanted = posts
@@ -116,8 +111,8 @@ export async function readPicturePosts(
 
   const pubs: DatedPublication[] = textPublications(analyzed, region, now, opts)
   const pictures: PicturePostsRead['pictures'] = {}
-  /** Posts whose pictures couldn't be read, by index, with the days they may be for */
-  const unread: { i: number; days: string[]; error: unknown }[] = []
+  /** What couldn't be read: captions (their hours are in the pictures, read below), then pictures */
+  const unread: UnreadItem[] = textUnread(analyzed, region, now, opts, { blind: false })
   // a post that says its schedule is in a picture, with none to fetch: as good as unread
   posts.forEach((post, i) => {
     const a = analyzed[i]!.analysis
@@ -125,7 +120,7 @@ export async function readPicturePosts(
     const postDay = kyivDate(new Date(post.at))
     const said = captionDate(a, region, postDay)
     unread.push({
-      i,
+      post: i,
       days: said ? [said] : [postDay, addDays(postDay, 1)],
       error: fail(region, post.url, 'the post announces a schedule picture and has none'),
     })
@@ -138,9 +133,7 @@ export async function readPicturePosts(
         // version replaces the hours from its post time on
         if (
           !r.stated &&
-          !pubs.some(
-            (p) => p.date === r.pub.date && p.post < w.i && !p.pub.add && !p.pub.cancelled && p.pub.from <= 0,
-          )
+          !pubs.some((p) => p.date === r.pub.date && p.post < w.i && !p.pub.cancelled && isWhole(p.pub))
         )
           r.pub.pub = { ...r.pub.pub, from: 0 }
         pubs.push(r.pub)
@@ -151,35 +144,12 @@ export async function readPicturePosts(
       const postDay = kyivDate(new Date(w.post.at))
       const said = captionDate(w.a.analysis, region, postDay)
       // a poster is for the day it is posted or the next: either may be the one it replaced
-      unread.push({ i: w.i, days: said ? [said] : [postDay, addDays(postDay, 1)], error })
+      unread.push({ post: w.i, days: said ? [said] : [postDay, addDays(postDay, 1)], error })
     }
   }
-  untilFurtherNotice(pubs, analyzed, region, now, opts)
-  // a picture or caption that can't be read may be newer than every one that can: an older one
-  // must not pass for the current schedule. Only a later whole day (a list or a picture posted
-  // before its day, or a cancellation) stands in for it: one posted during the day replaces only
-  // the hours ahead
-  const indexOf = (url: string) => posts.findIndex((x) => x.url === url)
-  const wholeAfter = (d: string, i: number) =>
-    pubs.some(
-      (p) =>
-        p.date === d &&
-        p.post > i &&
-        (p.pub.cancelled || (!p.pub.add && p.pub.from <= 0 && (p.pub.to ?? 1440) >= 1440)),
-    )
-  const errors = new Map<string, OutageError>()
-  for (const u of unread)
-    for (const d of u.days)
-      if (d >= kyivDate(now) && !wholeAfter(d, u.i) && !errors.has(d))
-        errors.set(
-          d,
-          u.error instanceof OutageError ? u.error : fail(region, posts[u.i]!.url, String(u.error)),
-        )
-  for (const [d, error] of unreadCaptions)
-    if (!errors.has(d) && !wholeAfter(d, indexOf(String(error.details?.url)))) errors.set(d, error)
-
-  const days = daysOf(pubs, opts)
-  markUnread(days, analyzed, errors, opts)
+  // a picture or caption that can't be read may be newer than every one that can: the day stays
+  // as read, flagged, until a later whole day (see `isWhole`)
+  const days = assembleDays(analyzed, pubs, unread, region, now, opts)
   const newest = [...days.values()]
     .filter((d) => !d.unread || Object.keys(d.groups).length)
     .sort((x, y) => y.at - x.at)[0]

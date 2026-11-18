@@ -148,29 +148,33 @@ describe('hourlySchedule: a ГАВ table is not the day’s hours', () => {
   })
 })
 
-describe('unreadDays: an unread post taints the days it could be about', () => {
-  it("tomorrow's list after it doesn't vouch for today", async () => {
-    const { unreadDays } = await import('../../src/ai/posts.js')
+describe('resolveUnread: an unread post flags the days it could be about', () => {
+  it("tomorrow's list after it doesn't vouch for today; a whole list for today does", async () => {
+    const { resolveUnread } = await import('../../src/providers/posts.js')
     const { OutageError } = await import('../../src/errors.js')
-    const at = (publishedAt: string, ok: boolean, dates: string[]) => ({
-      a: {
-        input: { publishedAt } as never,
-        analysis: ok ? ({ events: [], photosAreSchedules: false, statedAt: null } as never) : null,
-        error: ok ? null : new OutageError('parse', 'misread'),
-      },
-      dates,
+    const item = { post: 1, days: ['2026-11-18', '2026-11-19'], error: new OutageError('parse', 'misread') }
+    const pub = (date: string, post: number, over: object = {}) => ({
+      date,
+      at: 0,
+      post,
+      pub: { groups: {}, from: 0, ...over },
     })
-    const list = [
-      at('2026-11-18T08:00:00+02:00', true, ['2026-11-18']),
-      at('2026-11-18T10:00:00+02:00', false, []),
-      at('2026-11-18T20:00:00+02:00', true, ['2026-11-19']),
-    ]
-    const datesOf = (a: unknown) => list.find((l) => l.a === a)!.dates
-    const out = unreadDays(
-      list.map((l) => l.a),
-      datesOf as never,
-      new Date('2026-11-18T21:00:00+02:00'),
-    )
-    expect([...out.keys()]).toEqual(['2026-11-18'])
+    const newer = (a: number, b: number) => a > b
+    const now = new Date('2026-11-18T21:00:00+02:00')
+    expect([
+      ...resolveUnread([item], [pub('2026-11-18', 0), pub('2026-11-19', 2)], newer, now).keys(),
+    ]).toEqual(['2026-11-18'])
+    expect([
+      ...resolveUnread([item], [pub('2026-11-18', 2), pub('2026-11-19', 2)], newer, now).keys(),
+    ]).toEqual([])
+    // a correction or a window doesn't
+    expect([
+      ...resolveUnread(
+        [item],
+        [pub('2026-11-18', 2, { add: true }), pub('2026-11-19', 2, { from: 600 })],
+        newer,
+        now,
+      ).keys(),
+    ]).toEqual(['2026-11-18', '2026-11-19'])
   })
 })

@@ -1,5 +1,5 @@
 import { toSlots } from '../ai/map.js'
-import { analyzeAll, channelInputs, unreadDays } from '../ai/posts.js'
+import { analyzeAll, channelInputs } from '../ai/posts.js'
 import type { PostEvent } from '../ai/types.js'
 import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
@@ -16,7 +16,7 @@ import type {
   ProviderInfo,
   Street,
 } from '../types.js'
-import { gpvEvents, scheduleDates } from './posts.js'
+import { gpvEvents, newerThan, resolveUnread, textUnread, type DatedPublication } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
@@ -307,10 +307,28 @@ export async function parseChannelPosts(
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const analyzed = await analyzeAll(ctx, INFO.id, channelInputs(sorted, INFO.id))
   // a post that can't be read may be the newest version of a day: its clock and text are unknown
-  const unread = unreadDays(
-    analyzed,
-    (a) => scheduleDates(a, INFO.id, ctx.now(), { pictures: true }),
-    ctx.now(),
+  // what stands in for it: a newer list, picture announcement or cancellation of the day
+  const newer: DatedPublication[] = analyzed.flatMap((a, post) =>
+    a.analysis
+      ? gpvEvents(a.analysis, INFO.id)
+          .filter((e) => e.action === 'cancel' || e.action === 'start')
+          .map((e) => ({
+            date: e.date ?? kyivDate(new Date(a.input.publishedAt)),
+            at: Date.parse(a.input.publishedAt),
+            post,
+            pub: { groups: {}, from: 0 },
+          }))
+      : [],
+  )
+  const unread = new Map(
+    [
+      ...resolveUnread(
+        textUnread(analyzed, INFO.id, ctx.now(), {}, { blind: false }),
+        newer,
+        newerThan(analyzed),
+        ctx.now(),
+      ),
+    ].map(([d, item]) => [d, item.error]),
   )
   for (const { input, analysis } of analyzed) {
     if (!analysis) continue
@@ -333,7 +351,8 @@ export async function parseChannelPosts(
   }
   // a day whose newest post can't be read: neither its time nor its text is known, and an older
   // post's must not pass for them
-  for (const [d, error] of unread) if (clock.has(d) || text.has(d) || !clock.size) throw error
+  // (today and later: this reader has no flag, the site stands alone instead)
+  for (const error of unread.values()) throw error
   return { clock, text }
 }
 
