@@ -9,7 +9,7 @@ import type { Provider, ProviderContext } from './providers/provider.js'
 import { normalizeGroup } from './schedule.js'
 import { fuzzyScore, rankByName, sameStreet, searchFragments, tokens, type NameKind } from './fuzzy.js'
 import { decideHouseStatus } from './house-status.js'
-import { houseKey } from './text.js'
+import { houseKey, normalizeSettlement, normalizeStreet, streetType } from './text.js'
 import { toKyivIso } from './time.js'
 import type {
   AddressQuery,
@@ -542,9 +542,10 @@ export class OutageClient {
    * force, then the schedule.
    *
    * A part the region doesn't have, or that fails, is listed in `gaps` and the answer is made
-   * from the rest; `on` is said only when today's schedule is published and has no outage now.
-   * Throws only when the address itself can't be found (`not-found`, as `findGroup`), or when
-   * cancelled. Requests and caching as for the four calls it makes; `fresh` skips the caches.
+   * from the rest; `on` is said only when today's schedule is published with no outage now and
+   * every part the region has was read. Throws `not-found` when no lookup finds the address (as
+   * `findGroup`), rethrows anything that isn't an `OutageError`, and rejects when cancelled.
+   * Requests and caching as for the four calls it makes; `fresh` skips the caches.
    */
   async getHouseStatus(
     region: RegionId,
@@ -573,9 +574,8 @@ export class OutageClient {
     // the address first, then the house record: the two often walk the same address chain, and
     // one after the other the second finds the first's lists cached
     const house = (async () => {
-      const match = await part('address', () =>
-        abortable(this.findGroupIn(this.context(signal), region, address), signal),
-      )
+      const ctx = fresh ? { ...this.context(signal), fresh: true } : this.context(signal)
+      const match = await part('address', () => abortable(this.findGroupIn(ctx, region, address), signal))
       const outage = caps.houseOutage
         ? await part('house-outage', () => this.getHouseOutage(region, address, { signal, fresh }))
         : missing('house-outage', 'the operator publishes no per-house status')
@@ -586,23 +586,33 @@ export class OutageClient {
       caps.emergency
         ? part('emergency', () => this.getEmergency(region, { signal, fresh }))
         : Promise.resolve(missing('emergency', 'no source of emergency (ГАВ) announcements')),
-      part('schedule', () => this.getSchedules(region, { signal, fresh })),
+      // a last good schedule says nothing about now: a failed read is a gap, not an old answer
+      part('schedule', () => this.getSchedules(region, { signal, fresh, staleIfError: false })),
     ])
 
     // an address nobody could find is the caller's to fix, not an unknown state
-    const lookup = gaps.find((g) => g.part === 'address')
+    const lookup = gaps.find((g) => g.part === 'address')?.code
     const houseGap = gaps.find((g) => g.part === 'house-outage')
-    if (lookup?.code === 'not-found' && (houseGap?.code === 'not-found' || houseGap?.code === 'unsupported'))
-      throw new OutageError('not-found', lookup.message, { region })
+    const missed = (c: string | undefined) => c === 'not-found' || c === 'unsupported'
+    if (
+      missed(lookup) &&
+      missed(houseGap?.code) &&
+      (lookup === 'not-found' || houseGap?.code === 'not-found')
+    ) {
+      const why = gaps.find((g) => g.part === 'address' && g.code === 'not-found') ?? houseGap!
+      throw new OutageError('not-found', why.message, { region })
+    }
 
+    // the group of the lookup, or of the house record when the lookup failed
+    const group = match?.group ?? outage?.groups[0]
     let days = null
-    if (match && schedule) {
-      days = schedule.schedules[match.group] ?? null
+    if (group && schedule) {
+      days = schedule.schedules[group] ?? null
       if (!days)
         gaps.push({
           part: 'schedule',
           code: 'not-found',
-          message: `group ${match.group} is not in the region's schedule`,
+          message: `group ${group} is not in the region's schedule`,
         })
     }
     const now = this.ctx.now()
@@ -767,7 +777,7 @@ export class OutageClient {
             health = { ...health, address: { ok: true, group: m.group } }
           } catch (e) {
             if (signal?.aborted) throw signal.reason
-            health = { ...health, address: { ok: false, message: (e as Error).message } }
+            health = { ...health, address: { ok: false, message: errorMessage(e) } }
           }
         }
         // the sub-provider's own sample when it has one (its names can differ from the region's)
@@ -779,7 +789,7 @@ export class OutageClient {
             health = { ...health, houseOutage: { ok: true, kind: o?.kind ?? null } }
           } catch (e) {
             if (signal?.aborted) throw signal.reason
-            health = { ...health, houseOutage: { ok: false, message: (e as Error).message } }
+            health = { ...health, houseOutage: { ok: false, message: errorMessage(e) } }
           }
         }
         return health
@@ -896,7 +906,7 @@ interface AddressChain {
  * Picks the one result the user meant, or explains why not: nothing close enough, or several
  * equally good ("Соборна" is both a вулиця and a площа).
  */
-function choose<T extends { score?: number }>(
+function choose<T extends { score?: number; name: string }>(
   query: string,
   ranked: readonly T[],
   label: 'city' | 'street',
@@ -905,6 +915,13 @@ function choose<T extends { score?: number }>(
 ): T {
   const [top, second] = ranked
   if (!top) throw new OutageError('not-found', `No ${label} matches "${query}"`, { region })
+  // the name as typed, letter for letter, beats a near-duplicate ("Бердичівська" next to the
+  // directory's misspelled "Бердичивська"); for streets the type, when given, settles two of them
+  const norm = label === 'street' ? normalizeStreet : normalizeSettlement
+  let exact = ranked.filter((r) => norm(r.name) === norm(query))
+  if (exact.length > 1 && label === 'street' && streetType(query))
+    exact = exact.filter((r) => streetType(r.name) === streetType(query))
+  if (exact.length === 1) return exact[0]!
   const suggestions = (list: readonly T[]) => list.slice(0, 6).map(describe).join('; ')
   if ((top.score ?? 0) < CONFIDENT)
     throw new OutageError(
@@ -922,6 +939,9 @@ function choose<T extends { score?: number }>(
     )
   return top
 }
+
+/** A rejection's message, whatever was thrown */
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /** Failures a last good result may stand in for: the operator couldn't be read. Not a wrong question, not a cancel */
 const STALE_CODES: ReadonlySet<OutageErrorCode> = new Set([

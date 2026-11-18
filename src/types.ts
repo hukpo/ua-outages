@@ -356,8 +356,10 @@ export interface HouseOutage {
  * - `maybe`: it may be off: an emergency (ГАВ) is in force and the house's part in it isn't
  *   known, or the schedule's "possible outage" half hour;
  * - `on`: nothing the SDK can see has it off: the schedule is published for today with no
- *   outage now, no emergency is in force, and the per-house record (where there is one) is empty;
- * - `unknown`: not enough to tell (nothing published for today, sources failed).
+ *   outage now, no emergency hits the house, and every part the region has (per-house record,
+ *   emergency feed) was read and is clear;
+ * - `unknown`: not enough to tell (nothing published for today, a source failed, the emergency
+ *   status is unknown).
  */
 export type HouseState = 'off' | 'maybe' | 'on' | 'unknown'
 

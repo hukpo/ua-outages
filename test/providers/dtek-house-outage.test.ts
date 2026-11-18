@@ -62,6 +62,7 @@ function dtekSite(
         headers: { 'set-cookie': `_csrf-dtek-${code}=${cookie}; path=/; HttpOnly` },
       })
     const method = form.get('method')!
+    // only the site's own requests are counted below
     asked.push(method === 'getHomeNum' ? `getHomeNum ${form.get('data[1][value]')}` : method)
     if (method === 'checkDisconUpdate')
       return new Response(JSON.stringify({ result: true, fact: { data: {}, update: '17.11.2026 21:18' } }))
@@ -226,5 +227,30 @@ describe('streetsByCity', () => {
     expect(streetsByCity(['вул. Хрещатик', 5], 'kem')).toEqual({ 'м. Київ': ['вул. Хрещатик'] })
     expect(() => streetsByCity(['вул. Х'], 'oem')).toThrow(/without settlements/)
     expect(() => streetsByCity('x', 'kem')).toThrow(/unexpected/)
+  })
+})
+
+describe('one session per site', () => {
+  it('getHouseStatus reads the schedule and the address on one session: one handshake, one street list', async () => {
+    const site = dtekSite('krem', { 'м. Ірпінь': ['вул. Західна'] }, { '2': UNDER_EMERGENCY })
+    const client = new OutageClient({ fetch: site.fetch, now: () => AT })
+    const s = await client.getHouseStatus('kyiv-region', { city: 'Ірпінь', street: 'Західна', house: '2' })
+    expect(s).toMatchObject({ state: 'off', basis: 'house-outage' })
+    expect(site.asked.filter((m) => m === 'checkDisconUpdate')).toHaveLength(1)
+    expect(site.asked.filter((m) => m === 'getStreets')).toHaveLength(1)
+    expect(site.asked.filter((m) => m.startsWith('getHomeNum'))).toHaveLength(1)
+  })
+
+  it('Kyiv: the schedule channel and the house record share the DTEK site', async () => {
+    const site = dtekSite('kem', ['вул. Хрещатик'], { '6': UNDER_REPAIR })
+    const yasno: FetchLike = async (url, init) =>
+      url.startsWith('https://www.dtek-kem.com.ua')
+        ? site.fetch(url, init)
+        : new Response('down', { status: 503 })
+    const client = new OutageClient({ fetch: yasno, now: () => AT, cacheTtlMs: 0 })
+    await client.getSchedules('kyiv').catch(() => {})
+    await client.getHouseOutage('kyiv', { street: 'Хрещатик', house: '6' })
+    // the house lookup found the session the schedule had loaded
+    expect(site.asked.filter((m) => m === 'checkDisconUpdate')).toHaveLength(1)
   })
 })
