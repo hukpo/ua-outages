@@ -179,30 +179,39 @@ export class AiRuntime {
     // any region of the channel: a first reading that puts an Odesa cancel under Kyiv must still be
     // checked for Odesa
     if (!this.verify || (this.verifyPosts === 'emergency' && !touchesEmergency(first))) return first
+    // a disagreement about this region is remembered for a while (per region: on a channel of
+    // several, Kyiv's agreement stands while Odesa's readings disagree); once it is over, the
+    // second and third readers are asked again
+    const mark = sha('disagree', region, stable(input))
+    const marked = (await this.getQuietly(mark)) as { until?: number } | undefined
+    const disagreement = `${input.url}: the readings of its emergency events for ${region} disagree (${this.judge ? 'three ways' : 'no judgeProcessor'})`
+    if (marked?.until && marked.until > Date.now())
+      throw new OutageError('parse', disagreement, { region, url: input.url })
+    if (marked?.until)
+      for (const p of [this.verify, this.judge])
+        if (p)
+          await this.setQuietly(sha('text', p.id, stable(input)), {
+            ok: false,
+            code: 'parse',
+            message: 'asked again after a disagreement',
+            until: 0,
+          })
     const key = (a: PostAnalysis) => emergencyKey(a, input, region)
     const firstKey = key(first)
     const second = await this.readOrNull(this.verify, 'verify', region, input, signal)
-    if (second && key(second) === firstKey) return first
+    const settled = async (a: PostAnalysis) => {
+      if (marked) await this.setQuietly(mark, { cleared: true })
+      return a
+    }
+    if (second && key(second) === firstKey) return settled(first)
     const third = this.judge ? await this.readOrNull(this.judge, 'judge', region, input, signal) : null
     const votes = [first, second, third].filter((a): a is PostAnalysis => !!a)
     const keys = votes.map(key)
     const winner = votes.find((_, i) => keys.filter((k) => k === keys[i]).length >= 2)
-    if (winner) return winner
-    const message = `${input.url}: the readings of its emergency events disagree (${this.judge ? 'three ways' : 'no judgeProcessor'})`
-    // the second and third readings are asked again after a while, like any misread (the first
-    // one stays: its schedule events are used elsewhere). Only a reading that voted: one already
-    // remembered as failed keeps its time, or polls every 5 min would put it off for ever
-    for (const [p, vote] of [
-      [this.verify, second],
-      [this.judge, third],
-    ] as const)
-      if (p && vote)
-        await this.setQuietly(
-          sha('text', p.id, stable(input)),
-          { ok: false, code: 'parse', message, until: Date.now() + FAILED_TTL_MS },
-          FAILED_TTL_MS,
-        )
-    throw new OutageError('parse', message, { region, url: input.url })
+    if (winner) return settled(winner)
+    // kept past its time (no TTL): an expired mark is what says the readers are to be asked again
+    await this.setQuietly(mark, { until: Date.now() + FAILED_TTL_MS })
+    throw new OutageError('parse', disagreement, { region, url: input.url })
   }
 
   /**
@@ -256,20 +265,7 @@ export class AiRuntime {
     const p = this.requireImage(region)
     const edge = p.maxLongEdge ?? DEFAULT_MAX_LONG_EDGE
     const min = p.minShortEdge ?? 0
-    // the picture and everything the processor is shown with it, not the post's address: a
-    // repost the same day is read once, one a day later is read against its own date
-    const key = sha(
-      'image',
-      p.id,
-      String(edge),
-      String(min),
-      src.bytes,
-      src.caption ?? '',
-      src.region.id,
-      src.region.queues.join(),
-      src.publishedAt,
-      `${src.index ?? 0}/${src.of ?? 1}`,
-    )
+    const key = this.imageKey(p, src)
     return this.run(
       key,
       signal,
@@ -282,6 +278,38 @@ export class AiRuntime {
       },
       (raw) => validateImageReading(raw, this.checkInput(src)),
     )
+  }
+
+  /** The picture and everything the processor is shown with it, not the post's address: a repost the same day is read once, one a day later is read against its own date */
+  private imageKey(p: ImageProcessor, src: ImageSource): string {
+    return sha(
+      'image',
+      p.id,
+      String(p.maxLongEdge ?? DEFAULT_MAX_LONG_EDGE),
+      String(p.minShortEdge ?? 0),
+      src.bytes,
+      src.caption ?? '',
+      src.region.id,
+      src.region.queues.join(),
+      src.publishedAt,
+      `${src.index ?? 0}/${src.of ?? 1}`,
+    )
+  }
+
+  /**
+   * Readings that passed their own checks but not the post's (the picture's date against its
+   * caption, an album's queues): remembered as misread, so they are read again after 10 min like
+   * any other misread. Only call it for readings this poll took as good, or each poll would put
+   * the next reading off again
+   */
+  async misread(region: RegionId, srcs: readonly ImageSource[], message: string): Promise<void> {
+    const p = this.requireImage(region)
+    for (const src of srcs)
+      await this.setQuietly(
+        this.imageKey(p, src),
+        { ok: false, code: 'parse', message, until: Date.now() + FAILED_TTL_MS },
+        FAILED_TTL_MS,
+      )
   }
 
   /**
@@ -371,8 +399,17 @@ export class AiRuntime {
    * is remembered for a while; an outage of the AI API is not; a call whose callers all left
    * writes nothing (an abandoned call must not overwrite a newer answer).
    */
+  /** A cache read that fails is a miss */
+  private async getQuietly(key: string): Promise<unknown> {
+    try {
+      return await this.cache.get(key)
+    } catch {
+      return undefined
+    }
+  }
+
   /** A cache write that fails loses the entry, not the answer it was paid for */
-  private async setQuietly(key: string, entry: Entry, ttlMs?: number): Promise<void> {
+  private async setQuietly(key: string, entry: Entry | object, ttlMs?: number): Promise<void> {
     try {
       await this.cache.set(key, entry, ttlMs)
     } catch {

@@ -170,6 +170,12 @@ async function readPost(
   const caption = post.text || null
   const said = captionDate(a.analysis, region, postDay)
   let found = 0
+  /** The pictures read as good this poll: what a failed check of the post sends to be read again */
+  const read: Parameters<typeof ai.misread>[1][number][] = []
+  const misread = async (message: string) => {
+    await ai.misread(region, read, message)
+    return fail(region, post.url, message)
+  }
   // an album may split the queues over its pictures: one publication per day of the post
   const perDay = new Map<
     string,
@@ -188,33 +194,31 @@ async function readPost(
     // a bare photo: is it a schedule at all? (crews, damage, infographics are most of them)
     if (!caption && !(await ai.isSchedule(region, src, ctx.signal))) continue
     const reading: ImageReading = await ai.readImage(region, src, ctx.signal)
+    read.push(src)
     if (!hourlySchedule(reading)) continue
     const date = reading.date ?? said
-    if (!date) throw fail(region, post.url, `a schedule picture with no date, on it or in its post`)
+    if (!date) throw await misread(`a schedule picture with no date, on it or in its post`)
     if (reading.date && said && reading.date !== said)
-      throw fail(region, post.url, `the picture reads ${reading.date}, its post says ${said}`)
+      throw await misread(`the picture reads ${reading.date}, its post says ${said}`)
     if (date < addDays(postDay, -1) || date > addDays(postDay, 1))
-      throw fail(region, post.url, `a picture for ${date} in a post of ${postDay}`)
+      throw await misread(`a picture for ${date} in a post of ${postDay}`)
     found++
     const day = perDay.get(date) ?? { groups: {}, schedules: {} }
     for (const q of reading.schedule) {
-      if (q.queue in day.groups) throw fail(region, post.url, `queue ${q.queue} on two pictures of the album`)
+      if (q.queue in day.groups) throw await misread(`queue ${q.queue} on two pictures of the album`)
       day.groups[q.queue] = toSlots(q.intervals)
     }
     Object.assign(day.schedules, readingToDay(reading, date))
     perDay.set(date, day)
   }
   if (!found && caption && a.analysis && announces(a.analysis, region))
-    throw fail(
-      region,
-      post.url,
+    throw await misread(
       `the post announces a schedule picture, and none of its ${photos.length} reads as one`,
     )
   const out: { pub: DatedPublication; picture: PostedPicture; stated: boolean }[] = []
   for (const [date, day] of perDay) {
     const missing = info.queues.filter((q) => !(q in day.groups))
-    if (missing.length)
-      throw fail(region, post.url, `the post's pictures leave out queues ${missing.join(', ')}`)
+    if (missing.length) throw await misread(`the post's pictures leave out queues ${missing.join(', ')}`)
     const during = date === postDay && opts.updates === 'layer' ? kyivMinuteOfDay(at) : 0
     // "графік діє з 15:00" in the caption: the picture replaces the day from then, not from the
     // post time (the hours between still stand as they were)

@@ -264,9 +264,11 @@ export function textPublications(
   region: RegionId,
   now: Date,
   opts: PostsOptions = {},
+  /** The oldest day kept, default yesterday (a reader that dates another source by them keeps more) */
+  since = addDays(kyivDate(now), -1),
 ): DatedPublication[] {
   const out: DatedPublication[] = []
-  const from = addDays(kyivDate(now), -1)
+  const from = since
   analyzed.forEach(({ input, analysis }, post) => {
     if (!analysis) return
     const at = opts.timeless ? NaN : Date.parse(input.publishedAt)

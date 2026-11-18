@@ -129,8 +129,8 @@ function kiroAnswer(input: PostInput): Partial<PostAnalysis> | undefined {
   }
 }
 const kiroText = () => fakeText(kiroAnswer)
-/** `gpvVersions` as the provider runs it, at `now` */
-const versionsAt = (page: string, now: Date, text: TextProcessor = kiroText()) =>
+/** `gpvVersions` as the provider runs it, at `now`: the channel */
+const channelAt = (page: string, now: Date, text: TextProcessor = kiroText()) =>
   gpvVersions(
     {
       http: new Http({ fetch: mockFetch([]).fetch }),
@@ -141,6 +141,10 @@ const versionsAt = (page: string, now: Date, text: TextProcessor = kiroText()) =
   )
 const version = async (page: string, id: number, now: Date) =>
   (await versionsAt(page, now)).find((v) => v.url.endsWith(`/${id}`))!
+/** …its versions */
+const versionsAt = async (page: string, now: Date, text: TextProcessor = kiroText()) =>
+  (await channelAt(page, now, text)).versions
+const asChannel = (versions: GpvVersion[]) => ({ versions, unread: new Map() })
 
 /**
  * The grid the site draws for a channel list: "1" for its hours, "10" ("possible") for the half
@@ -429,7 +433,7 @@ describe('Kirovohradoblenergo: the channel’s lists', () => {
   it('gives a group missing from a list a day without outages', async () => {
     // 1816 (15.11 15:45) lists 2.1–6.2 only
     const days = gpvVersionsToSource(
-      await versionsAt(upTo(CHANNEL_17, 1816), NIGHT),
+      await channelAt(upTo(CHANNEL_17, 1816), NIGHT),
       new Date('2026-11-15T16:00:00+02:00'),
     ).days
     const day = days['2026-11-15']!
@@ -456,7 +460,9 @@ describe('Kirovohradoblenergo: the channel’s lists', () => {
       ['1755', '2026-11-05', '2026-11-05T21:27:00+02:00'],
     ])
     // 1753 drops 1.1's 10-12 of 1752: the whole list stands, not 1752 plus 1753
-    expect(gpvVersionsToSource(all, NOW).days['2026-11-05']!.schedules['1.1']!.intervals).toHaveLength(4)
+    expect(
+      gpvVersionsToSource(asChannel(all), NOW).days['2026-11-05']!.schedules['1.1']!.intervals,
+    ).toHaveLength(4)
   })
 
   it('reads both cancellations; "до окремого розпорядження" also withdraws a list for tomorrow', async () => {
@@ -489,7 +495,7 @@ describe('Kirovohradoblenergo: the channel’s lists', () => {
     expect(standingVersions([early, cancel, late]).get('2026-11-16')).toBe(late)
   })
 
-  it('refuses a recent list it cannot use exactly, and ignores an old one', async () => {
+  it('flags the day of a recent list it cannot use exactly (read again on the next poll), and ignores an old one', async () => {
     const post = (at: string) =>
       `<div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message" data-post="SvitloKropyvnytskyiMisto/1">` +
       `<div class="tgme_widget_message_text js-message_text" dir="auto">17.11.2026 за розпорядженням НЕК "Укренерго" буде діяти наступний графік</div>` +
@@ -511,11 +517,24 @@ describe('Kirovohradoblenergo: the channel’s lists', () => {
       ['7.1', { events: [gpv({ schedule: [{ queue: '7.1', intervals: [] }] })] }],
       // a group named without hours ("уточнюється")
       ['no hours', { events: [gpv({ schedule: [{ queue: '1.1', intervals: null }] })] }],
-      // a list for a day already past
-      ['past', { events: [gpv({ date: '2026-11-15', schedule: [{ queue: '1.1', intervals: [] }] })] }],
+      // a list for part of the day: a reader of whole lists can't apply it
+      [
+        'window',
+        { events: [gpv({ at: '16:00', until: '18:00', schedule: [{ queue: '1.1', intervals: [] }] })] },
+      ],
     ]
-    for (const [what, a] of bad)
-      await expect(versionsAt(recent, NIGHT, answer(a)), what).rejects.toMatchObject({ code: 'parse' })
+    for (const [what, a] of bad) {
+      const c = await channelAt(recent, NIGHT, answer(a))
+      expect(c.versions, what).toEqual([])
+      expect([...c.unread.keys()], what).toContain('2026-11-17')
+    }
+    // a list for a day already past: nothing to flag
+    const past = await channelAt(
+      recent,
+      NIGHT,
+      answer({ events: [gpv({ date: '2026-11-15', schedule: [{ queue: '1.1', intervals: [] }] })] }),
+    )
+    expect([past.versions, [...past.unread.keys()]]).toEqual([[], []])
     // posted before yesterday: it can't matter any more (15.11 is that post's next day, and fits)
     const old = post('2026-11-14T21:35:26+00:00')
     for (const [what, a] of bad.slice(0, 3)) expect(await versionsAt(old, NIGHT, answer(a)), what).toEqual([])
@@ -728,7 +747,7 @@ describe('Kirovohradoblenergo: site and channel merged', () => {
     expect(dateGrid(grid, [...known, order], morning)).toEqual({ date: '2026-11-16', publishedAt: null })
   })
 
-  it('reports an unreadable recent list as a failed channel and keeps the site', async () => {
+  it('flags the day of an unusable recent list on the channel; the site stands, undated', async () => {
     const now = new Date('2026-11-17T09:00:00+02:00')
     const broken = CHANNEL_17.replace(
       'Черга 6.2: 02-04, 06-08, 14-16, 18-20, 22-24',
@@ -737,8 +756,10 @@ describe('Kirovohradoblenergo: site and channel merged', () => {
     expect(broken).not.toBe(CHANNEL_17)
     const s = await setup({ now, graphs: GRID_17, channel: broken }).client.getSchedules('kirovohrad')
     expect(source(s, CHANNEL)).toMatchObject({
-      ok: false,
-      error: { code: 'parse', message: expect.stringMatching(/1828: group 6\.2 is listed without hours/) },
+      ok: true,
+      unread: [
+        { date: '2026-11-17', message: expect.stringMatching(/1828: a group is listed without hours/) },
+      ],
     })
     expect(source(s, SITE)).toMatchObject({ ok: true, dates: ['2026-11-17'], updatedAt: null })
   })

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { channelInputs } from '../../src/ai/posts.js'
 import { AiRuntime } from '../../src/ai/runtime.js'
 import type { ImageProcessor, PostEvent, TextProcessor } from '../../src/ai/types.js'
@@ -318,5 +318,51 @@ describe('consolidation review', () => {
       expect([...r.unread.keys()]).toEqual(['2026-11-19'])
       expect(r.text.has('2026-11-18')).toBe(true)
     })
+  })
+})
+
+describe('pre-merge review', () => {
+  it('a picture whose date its caption contradicts is read again after 10 minutes', async () => {
+    const t0 = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(t0)
+    try {
+      const png = fixtureBytes('chernihiv/posters/tg-5718.jpg')
+      const posts = [tg('chernigivoblenergo', 1, '2026-11-17T20:00:00+02:00', 'poster for 18', 1)]
+      const text = fakeText(() => ({
+        photosAreSchedules: true,
+        events: [gpv({ date: '2026-11-18' }, 'chernihiv')],
+      }))
+      const image = fakeImage(() => ({
+        date: '2026-11-17',
+        schedule: STANDARD_GROUPS.map((queue) => ({ queue, intervals: intervalsOf('08:00-10:00') })),
+      }))
+      const ctx = ctxOf('2026-11-17T21:00:00+02:00', text, image, { 1: png })
+      const opts = { groups: STANDARD_GROUPS, updates: 'layer' } as const
+      expect(
+        (await readPicturePosts(ctx, 'chernihiv', posts, opts)).days.get('2026-11-18')!.unread,
+      ).toBeDefined()
+      await readPicturePosts(ctx, 'chernihiv', posts, opts)
+      expect(image.calls).toHaveLength(1)
+      clock.mockReturnValue(t0 + 11 * 60_000)
+      await readPicturePosts(ctx, 'chernihiv', posts, opts)
+      expect(image.calls).toHaveLength(2)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('Chernivtsi: "графік у фото" with no photo keeps the flag and the clock', async () => {
+    const { parseChannelPosts } = await import('../../src/providers/chernivtsi.js')
+    const text = fakeText((input) =>
+      input.text === 'unreadable'
+        ? [gpv({ at: '25:00' }, 'chernivtsi')]
+        : { photosAreSchedules: true, events: [gpv({ date: '2026-11-18' }, 'chernivtsi')] },
+    )
+    const r = await parseChannelPosts(ctxOf('2026-11-18T09:30:00+02:00', text), [
+      tg('oe_cv_ua', 1, '2026-11-18T07:00:00+02:00', 'unreadable'),
+      tg('oe_cv_ua', 2, '2026-11-18T08:00:00+02:00', 'графік на сьогодні у фото'),
+    ])
+    expect(r.unread.has('2026-11-18')).toBe(true)
+    expect(r.clock.get('2026-11-18')).toBeUndefined()
   })
 })

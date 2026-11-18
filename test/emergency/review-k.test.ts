@@ -298,3 +298,30 @@ describe('round 3', () => {
     expect(s).toMatchObject({ state: 'active', kind: 'gav', queues: ['1', '2', '3', '4', '5'] })
   })
 })
+
+describe('pre-merge review', () => {
+  it('a disagreement about Odesa leaves Kyiv’s agreed reading of the same post alone', async () => {
+    const both = (odesa: string[]) => [
+      ev({ kind: 'gav', action: 'start', regions: ['kyiv'], queues: ['1'] }),
+      ev({ kind: 'gav', action: 'start', regions: ['odesa'], queues: odesa }),
+    ]
+    const ai = new AiRuntime({
+      textProcessor: fakeText(() => both(['1'])),
+      verifyProcessor: fakeText(() => both(['2']), 'second'),
+    })
+    const input = {
+      url: 'https://t.me/dtek_ua/2',
+      source: { kind: 'telegram' as const, channel: 'dtek_ua' },
+      publishedAt: '2026-11-18T10:00:00+02:00',
+      edited: false,
+      title: null,
+      text: 'Київ і Одеса: ГАВ',
+      replyTo: null,
+      photoCount: 0,
+      regions: (['kyiv', 'odesa'] as const).map(postRegion),
+    }
+    await expect(ai.analyzeEmergencyPost('kyiv', input)).resolves.toBeDefined()
+    await expect(ai.analyzeEmergencyPost('odesa', input)).rejects.toMatchObject({ code: 'parse' })
+    await expect(ai.analyzeEmergencyPost('kyiv', input)).resolves.toBeDefined()
+  })
+})

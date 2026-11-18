@@ -1,12 +1,20 @@
-import { toSlots } from '../ai/map.js'
-import { analyzeAll, channelInputs } from '../ai/posts.js'
+import { analyzeAll, channelInputs, type Analyzed } from '../ai/posts.js'
 import { clockMinutes } from '../ai/validate.js'
 import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
 import { makeDay, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
-import { gpvEvents } from './posts.js'
+import {
+  gpvEvents,
+  isWhole,
+  newerThan,
+  resolveUnread,
+  textPublications,
+  textUnread,
+  type DatedPublication,
+  type UnreadItem,
+} from './posts.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead } from './sources.js'
 
@@ -59,113 +67,94 @@ export interface GpvVersion {
   slots: Record<GroupId, MinuteSlot[]>
 }
 
+/** The channel's ГПВ statements, and the days a newer post about couldn't be read (yet) */
+export interface GpvChannel {
+  /** Whole lists and cancellations, oldest first */
+  versions: GpvVersion[]
+  /** date → why: the day stands as read before it, flagged; read again on a later poll */
+  unread: Map<string, OutageError>
+}
+
 /**
- * The ГПВ statements among a channel's posts, oldest first, read by the client's text processor.
- * Posts of another kind (СГАВ notices, forecasts, ГОП orders) give none. A post that can't be
- * read is a `parse` error when it is recent enough to matter (posted since yesterday): a list
- * read wrong, or skipped while an older one stands, would be shown as the schedule.
+ * The ГПВ statements among a channel's posts, read by the client's text processor and put
+ * together like every other post reader's (`textPublications`, `isWhole`, `resolveUnread`).
+ * Posts of another kind (СГАВ notices, forecasts, ГОП orders) give none.
  *
- * Every list states the whole day, so a correction ("внесено зміни …") is a whole list too,
- * whatever the processor calls it. The operator's change time ("станом на 15:45 15.11.2026") is
- * the version's time when the post follows it within the hour.
+ * Every list states the whole day, so a correction ("внесено зміни …") naming every group is a
+ * whole list too, whatever the processor calls it. What a reader of whole lists can't apply is as
+ * good as unread for its day: a correction of some groups, a list for part of the day ("з 16:00
+ * до 18:00"), a group listed without hours, hours that are only in a picture, a date that doesn't
+ * fit the post. The operator's change time ("станом на 15:45 15.11.2026") is the version's time
+ * when the post follows it within the hour.
  */
-export async function gpvVersions(
-  ctx: ProviderContext,
-  posts: readonly TelegramPost[],
-): Promise<GpvVersion[]> {
+export async function gpvVersions(ctx: ProviderContext, posts: readonly TelegramPost[]): Promise<GpvChannel> {
   const region = 'kirovohrad'
   const now = ctx.now()
-  const recent = kyivInstant(addDays(kyivDate(now), -1), 0).getTime()
   const sorted = [...posts].sort((a, b) => a.id - b.id)
-  const analyzed = await analyzeAll(ctx, region, channelInputs(sorted, region))
-  const out: GpvVersion[] = []
-  /** New versions whose hours aren't in their text */
-  const blind: { date: string; postedAt: number; url: string }[] = []
-  for (const { input, analysis, error } of analyzed) {
-    const postedAt = Date.parse(input.publishedAt)
-    if (!analysis) {
-      if (postedAt >= recent) throw error
-      continue
-    }
-    for (const ev of gpvEvents(analysis, region)) {
-      const date = ev.date ?? kyivDate(new Date(postedAt))
-      const posted = kyivDate(new Date(postedAt))
-      if (date < posted || date > addDays(posted, 2)) {
-        if (postedAt >= recent)
-          throw new OutageError('parse', `${input.url}: the date ${date} doesn't fit a post of ${posted}`, {
-            region,
-            url: input.url,
-          })
-        continue
-      }
-      const base = {
-        date,
-        at: stampOr(analysis.statedAt, date, input.publishedAt),
-        postedAt: input.publishedAt,
-        url: input.url,
-      }
-      if (ev.action === 'cancel') {
-        out.push({ ...base, cancelled: true, untilFurtherOrder: ev.untilFurtherNotice, slots: {} })
-        continue
-      }
-      // a new version whose hours aren't in its text (a picture): it must not leave the version
-      // before it standing, unless a list with hours for its day follows (checked below)
-      if (!ev.schedule.length) {
-        if (postedAt >= recent) blind.push({ date, postedAt, url: input.url })
-        continue
-      }
-      // the dispatcher calls whole lists "Зміни … до графіка" too: one naming every group is the
-      // day; a correction of some groups only can't be applied by a reader of whole lists
-      if (ev.action === 'change' && KIROVOHRAD_GROUPS.some((g) => !ev.schedule.some((q) => q.queue === g))) {
-        if (postedAt >= recent)
-          throw new OutageError(
-            'parse',
-            `${input.url}: a correction of some groups, which a list reader can't apply`,
-            {
-              region,
-              url: input.url,
-            },
-          )
-        continue
-      }
-      const slots: Record<GroupId, MinuteSlot[]> = {}
-      for (const q of ev.schedule) {
-        if (!q.intervals) {
-          if (postedAt >= recent)
-            throw new OutageError('parse', `${input.url}: group ${q.queue} is listed without hours`, {
-              region,
-              url: input.url,
-            })
-          continue
+  const raw = await analyzeAll(ctx, region, channelInputs(sorted, region))
+  // a "change" listing every group, for the whole day: the day's list
+  const analyzed: Analyzed[] = raw.map((a) =>
+    a.analysis
+      ? {
+          ...a,
+          analysis: {
+            ...a.analysis,
+            events: a.analysis.events.map((e) =>
+              e.kind === 'gpv' &&
+              e.action === 'change' &&
+              !e.at &&
+              !e.until &&
+              KIROVOHRAD_GROUPS.every((g) => e.schedule.some((q) => q.queue === g))
+                ? { ...e, action: 'start' as const }
+                : e,
+            ),
+          },
         }
-        slots[q.queue] = toSlots(q.intervals)
-      }
-      out.push({ ...base, cancelled: false, slots })
-    }
+      : a,
+  )
+  const items: UnreadItem[] = textUnread(analyzed, region, now)
+  const whole: DatedPublication[] = []
+  const cantApply = (post: number, date: string, why: string) =>
+    items.push({
+      post,
+      days: [date],
+      error: new OutageError('parse', `${analyzed[post]!.input.url}: ${why}`, {
+        region,
+        url: analyzed[post]!.input.url,
+      }),
+    })
+  // back to the day before yesterday: yesterday's grid on the site is recognised after midnight
+  for (const p of textPublications(analyzed, region, now, {}, addDays(kyivDate(now), -2))) {
+    const posted = kyivDate(new Date(analyzed[p.post]!.input.publishedAt))
+    if (p.date < posted || p.date > addDays(posted, 2))
+      cantApply(p.post, p.date, `the date ${p.date} doesn't fit a post of ${posted}`)
+    else if (!isWhole(p.pub))
+      cantApply(p.post, p.date, `a correction or part of the day, which a list reader can't apply`)
+    else if (Object.values(p.pub.groups).some((slots) => slots === null))
+      cantApply(p.post, p.date, `a group is listed without hours`)
+    else whole.push(p)
   }
-  // a version without hours ("на 06.11 діятиме графік", hours in a picture) must not leave an
-  // older list standing for its day: fine when a list with hours follows it, or when there was
-  // none before it (the day is then simply not known)
-  const today = kyivDate(now)
-  // among posts of the same second, the higher message id is the later
-  const idOf = (url: string) => Number(url.split('/').pop()) || 0
-  const cmp = (v: GpvVersion, b: (typeof blind)[number]) =>
-    Date.parse(v.postedAt) - b.postedAt || idOf(v.url) - idOf(b.url)
-  for (const b of blind)
-    if (
-      b.date >= today &&
-      out.some((v) => v.date === b.date && cmp(v, b) < 0) &&
-      !out.some((v) => v.date === b.date && cmp(v, b) > 0)
-    )
-      throw new OutageError(
-        'parse',
-        `${b.url}: the newest version for ${b.date} has its hours outside its text`,
-        {
-          region,
-          url: b.url,
-        },
-      )
-  return out
+  const unread = new Map(
+    [...resolveUnread(items, whole, newerThan(analyzed), now)].map(([d, item]) => [d, item.error]),
+  )
+  const versions = whole.map((p): GpvVersion => {
+    const { input, analysis } = analyzed[p.post]!
+    const cancel = analysis
+      ? gpvEvents(analysis, region).find(
+          (e) => e.action === 'cancel' && (e.date ?? kyivDate(new Date(input.publishedAt))) === p.date,
+        )
+      : undefined
+    return {
+      date: p.date,
+      at: stampOr(analysis?.statedAt ?? null, p.date, input.publishedAt),
+      postedAt: input.publishedAt,
+      url: input.url,
+      cancelled: !!p.pub.cancelled,
+      ...(cancel?.untilFurtherNotice ? { untilFurtherOrder: true } : {}),
+      slots: p.pub.cancelled ? {} : (p.pub.groups as Record<GroupId, MinuteSlot[]>),
+    }
+  })
+  return { versions, unread }
 }
 
 /** "станом на 23:56" is the change itself, when the post follows within the hour */
@@ -203,12 +192,21 @@ export function versionDay(v: GpvVersion): Record<GroupId, DaySchedule> {
   return out
 }
 
-/** The channel as a schedule source: today and later, each day as it stands now. */
-export function gpvVersionsToSource(versions: readonly GpvVersion[], now: Date): SourceRead {
+/** The channel as a schedule source: today and later, each day as it stands now, flagged when a newer post about it couldn't be read. */
+export function gpvVersionsToSource({ versions, unread }: GpvChannel, now: Date): SourceRead {
   const today = kyivDate(now)
   const days: SourceRead['days'] = {}
   for (const [date, v] of standingVersions(versions))
-    if (date >= today) days[date] = { schedules: versionDay(v), publishedAt: v.at }
+    if (date >= today)
+      days[date] = {
+        schedules: versionDay(v),
+        // known to be behind (a newer post couldn't be read): no time to win the day by, so the
+        // site's grid, which may show the newer list, stands where it has one
+        publishedAt: unread.has(date) ? null : v.at,
+        ...(unread.has(date) ? { unread: unread.get(date)!.message } : {}),
+      }
+  for (const [date, error] of unread)
+    if (date >= today && !days[date]) days[date] = { schedules: {}, publishedAt: null, unread: error.message }
   return { days, groups: [...KIROVOHRAD_GROUPS] }
 }
 
@@ -216,7 +214,7 @@ export function gpvVersionsToSource(versions: readonly GpvVersion[], now: Date):
  * Reads the channel back to the evening two days ago: far enough for every statement about
  * yesterday (needed to recognise yesterday's grid on the site after midnight), today and tomorrow.
  */
-export async function readGpvChannel(ctx: ProviderContext): Promise<GpvVersion[]> {
+export async function readGpvChannel(ctx: ProviderContext): Promise<GpvChannel> {
   const now = ctx.now()
   const since = kyivInstant(addDays(kyivDate(now), -2), 12 * 60)
   const { posts, from } = await readChannelWindow(ctx, KIROVOHRAD_CHANNEL, {

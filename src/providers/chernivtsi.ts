@@ -23,6 +23,7 @@ import {
   textPublications,
   textUnread,
   type DatedPublication,
+  type UnreadItem,
 } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
@@ -321,7 +322,27 @@ export async function parseChannelPosts(
   const text = new Map<string, Record<GroupId, DaySchedule>>()
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const analyzed = await analyzeAll(ctx, INFO.id, channelInputs(sorted, INFO.id))
-  // a post that can't be read may be the newest version of a day: its clock and text are unknown
+  // a post that can't be read may be the newest version of a day: flagged, per day, until a newer
+  // whole day (the same rule as every post reader: `textPublications`, `isWhole`, `resolveUnread`).
+  // "графік у фото" with no photo: as good as unread for the day it names
+  const noPicture: UnreadItem[] = analyzed.flatMap((a, post) =>
+    a.analysis && !a.input.photoCount
+      ? gpvEvents(a.analysis, INFO.id)
+          .filter((e) => e.action === 'start' && !e.schedule.length)
+          .map((e) => ({
+            post,
+            days: [e.date ?? kyivDate(new Date(a.input.publishedAt))],
+            error: new OutageError(
+              'parse',
+              `${a.input.url}: the post says its schedule is in a picture and has none`,
+              {
+                region: INFO.id,
+                url: a.input.url,
+              },
+            ),
+          }))
+      : [],
+  )
   // what stands in for it: a newer whole day (see `isWhole`): a list, a cancellation, or a post
   // that names the day and says its whole schedule is in the picture
   const now = ctx.now()
@@ -330,7 +351,15 @@ export async function parseChannelPosts(
     ...analyzed.flatMap((a, post) =>
       a.analysis
         ? gpvEvents(a.analysis, INFO.id)
-            .filter((e) => e.action === 'start' && !e.schedule.length && e.dateNamed && !e.at && !e.until)
+            .filter(
+              (e) =>
+                e.action === 'start' &&
+                !e.schedule.length &&
+                e.dateNamed &&
+                !e.at &&
+                !e.until &&
+                a.input.photoCount > 0,
+            )
             .map((e) => ({
               date: e.date ?? kyivDate(new Date(a.input.publishedAt)),
               at: Date.parse(a.input.publishedAt),
@@ -343,7 +372,7 @@ export async function parseChannelPosts(
   const unread = new Map(
     [
       ...resolveUnread(
-        textUnread(analyzed, INFO.id, ctx.now(), {}, { blind: false }),
+        [...textUnread(analyzed, INFO.id, ctx.now(), {}, { blind: false }), ...noPicture],
         newer,
         newerThan(analyzed),
         ctx.now(),
@@ -356,6 +385,8 @@ export async function parseChannelPosts(
     for (const ev of gpvEvents(analysis, INFO.id)) {
       const date = ev.date ?? posted
       if (date !== posted && date !== addDays(posted, 1)) continue
+      // a picture announced and not there changes nothing the channel can vouch for
+      if (ev.action === 'start' && !ev.schedule.length && !input.photoCount) continue
       clock.set(date, input.publishedAt)
       // only the newest post about a date counts: a picture after a text post outdates the text,
       // and a correction of some groups leaves no whole day in text (the page has it)
