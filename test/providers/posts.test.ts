@@ -159,9 +159,10 @@ describe('updates that list only the hours ahead', () => {
     // a window "з 16:39 до 22:00" with no day before it: the hours after 22:00 aren't known
     const window = layerPublications([{ from: 999, to: 1320, groups: { '1.1': [off(19, 22)] } }], 'none')
     expect(window).toMatchObject({ groups: { '1.1': null }, based: false })
-    // the rest of the day from 17:00: known from then
+    // the rest of the day from 17:00: the hours before aren't known either, and a day is whole
+    // or not known
     const rest = layerPublications([{ from: 1020, groups: { '1.1': [off(18, 20)] } }], 'none')
-    expect(rest).toMatchObject({ groups: { '1.1': [off(18, 20)] }, based: false })
+    expect(rest).toMatchObject({ groups: { '1.1': null }, based: false })
     expect(layerPublications([{ from: 0, groups: { '1.1': [] } }]).based).toBe(true)
   })
 

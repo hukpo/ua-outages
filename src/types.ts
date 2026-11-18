@@ -168,6 +168,11 @@ export interface SourceStatus {
    * differ. Usually this channel is simply behind; if the newer one is wrong, this is the trace.
    */
   disagrees?: boolean
+  /**
+   * Days whose newest post on this channel couldn't be read (the AI answer failed, its picture
+   * didn't read): they are `unknown`, never shown from an older post, and this says why
+   */
+  unread?: { date: string; message: string }[]
 }
 
 /** Why a result is the last good one instead of a new one (`staleIfError`). */

@@ -386,14 +386,15 @@ describe('Zakarpattiaoblenergo schedule', () => {
         { match: '/media/gpv-today.png', body: poster('10848_2026-10-17T0951.jpg') },
       ],
     })
-    // before: the API's older version stood as today. Now neither channel has the day
-    await expect(c.getSchedules('zakarpattia')).rejects.toMatchObject({
-      code: 'parse',
-      details: { url: 'https://t.me/zakarpatenergyofficial/10850' },
-    })
+    // before: the API's older version stood as today. Now the channel's unread day, newer, wins it
+    const s = await c.getSchedules('zakarpattia')
+    expectUnpublished(s, 12)
+    expect(s.sources![0]!.unread).toEqual([
+      { date: '2026-10-17', message: expect.stringMatching(/announces a schedule picture/) },
+    ])
   })
 
-  it("fails the channel when its newest picture can't be read, not falling back to an older one", async () => {
+  it("a newest picture that can't be read leaves its day not known, not falling back to an older one", async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
       // the 14:19 post now carries something else
@@ -403,21 +404,20 @@ describe('Zakarpattiaoblenergo schedule', () => {
     expectUnpublished(s, 12)
     expect(s.sources![0]).toMatchObject({
       id: TELEGRAM,
-      ok: false,
-      error: { code: 'parse', message: expect.stringMatching(/announces a schedule picture/) },
+      ok: true,
+      unread: [{ date: '2026-10-17', message: expect.stringMatching(/announces a schedule picture/) }],
     })
   })
 
-  it('skips an unreadable picture that a later one of the same day replaced', async () => {
+  it('an unreadable re-issue is not excused by a later re-issue of the same day: that one gives only the hours ahead', async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
-      // the 10:51 post now carries something else; the 14:19 one reads
+      // the 10:51 post now carries something else; the 14:19 one reads, from 14:19 on
       routes: [{ match: 'file/WpmvXvc4pw', body: fixtureBytes('chernihiv/posters/tg-5631.jpg') }],
     })
     const s = await c.getSchedules('zakarpattia')
-    expect(s.sources![0]).toMatchObject({ id: TELEGRAM, ok: true, dates: ['2026-10-17'] })
-    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10850_2026-10-17T1319.jpg']!.rows)
-    expect(s.updatedAt).toBe('2026-10-17T14:19:19+03:00')
+    expect(s.sources![0]).toMatchObject({ id: TELEGRAM, ok: true, unread: [{ date: '2026-10-17' }] })
+    expectUnpublished(s, 12)
   })
 
   it('sends the captions to the text processor and the pictures, with them, to the image processor', async () => {
@@ -436,7 +436,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
     )
   })
 
-  it('fails the channel when the picture and its caption name different days', async () => {
+  it('a picture and its caption naming different days: the day is not known', async () => {
     // the caption of 10850 says 18.10; its picture is of 17.10
     const text = fakeText((input) =>
       input.url.endsWith('/10850')
@@ -450,10 +450,12 @@ describe('Zakarpattiaoblenergo schedule', () => {
           },
     )
     const s = await channel({ now: '2026-10-17T14:30:00+03:00', text }).client.getSchedules('zakarpattia')
-    expect(s.sources![0]).toMatchObject({ id: TELEGRAM, ok: false, error: { code: 'parse' } })
+    expect(s.sources![0]!.unread![0]!.message).toMatch(
+      /the picture reads 2026-10-17, its post says 2026-10-18/,
+    )
   })
 
-  it("fails the channel when its newest caption can't be read", async () => {
+  it("a newest caption that can't be read leaves its day not known", async () => {
     const text = fakeText((input) =>
       input.url.endsWith('/10850')
         ? [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date: '2026-13-01' })]
@@ -464,7 +466,8 @@ describe('Zakarpattiaoblenergo schedule', () => {
     )
     const s = await channel({ now: '2026-10-17T14:30:00+03:00', text }).client.getSchedules('zakarpattia')
     expectUnpublished(s, 12)
-    expect(s.sources![0]).toMatchObject({ id: TELEGRAM, ok: false, error: { code: 'parse' } })
+    // the days it may be about, its own and the next
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toEqual(['2026-10-17', '2026-10-18'])
   })
 
   it('needs both processors for the schedule; the address search needs neither', async () => {

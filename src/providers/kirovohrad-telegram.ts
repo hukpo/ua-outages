@@ -147,11 +147,15 @@ export async function gpvVersions(
   // older list standing for its day: fine when a list with hours follows it, or when there was
   // none before it (the day is then simply not known)
   const today = kyivDate(now)
+  // among posts of the same second, the higher message id is the later
+  const idOf = (url: string) => Number(url.split('/').pop()) || 0
+  const cmp = (v: GpvVersion, b: (typeof blind)[number]) =>
+    Date.parse(v.postedAt) - b.postedAt || idOf(v.url) - idOf(b.url)
   for (const b of blind)
     if (
       b.date >= today &&
-      out.some((v) => v.date === b.date && Date.parse(v.postedAt) < b.postedAt) &&
-      !out.some((v) => v.date === b.date && Date.parse(v.postedAt) > b.postedAt)
+      out.some((v) => v.date === b.date && cmp(v, b) < 0) &&
+      !out.some((v) => v.date === b.date && cmp(v, b) > 0)
     )
       throw new OutageError(
         'parse',
@@ -215,10 +219,17 @@ export function gpvVersionsToSource(versions: readonly GpvVersion[], now: Date):
 export async function readGpvChannel(ctx: ProviderContext): Promise<GpvVersion[]> {
   const now = ctx.now()
   const since = kyivInstant(addDays(kyivDate(now), -2), 12 * 60)
-  const { posts } = await readChannelWindow(ctx, KIROVOHRAD_CHANNEL, {
+  const { posts, from } = await readChannelWindow(ctx, KIROVOHRAD_CHANNEL, {
     region: 'kirovohrad',
     since,
     maxPages: 4,
   })
+  // a post among the ones missed may be a newer version of a day, unread or blind
+  if (Date.parse(from) > since.getTime())
+    throw new OutageError(
+      'parse',
+      `Telegram @${KIROVOHRAD_CHANNEL}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
+      { region: 'kirovohrad', url: `https://t.me/s/${KIROVOHRAD_CHANNEL}` },
+    )
   return gpvVersions(ctx, posts)
 }

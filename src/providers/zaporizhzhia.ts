@@ -4,7 +4,16 @@ import { OutageError } from '../errors.js'
 import { slotsToIntervals, STANDARD_GROUPS } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, parseClock, toKyivIso } from '../time.js'
 import type { ProviderInfo } from '../types.js'
-import { daysToSource, gpvEvents, hasSchedule, postsToDays, readChannelPosts, type PostDay } from './posts.js'
+import {
+  daysToSource,
+  gpvEvents,
+  groundTimeless,
+  markUnread,
+  postsToDays,
+  readChannelPosts,
+  unreadOf,
+  type PostDay,
+} from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { zoeAddresses } from './zaporizhzhia-addresses.js'
@@ -155,11 +164,7 @@ async function readZoe(ctx: ProviderContext, html: string): Promise<SiteRead> {
       INFO.id,
     ),
   )
-  const analyzed = await analyzeAll(ctx, INFO.id, inputs)
-  // an article above the newest one read fine may be the current version
-  const firstGood = analyzed.findIndex((a) => a.analysis && hasSchedule(a.analysis, INFO.id))
-  const firstBad = analyzed.findIndex((a) => a.error)
-  if (firstBad !== -1 && (firstGood === -1 || firstBad < firstGood)) throw analyzed[firstBad]!.error
+  const analyzed = groundTimeless(await analyzeAll(ctx, INFO.id, inputs), INFO.id, SITE_POSTS)
   // each article alone: the date and content of every version
   const each = analyzed.map((a) => [...postsToDays([a], INFO.id, now, SITE_POSTS)][0])
   const times = stampTimes(
@@ -167,6 +172,9 @@ async function readZoe(ctx: ProviderContext, html: string): Promise<SiteRead> {
     now,
   )
   const days = postsToDays(analyzed, INFO.id, now, SITE_POSTS)
+  // an article above the newest one read fine for its day may be the current version of it: that
+  // day is not known (only a whole day newer on the page stands in for it)
+  markUnread(days, analyzed, unreadOf(analyzed, INFO.id, now, SITE_POSTS), SITE_POSTS)
   return {
     read: daysToSource(days, { ...POSTS, publishedAt: (day) => times[day.post] ?? null }),
     versions: each.flatMap((e) => (e ? [{ date: e[0], content: contentOf(e[0], e[1]) }] : [])),

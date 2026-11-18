@@ -391,18 +391,22 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
       SITE_16,
       ...channel('5717-5723', { 5718: 'tg-5718.jpg' }),
     ])
-    expect(source(s, TG).error).toMatchObject({ code: 'parse' })
-    expect(source(s, TG).error!.message).toMatch(/announces a schedule picture/)
+    // the day it is about is not known, and the channel says why
+    expect(source(s, TG).unread).toEqual([
+      { date: '2026-11-17', message: expect.stringMatching(/announces a schedule picture/) },
+    ])
+    expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-17')!.status).toBe('unknown')
   })
 
   it('an unreadable poster that a later one of the same day replaced is skipped', async () => {
-    // the evening poster of 5631 is a banner now; the re-issue of 14:48 reads
+    // the evening poster of 5631 is a banner now; the re-issue of 14:48 reads, and with nothing
+    // read before it, it is the whole day it draws
     const s = await read('2026-11-02T15:00:00+02:00', [
       SITE_DOWN,
       ...channel('5631-5638', { 5638: 'tg-5638.jpg' }),
     ])
     expect(source(s, TG)).toMatchObject({ ok: true, dates: ['2026-11-02'] })
-    // nothing before the re-issue to lay it on: its own hours
+    expect(source(s, TG).unread).toBeUndefined()
     expect(day(s, '1.1', '2026-11-02')).toBe('14:30-16:00 19:00-00:00')
   })
 
@@ -412,19 +416,23 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
       SITE_16,
       ...channel('5717-5723', { 5718: 'tg-5718.jpg', 5723: 'tg-5718.jpg' }),
     ])
-    expect(source(s, TG).error!.message).toMatch(/the picture reads 2026-11-16, its post says 2026-11-17/)
+    expect(source(s, TG).unread![0]!.message).toMatch(
+      /the picture reads 2026-11-16, its post says 2026-11-17/,
+    )
   })
 
   it("fails the channel when its newest post about a day can't be read, also when tomorrow's poster came after", async () => {
     const misread = (id: number) =>
       posts((input) => (postId(input) === id ? [gpv({ date: '2026-11-17', at: '25:00' })] : undefined))
     const s = await read('2026-11-16T23:30:00+02:00', [SITE_16, ...EVENING], { text: misread(5723) })
-    expect(source(s, TG)).toMatchObject({ ok: false, error: { code: 'parse' } })
-    expect(dates(s)).toEqual(['2026-11-16'])
+    // the days it may be about (its own and the next) are not known, the channel says why
+    expect(source(s, TG)).toMatchObject({ ok: true })
+    expect(source(s, TG).unread!.map((u) => u.date)).toEqual(['2026-11-16', '2026-11-17'])
+    expect(day(s, '1.1', '2026-11-17')).toBe('unknown')
     // 5721 is a correction for the 16th (2.1, 2.2 from 10:10): tomorrow's poster 5723 says nothing
     // about today, and nothing after 5721 gave the 16th whole, so the 16th can't be shown
     const older = await read('2026-11-16T23:30:00+02:00', [SITE_16, ...EVENING], { text: misread(5721) })
-    expect(source(older, TG)).toMatchObject({ ok: false, error: { code: 'parse' } })
+    expect(source(older, TG).unread!.map((u) => u.date)).toContain('2026-11-16')
   })
 
   it('"ОНОВЛЕНИЙ": the re-issued poster replaces the rest of its day only', async () => {
@@ -593,7 +601,10 @@ describe('Chernihivoblenergo: pictures of the channel', () => {
         { 1: photo },
         posts(() => poster('2026-11-17')),
       )
-      await expect(announced.result, String(id)).rejects.toMatchObject({ code: 'parse' })
+      // the day it announces is not known, never "no outages" or an older poster
+      expect((await announced.result).days.get('2026-11-17')!.unread, String(id)).toMatchObject({
+        code: 'parse',
+      })
     }
   })
 
@@ -676,7 +687,7 @@ describe('Chernihivoblenergo: pictures of the channel', () => {
       posts(() => poster('2026-11-17')),
       half(8),
     )
-    await expect(one.result).rejects.toMatchObject({ code: 'parse' })
+    expect((await one.result).days.get('2026-11-17')!.unread).toMatchObject({ code: 'parse' })
   })
 
   it('an unreadable re-issue is not excused by a later poster of another day', async () => {
@@ -699,6 +710,8 @@ describe('Chernihivoblenergo: pictures of the channel', () => {
       undefined,
       new Date('2026-11-14T21:00:00+02:00'),
     )
-    await expect(result).rejects.toMatchObject({ code: 'parse' })
+    const r = await result
+    expect(r.days.get('2026-11-14')!.unread).toMatchObject({ code: 'parse' })
+    expect(r.days.get('2026-11-15')!.unread).toBeUndefined()
   })
 })

@@ -383,7 +383,7 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
     expect(alone.updatedAt).toBe('2026-11-16T16:27:00+02:00')
   })
 
-  it('fails the site when its top article is misread, and falls back to Telegram', async () => {
+  it('a misread top article leaves its days not known on the site, and Telegram stands in', async () => {
     // the 00:13 version answered with "25:00": it may be the current schedule
     const text = fakeText((input) =>
       input.title?.includes('(оновлено 00:13)')
@@ -398,10 +398,15 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
         : answer(input),
     )
     const s = await schedules([{ match: SITE, body: PAGE }, CHANNEL], NIGHT, text)
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: false, error: { code: 'parse' } })
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-17')
     // the channel's 23:35 post for 17.11 stands in
     expect(s.sources![1]).toMatchObject({ ok: true, dates: ['2026-11-17'] })
-    expect(hhmm(s.schedules['1.2']!.at(-1)!)).toEqual(['00:00-01:30', '10:00-15:00', '19:00-00:00'])
+    expect(hhmm(s.schedules['1.2']!.find((d) => d.date === '2026-11-17')!)).toEqual([
+      '00:00-01:30',
+      '10:00-15:00',
+      '19:00-00:00',
+    ])
   })
 
   it('keeps the site when only an article below the current one is misread', async () => {
@@ -418,7 +423,11 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
         : answer(input),
     )
     const s = await schedules([{ match: SITE, body: PAGE }, CHANNEL], NIGHT, text)
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-16', '2026-11-17'] })
+    // the days newer articles give whole stand; a page without times can't tell which day the
+    // misread one was about, so tomorrow, which nothing newer gives, is not known
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toEqual(['2026-11-18'])
+    expect(hhmm(s.schedules['1.2']!.find((d) => d.date === '2026-11-17')!)).not.toEqual([])
   })
 
   // the articles are read against today's noon: three quiet days on, the top article's date is

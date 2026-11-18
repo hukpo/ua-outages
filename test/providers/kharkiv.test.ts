@@ -262,15 +262,15 @@ describe('Kharkivoblenergo: site and Telegram', () => {
     expect(s.sources![1]!.dates).toEqual([])
   })
 
-  it('fails the channel when its newest schedule post is misread, and keeps the site', async () => {
+  it('a misread newest channel post leaves its days not known on the channel; the site keeps what it published later', async () => {
     // a model that answers "25:00" for 2376: the newest post may be tomorrow's schedule
     const text = fakeText((input) =>
       input.url.endsWith('/2376') ? [day('2026-11-17', '1.1 23:00-25:00')] : answer(input),
     )
     const s = await client([{ match: WWW, body: SITE }, TELEGRAM], NOW, text).client.getSchedules('kharkiv')
-    expect(s.sources![1]).toMatchObject({ ok: false, error: { code: 'parse' } })
-    expect(s.sources![0]).toMatchObject({ ok: true, dates: ['2026-11-16'] })
-    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-16'])
+    expect(s.sources![1]).toMatchObject({ ok: true })
+    expect(s.sources![1]!.unread!.map((u) => u.date)).toContain('2026-11-17')
+    expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-17')?.status ?? 'unknown').toBe('unknown')
   })
 
   it('reads each post once while it is unchanged', async () => {

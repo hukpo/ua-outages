@@ -537,29 +537,31 @@ describe('Cherkasyoblenergo', () => {
     })
   })
 
-  it('fails the site when its newest schedule post is misread, rather than serve the older one', async () => {
+  it('a misread newest schedule post leaves its days not known, rather than serve the older one', async () => {
     // "24:30" for the post of 5.11 20:25 (tomorrow's schedule)
     const text = fakeText(
       answer({ 'hrafik-pohodynnykh-vidklyuchen-hpv-na-6-lystopada': [day('2026-11-06', '1.1 22:00-24:30')] }),
     )
     const s = await client(POSTS, NOW, text).client.getSchedules('cherkasy')
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: false, error: { code: 'parse' } })
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-06')
     expectUnpublished(s, 12)
   })
 
-  it('keeps the site when only an older post is misread', async () => {
+  it('a misread post leaves its day not known; the day a later post gives stands', async () => {
     const text = fakeText(
       answer({ 'hrafik-pohodynnykh-vidklyuchen-hpv-na-5-lystopada': [day('2026-11-05', '1.1 22:00-24:30')] }),
     )
     const s = await client(POSTS, NOW, text).client.getSchedules('cherkasy')
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-06'] })
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-05', '2026-11-06'] })
+    const fifth = s.schedules['1.1']!.find((d) => d.date === '2026-11-05')!
+    expect(fifth.status).toBe('unknown')
+    expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-06')!.status).not.toBe('unknown')
   })
 
-  // Old behaviour: a schedule post without readable group lines failed the site (`parse`). Now
-  // a post whose hours are only in a picture is a gpv start with an empty schedule, which
-  // `textPublications` skips ("the picture reader has them"); Cherkasy has no picture reader,
-  // so the site answers ok with the day missing and nothing says the newest schedule was lost.
-  it('fails the site when its newest schedule post has the hours only in a picture', async () => {
+  // a post whose hours are only in a picture (Cherkasy has no picture reader): its day is not
+  // known, published as such, so an older version doesn't pass for it
+  it('the newest schedule post with its hours only in a picture leaves the day not known', async () => {
     const text = fakeText(
       answer({
         'hrafik-pohodynnykh-vidklyuchen-hpv-na-6-lystopada': [
@@ -568,7 +570,8 @@ describe('Cherkasyoblenergo', () => {
       }),
     )
     const s = await client(POSTS, NOW, text).client.getSchedules('cherkasy')
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: false })
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-06')!.status).toBe('unknown')
   })
 
   it('flattens the hand-edited HTML', () => {

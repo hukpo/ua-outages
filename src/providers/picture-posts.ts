@@ -8,12 +8,15 @@ import type { DaySchedule, GroupId, RegionId } from '../types.js'
 import type { MinuteSlot } from '../schedule.js'
 import { mapLimit } from '../util.js'
 import { toSlots } from '../ai/map.js'
+import { clockMinutes } from '../ai/validate.js'
 import { hourlySchedule, readingToDay } from './image-schedule.js'
 import {
   daysOf,
   gpvEvents,
+  markUnread,
   scheduleDates,
   textPublications,
+  untilFurtherNotice,
   type DatedPublication,
   type PostDay,
   type PostsOptions,
@@ -89,7 +92,11 @@ export async function readPicturePosts(
   const analyzed: Analyzed[] = posts.map(
     (p) => byUrl.get(p.url) ?? { input: channelInputs([p], region)[0]!, analysis: null, error: null },
   )
-  const unreadCaptions = unreadDays(analyzed, (a) => scheduleDates(a, region, now, { pictures: true }), now)
+  const unreadCaptions = unreadDays(
+    analyzed,
+    (a) => scheduleDates(a, region, now, { ...opts, pictures: true }),
+    now,
+  )
 
   // CDN links expire: the pictures are fetched right after the page, and only those that matter
   const wanted = posts
@@ -126,6 +133,16 @@ export async function readPicturePosts(
   for (const w of loaded) {
     try {
       for (const r of await readPost(ctx, region, info, w, opts)) {
+        // a picture draws the whole day: with nothing read for the day before it (Zakarpattia posts
+        // the day's first poster that morning), it is the whole day; a re-issue after another
+        // version replaces the hours from its post time on
+        if (
+          !r.stated &&
+          !pubs.some(
+            (p) => p.date === r.pub.date && p.post < w.i && !p.pub.add && !p.pub.cancelled && p.pub.from <= 0,
+          )
+        )
+          r.pub.pub = { ...r.pub.pub, from: 0 }
         pubs.push(r.pub)
         ;(pictures[r.pub.date] ??= []).push(r.picture)
       }
@@ -137,19 +154,31 @@ export async function readPicturePosts(
       unread.push({ i: w.i, days: said ? [said] : [postDay, addDays(postDay, 1)], error })
     }
   }
-  // a picture that can't be read may be newer than every one that can: an older one must not
-  // pass for the current schedule. One that a later picture of the same day has replaced
-  // doesn't matter
+  untilFurtherNotice(pubs, analyzed, region, now, opts)
+  // a picture or caption that can't be read may be newer than every one that can: an older one
+  // must not pass for the current schedule. Only a later whole day (a list or a picture posted
+  // before its day, or a cancellation) stands in for it: one posted during the day replaces only
+  // the hours ahead
   const indexOf = (url: string) => posts.findIndex((x) => x.url === url)
-  const replaced = (u: (typeof unread)[number]) =>
-    u.days.every((d) => d < kyivDate(now) || (pictures[d] ?? []).some((p) => indexOf(p.url) > u.i))
-  const blocking = unread.find((u) => !replaced(u))
-  if (blocking) throw blocking.error
+  const wholeAfter = (d: string, i: number) =>
+    pubs.some(
+      (p) =>
+        p.date === d && p.post > i && (p.pub.cancelled || (p.pub.from <= 0 && (p.pub.to ?? 1440) >= 1440)),
+    )
+  const errors = new Map<string, OutageError>()
+  for (const u of unread)
+    for (const d of u.days)
+      if (d >= kyivDate(now) && !wholeAfter(d, u.i) && !errors.has(d))
+        errors.set(
+          d,
+          u.error instanceof OutageError ? u.error : fail(region, posts[u.i]!.url, String(u.error)),
+        )
+  for (const [d, error] of unreadCaptions)
+    if (!errors.has(d) && !wholeAfter(d, indexOf(String(error.details?.url)))) errors.set(d, error)
 
   const days = daysOf(pubs, opts)
-  // a day whose newest caption can't be read is not shown from an older post
-  for (const [d, error] of unreadCaptions) if (days.has(d) || !days.size) throw error
-  const newest = [...days.values()].sort((x, y) => y.at - x.at)[0]
+  markUnread(days, analyzed, errors, opts)
+  const newest = [...days.values()].filter((d) => !d.unread).sort((x, y) => y.at - x.at)[0]
   return { days, analyzed, pictures, url: newest ? posts[newest.post]?.url : undefined }
 }
 
@@ -160,7 +189,7 @@ async function readPost(
   info: PostRegion,
   { post, i, a, photos }: { post: TelegramPost; i: number; a: Analyzed; photos: Uint8Array[] },
   opts: PostsOptions,
-): Promise<{ pub: DatedPublication; picture: PostedPicture }[]> {
+): Promise<{ pub: DatedPublication; picture: PostedPicture; stated: boolean }[]> {
   const ai = aiOf(ctx)
   const at = new Date(post.at)
   const postDay = kyivDate(at)
@@ -207,15 +236,30 @@ async function readPost(
       post.url,
       `the post announces a schedule picture, and none of its ${photos.length} reads as one`,
     )
-  const out: { pub: DatedPublication; picture: PostedPicture }[] = []
+  const out: { pub: DatedPublication; picture: PostedPicture; stated: boolean }[] = []
   for (const [date, day] of perDay) {
     const missing = info.queues.filter((q) => !(q in day.groups))
     if (missing.length)
       throw fail(region, post.url, `the post's pictures leave out queues ${missing.join(', ')}`)
     const during = date === postDay && opts.updates === 'layer' ? kyivMinuteOfDay(at) : 0
+    // "графік діє з 15:00" in the caption: the picture replaces the day from then, not from the
+    // post time (the hours between still stand as they were)
+    const said = a.analysis
+      ? gpvEvents(a.analysis, region).find(
+          (e) => e.action !== 'cancel' && !e.schedule.length && e.at && (e.date ?? postDay) === date,
+        )
+      : undefined
+    const from = opts.updates === 'layer' && said?.at ? clockMinutes(said.at) : during
+    const to = opts.updates === 'layer' && said?.at && said.until ? clockMinutes(said.until, true) : undefined
     out.push({
-      pub: { date, at: at.getTime(), post: i, pub: { groups: day.groups, from: during } },
+      pub: {
+        date,
+        at: at.getTime(),
+        post: i,
+        pub: { groups: day.groups, from, ...(to !== undefined ? { to } : {}) },
+      },
       picture: { publishedAt: post.at, url: post.url, schedules: day.schedules },
+      stated: !!said?.at,
     })
   }
   return out

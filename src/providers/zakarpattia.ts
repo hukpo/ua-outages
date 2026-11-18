@@ -84,7 +84,16 @@ export function zakarpattiaProvider(): Provider {
           region,
           since: kyivInstant(addDays(today, -1), 0),
           withPhotoOnly: true,
-        }).then((r) => readPicturePosts(ctx, region, r.posts, opts)))
+        }).then((r) => {
+          // yesterday evening's poster may be among the ones missed: today's re-issues would stand as all of it
+          if (Date.parse(r.from) > kyivInstant(addDays(today, -1), 0).getTime())
+            throw new OutageError(
+              'parse',
+              `Telegram @${CHANNEL}: the posts since yesterday couldn't all be read (only from ${r.from})`,
+              { region, url: `https://t.me/s/${CHANNEL}` },
+            )
+          return readPicturePosts(ctx, region, r.posts, opts)
+        }))
       return mergeSources(
         ctx,
         region,

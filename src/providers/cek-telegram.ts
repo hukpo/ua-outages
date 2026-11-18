@@ -3,7 +3,8 @@ import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { makeDay, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
-import { daysOf, textPublications } from './posts.js'
+import { OutageError } from '../errors.js'
+import { daysOf, textPublications, unreadOf } from './posts.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead, SourceSpec } from './sources.js'
 
@@ -80,6 +81,9 @@ export async function cekDays(
     a.analysis ? { ...a, analysis: { ...a.analysis, events: a.analysis.events.filter((e) => !e.area) } } : a,
   )
   const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer', layerFrom: 'stated' } as const
+  // "графік оновлено, дивіться на сайті": the newest version of the day is elsewhere, and the
+  // list before it is no longer the schedule
+  for (const [d, error] of unreadOf(analyzed, region, now, opts)) if (d >= kyivDate(now)) throw error
   const days = daysOf(textPublications(analyzed, region, now, opts), opts)
   const out = new Map<string, CekDay>()
   for (const [date, day] of days) {
@@ -138,11 +142,19 @@ export function cekTelegramSource(): SourceSpec {
       const now = ctx.now()
       // back to the list posted the evening before yesterday, which later changes build on
       const since = kyivInstant(addDays(kyivDate(now), -2), 12 * 60)
-      const { posts } = await readChannelWindow(ctx, CEK_CHANNEL, {
+      const { posts, from } = await readChannelWindow(ctx, CEK_CHANNEL, {
         region: 'dnipro-cek',
         since,
         maxPages: 6,
       })
+      // without the list of the evening before, the day's changes would stand as all of it, and an
+      // unread post among the ones missed would never count
+      if (Date.parse(from) > since.getTime())
+        throw new OutageError(
+          'parse',
+          `Telegram @${CEK_CHANNEL}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
+          { region: 'dnipro-cek', url: `https://t.me/s/${CEK_CHANNEL}` },
+        )
       return cekDaysToSource(await cekDays(ctx, posts), now)
     },
   }

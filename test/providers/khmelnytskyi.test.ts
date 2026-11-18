@@ -408,7 +408,7 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     await expect(schedules([down('hoe.com.ua'), down('t.me')])).rejects.toMatchObject({ code: 'http' })
   })
 
-  it('fails the page when its top block is misread, rather than serve the block under it', async () => {
+  it('a misread top block leaves its day not known on the page, rather than serve the block under it', async () => {
     // "Підчерга 7.1" doesn't exist
     const text = fakeText((input) =>
       input.text.includes('(оновлено з 15:00, 16.11.2026)') &&
@@ -418,7 +418,8 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
         : answer(input),
     )
     const { s } = await schedules([PAGE, ARCHIVE, LIST, ...NEWS, CHANNEL], NIGHT, text)
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: false, error: { code: 'parse' } })
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-16')
     // the news post has the same blocks
     expect(s.sources![1]).toMatchObject({ id: 'news', ok: true })
   })
@@ -447,6 +448,8 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
   })
 
   it('"(оновлено з 18:00, …)" read at 17:10 is no time of publication: a newer Telegram post wins', async () => {
+    // the newer post gives only the hours from 19:00, with no whole day under it on the channel:
+    // the day is not known (neither the page's older 18:00 version nor "no outages" before 19:00)
     const now = new Date('2026-11-17T17:10:00+02:00')
     const PAGE_18 = sitePage(
       '<p>Оновлено графік погодинних відключень (ГПВ) на 17 листопада (оновлено з 18:00, 17.11.2026).</p><p>Підчерга 1.1 – 18:00-22:00.</p>',
@@ -460,17 +463,18 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
       },
     ])
     const { s } = await schedules([PAGE_18, ARCHIVE, down('/post/'), newer], now)
-    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['19:00-21:00'])
+    expect(s.schedules['1.1']![0]!.status).toBe('unknown')
     expect(s.updatedAt).toBe('2026-11-17T17:05:00+02:00')
     expect(s.sources).toMatchObject([
-      { id: 'site', dates: [], updatedAt: null, disagrees: true },
+      { id: 'site', dates: [], updatedAt: null },
       { id: 'news', ok: false },
       { id: 'telegram:@khmelnytskoblenergo', dates: ['2026-11-17'] },
     ])
 
-    // alone, the page still gives the day, and no `updatedAt` from the future
+    // alone, the page's update from 18:00 with no whole day under it: not known either, and no
+    // `updatedAt` from the future
     const alone = await schedules([PAGE_18, ARCHIVE, down('/post/'), down('t.me')], now)
-    expect(hhmm(alone.s.schedules['1.1']![0]!)).toEqual(['18:00-22:00'])
+    expect(alone.s.schedules['1.1']![0]!.status).toBe('unknown')
     expect(alone.s.updatedAt).toBeNull()
     // once 18:00 has passed the stamp is a time again
     const later = await schedules(
