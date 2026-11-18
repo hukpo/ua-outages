@@ -5,6 +5,7 @@ import {
   accidentHouses,
   accidentOutage,
   currentAccident,
+  groupInNote,
   type PowerOnAccident,
 } from '../../src/providers/poweron.js'
 import { ternopilProvider } from '../../src/providers/ternopil.js'
@@ -277,5 +278,17 @@ describe('getHouseOutage on PowerOn regions', () => {
     const street = streets.find((s: { id: number }) => s.id === 10035).name
     expect(await client.getHouseOutage('ternopil', { city: 'Тернопіль', street, house: '1' })).toBeNull()
     expect(new OutageClient().region('volyn').capabilities.houseOutage).toBe(false)
+  })
+})
+
+describe('groupInNote: the group of a ГПВ row, in either form the list has used', () => {
+  it('"3,1" and "ГПВ-6.1"; a dispatcher\'s words are not a group', () => {
+    expect(groupInNote('3,1')).toBe('3.1')
+    expect(groupInNote('ГПВ-6.1')).toBe('6.1')
+    expect(groupInNote(' ГПВ 2.2 ')).toBe('2.2')
+    expect(groupInNote('УДАР БПЛА')).toBeNull()
+    expect(groupInNote('ремонт КЛ-6кВ Л7-1793')).toBeNull()
+    expect(groupInNote('')).toBeNull()
+    expect(groupInNote(null)).toBeNull()
   })
 })

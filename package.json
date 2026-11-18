@@ -1,6 +1,6 @@
 {
   "name": "ua-outages",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "description": "TypeScript SDK for Ukrainian power outage schedules: find your outage group by address and get schedules straight from the grid operators.",
   "keywords": [
     "ukraine",
@@ -40,6 +40,7 @@
     "test:watch": "vitest",
     "test:live": "LIVE=1 vitest run test/live",
     "health": "tsx scripts/health.ts",
+    "capture-gav": "tsx scripts/capture-gav.ts",
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test",
     "format": "prettier --write .",
