@@ -78,9 +78,7 @@ async function readChannel(ctx: ProviderContext): Promise<SourceRead> {
         url: `https://t.me/s/${CHANNEL}`,
       },
     )
-  const { days, url } = await readPicturePosts(ctx, INFO.id, posts, POSTS)
-  for (const date of [...days.keys()]) if (date < today) days.delete(date)
-  return { ...daysToSource(days, POSTS), ...(url ? { url } : {}) }
+  return (await readPicturePosts(ctx, INFO.id, posts, POSTS)).read(today)
 }
 const HEADERS = {
   Referer: 'https://www.soe.com.ua/consumers/shutdowns',

@@ -8,7 +8,7 @@ import {
   daysToSource,
   gpvEvents,
   groundTimeless,
-  assembleDays,
+  publicationsRead,
   postsToDays,
   readChannelPosts,
   textPublications,
@@ -95,19 +95,9 @@ async function readChannel(ctx: ProviderContext, site: SiteRead | null): Promise
     for (const [date, day] of days) {
       const versions = site.versions.filter((v) => v.date === date)
       const same = versions.findIndex((v) => v.content === contentOf(date, day))
-      if (same > 0 || (same === 0 && site.read.days[date]?.publishedAt)) {
-        // the site has it: the channel's copy goes, a post it couldn't read about the day stays said
-        const unread = read.days[date]?.unread
-        if (unread)
-          read.days[date] = {
-            schedules: Object.fromEntries(
-              STANDARD_GROUPS.map((g) => [g, { date, status: 'unknown' as const, intervals: [] }]),
-            ),
-            publishedAt: null,
-            unread,
-          }
-        else delete read.days[date]
-      }
+      // the site has it: the channel's copy goes (a post it couldn't read about the day stays said)
+      if (same > 0 || (same === 0 && siteStamped(site.read, date)))
+        read.publications = read.publications?.filter((p) => p.date !== date)
     }
   return read
 }
@@ -186,19 +176,23 @@ async function readZoe(ctx: ProviderContext, html: string): Promise<SiteRead> {
   )
   // an article above the newest one read fine for its day may be the current version of it: that
   // day is flagged (only a whole day newer on the page stands in for it)
-  const days = assembleDays(
-    analyzed,
-    textPublications(analyzed, INFO.id, now, SITE_POSTS),
-    textUnread(analyzed, INFO.id, now, SITE_POSTS),
-    INFO.id,
-    now,
-    SITE_POSTS,
-  )
   return {
-    read: daysToSource(days, { ...POSTS, publishedAt: (day) => times[day.post] ?? null }),
+    read: publicationsRead(
+      analyzed,
+      textPublications(analyzed, INFO.id, now, SITE_POSTS),
+      textUnread(analyzed, INFO.id, now, SITE_POSTS),
+      INFO.id,
+      now,
+      { ...SITE_POSTS, stamp: (p) => times[p.post] ?? null },
+    ),
     versions: each.flatMap((e) => (e ? [{ date: e[0], content: contentOf(e[0], e[1]) }] : [])),
   }
 }
+
+/** The site's newest publication of the day has a time of its own */
+const siteStamped = (read: SourceRead, date: string) =>
+  !!(read.publications ?? []).filter((p) => p.date === date).sort((a, b) => (b.seq ?? 0) - (a.seq ?? 0))[0]
+    ?.at
 
 /** "(оновлено 21:25)": the processor's `statedAt`, for an article that publishes a schedule */
 const stampOf = (a: Analyzed) =>

@@ -3,6 +3,7 @@ import { compareGroups } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionId, RegionSchedule, SourceStatus } from '../types.js'
 import { dayPublication, foldOne, foldPublications, time, type SourcedPublication } from './fold.js'
+import { isWhole, type Publication } from './posts.js'
 import type { ProviderContext } from './provider.js'
 
 /**
@@ -43,10 +44,39 @@ export interface SourceRead {
       partial?: boolean
     }
   >
+  /**
+   * What a reader of posts or pictures publishes, as it was published (whole days, windows,
+   * corrections, cancellations): layered with every other channel's publications, oldest first
+   */
+  publications?: SourcePublication[]
+  /**
+   * Its posts or pictures that couldn't be read (yet): each flags the days it may be about, until
+   * a newer whole day of any channel stands in for it
+   */
+  unread?: SourceUnread[]
   /** Groups this channel knows of, listed in the result even when no day names them */
   groups?: GroupId[]
   /** Where exactly it was read (e.g. the post), when more precise than `SourceSpec.url` */
   url?: string
+}
+
+/** One publication of a channel (see `Publication`) */
+export interface SourcePublication {
+  date: string
+  /** When it was published, ISO; null when the channel doesn't say */
+  at: string | null
+  /** Among the same time, the higher is newer (a message id) */
+  seq?: number
+  pub: Publication
+}
+
+/** A post or picture of a channel that couldn't be read (yet) */
+export interface SourceUnread {
+  /** The days it may be about */
+  days: string[]
+  at: string | null
+  seq?: number
+  message: string
 }
 
 export interface SourceSpec {
@@ -132,6 +162,36 @@ export async function mergeSources(
       const pub = dayPublication(date, day.schedules, day)
       if (pub) pubs.push({ source, date, at: time(day.publishedAt), iso: day.publishedAt, seq: 0, pub })
     }
+    for (const p of r.publications ?? []) {
+      dateSet.add(p.date)
+      for (const g of Object.keys(p.pub.groups)) groupSet.add(g)
+      pubs.push({ source, date: p.date, at: time(p.at), iso: p.at, seq: p.seq ?? 0, pub: p.pub })
+    }
+  })
+  // a post or picture that couldn't be read: its days flagged, until a newer whole day of any
+  // channel stands in for it (the same time is newer only on the same channel, by its order)
+  const today = kyivDate(ctx.now())
+  const flagged = new Map<number, Map<string, string>>()
+  reads.forEach((r, source) => {
+    for (const u of r?.unread ?? []) {
+      const at = time(u.at)
+      for (const date of u.days) {
+        if (date < today) continue
+        // with no time of its own (a page), only a newer one on its own page is known to be newer
+        const covered = pubs.some(
+          (p) =>
+            p.date === date &&
+            isWhole(p.pub) &&
+            ((p.at > at && Number.isFinite(at)) ||
+              (p.at === at && p.source === source && p.seq > (u.seq ?? 0))),
+        )
+        if (covered) continue
+        const mine = flagged.get(source) ?? new Map<string, string>()
+        if (!mine.has(date)) mine.set(date, u.message)
+        flagged.set(source, mine)
+        dateSet.add(date)
+      }
+    }
   })
   const groups = [...groupSet].sort(compareGroups)
   const dates = [...dateSet].sort()
@@ -164,10 +224,12 @@ export async function mergeSources(
   }
   // the days a channel couldn't read, and why
   reads.forEach((r, i) => {
-    const unread = Object.entries(r?.days ?? {})
-      .filter(([, d]) => d.unread)
-      .map(([date, d]) => ({ date, message: d.unread! }))
-      .sort((a, b) => a.date.localeCompare(b.date))
+    const unread = [
+      ...Object.entries(r?.days ?? {})
+        .filter(([, d]) => d.unread)
+        .map(([date, d]) => ({ date, message: d.unread! })),
+      ...[...(flagged.get(i) ?? [])].map(([date, message]) => ({ date, message })),
+    ].sort((a, b) => a.date.localeCompare(b.date))
     if (unread.length) statuses[i]!.unread = unread
   })
   // a channel that won no day still says when it last published something

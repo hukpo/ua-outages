@@ -392,3 +392,45 @@ describe('steadyStamps', () => {
     })
   })
 })
+
+describe('mergeSources: one fold of every source', () => {
+  const d = '2026-11-05'
+  const slot = (start: number, end: number) => ({ start: start * 60, end: end * 60, kind: 'off' as const })
+
+  it("an update on one channel layers onto another channel's whole day", async () => {
+    const s = await mergeSources(ctx(), 'kharkiv', [
+      // the site's whole day, the evening before
+      spec('site', { days: { [d]: day('2026-11-04T20:00:00+02:00', { '1.1': off(d, 8 * 60, 10 * 60) }) } }),
+      // the channel: "оновлено з 14:00" for 1.1
+      spec('telegram:@x', {
+        days: {},
+        publications: [
+          {
+            date: d,
+            at: '2026-11-05T13:50:00+02:00',
+            pub: { from: 14 * 60, groups: { '1.1': [slot(18, 20)] } },
+          },
+        ],
+      }),
+    ])
+    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['08:00-10:00', '18:00-20:00'])
+    // the channel shaped the day last
+    expect(s.sources!.map((x) => x.dates)).toEqual([[], [d]])
+  })
+
+  it('an unread post flags its day until a newer whole day of any channel', async () => {
+    const unread = { days: [d], at: '2026-11-05T09:00:00+02:00', message: 'misread' }
+    const flagged = await mergeSources(ctx(), 'kharkiv', [
+      spec('site', { days: { [d]: day('2026-11-05T08:00:00+02:00', { '1.1': off(d, 0, 60) }) } }),
+      spec('telegram:@x', { days: {}, unread: [unread] }),
+    ])
+    // the day as read, flagged
+    expect(flagged.schedules['1.1']![0]!.status).toBe('scheduled')
+    expect(flagged.sources![1]!.unread).toEqual([{ date: d, message: 'misread' }])
+    const covered = await mergeSources(ctx(), 'kharkiv', [
+      spec('site', { days: { [d]: day('2026-11-05T09:30:00+02:00', { '1.1': off(d, 0, 60) }) } }),
+      spec('telegram:@x', { days: {}, unread: [unread] }),
+    ])
+    expect(covered.sources![1]!.unread).toBeUndefined()
+  })
+})

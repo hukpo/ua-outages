@@ -506,7 +506,7 @@ export function assembleDays(
   now: Date,
   opts: PostsOptions = {},
 ): Map<string, PostDay> {
-  const all = untilFurtherNotice(pubs, analyzed, region, now, opts)
+  const all = untilFurtherNotice([...pubs], analyzed, region, now, opts)
   const unread = resolveUnread(items, all, newerThan(analyzed, opts), now)
   const days = daysOf(all, opts)
   for (const [d, item] of unread) {
@@ -518,26 +518,81 @@ export function assembleDays(
 }
 
 /**
- * Text posts through the text processor, then `assembleDays`. A post that can't be read (yet)
- * leaves the days it may be about as read, flagged
+ * What a reader of posts or pictures gives `mergeSources`: its publications as they were made and
+ * what it couldn't read, for the one fold of every channel (`foldPublications`). `since`: the
+ * oldest day given; `stamp`: the operator's own time of a day's newest publication on a page
+ * without times ("(оновлено 21:25)")
+ */
+export function publicationsRead(
+  analyzed: readonly Analyzed[],
+  pubs: readonly DatedPublication[],
+  items: readonly UnreadItem[],
+  region: RegionId,
+  now: Date,
+  opts: PostsOptions & {
+    since?: string
+    stamp?: (p: DatedPublication) => string | null
+  } = {},
+): SourceRead {
+  const all = untilFurtherNotice([...pubs], analyzed, region, now, opts).filter(
+    (p) => !opts.since || p.date >= opts.since,
+  )
+  const seq = (p: DatedPublication) => p.seq ?? -p.post
+  // on a page without times only the newest publication of a day has the operator's time: an
+  // older one stamped would pass the newer
+  const newest = new Map<string, DatedPublication>()
+  for (const p of all) {
+    const n = newest.get(p.date)
+    if (!n || seq(p) > seq(n)) newest.set(p.date, p)
+  }
+  const atOf = (p: DatedPublication) =>
+    opts.stamp && newest.get(p.date) === p
+      ? opts.stamp(p)
+      : Number.isFinite(p.at)
+        ? toKyivIso(new Date(p.at))
+        : null
+  return {
+    days: {},
+    publications: all.map((p) => ({
+      date: p.date,
+      at: atOf(p),
+      seq: seq(p),
+      pub: { ...p.pub, omitted: p.pub.omitted ?? opts.omitted ?? 'unknown' },
+    })),
+    unread: items.map((it) => {
+      const input = analyzed[it.post]?.input
+      return {
+        days: it.days.filter((d) => !opts.since || d >= opts.since),
+        at: opts.timeless || !input ? null : input.publishedAt,
+        seq: input ? seqOf(input, it.post) : 0,
+        message: it.error.message,
+      }
+    }),
+    ...(opts.groups ? { groups: [...opts.groups] } : {}),
+  }
+}
+
+/**
+ * Text posts through the text processor: their publications and what couldn't be read
+ * (`publicationsRead` for `mergeSources`), and the days they make on their own (`assembleDays`)
  */
 export async function readSchedulePosts(
   ctx: ProviderContext,
   region: RegionId,
   inputs: readonly PostInput[],
-  opts: PostsOptions = {},
-): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[] }> {
+  opts: PostsOptions & { since?: string; stamp?: (p: DatedPublication, a: Analyzed) => string | null } = {},
+): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[]; read: SourceRead }> {
   const now = ctx.now()
   const analyzed = groundTimeless(await analyzeAll(ctx, region, inputs), region, opts)
-  const days = assembleDays(
-    analyzed,
-    textPublications(analyzed, region, now, opts),
-    textUnread(analyzed, region, now, opts),
-    region,
-    now,
-    opts,
-  )
-  return { days, analyzed }
+  const pubs = textPublications(analyzed, region, now, opts)
+  const items = textUnread(analyzed, region, now, opts)
+  const days = assembleDays(analyzed, pubs, items, region, now, opts)
+  const { stamp, ...rest } = opts
+  const read = publicationsRead(analyzed, pubs, items, region, now, {
+    ...rest,
+    ...(stamp ? { stamp: (p: DatedPublication) => stamp(p, analyzed[p.post]!) } : {}),
+  })
+  return { days, analyzed, read }
 }
 
 /**
@@ -681,7 +736,10 @@ export async function readChannelPosts(
       `Telegram @${channel}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
       { region, url: `https://t.me/s/${channel}` },
     )
-  const { days } = await readSchedulePosts(ctx, region, channelInputs(posts, region), opts)
+  const { days, read } = await readSchedulePosts(ctx, region, channelInputs(posts, region), {
+    ...opts,
+    since: today,
+  })
   for (const date of [...days.keys()]) if (date < today) days.delete(date)
-  return { read: daysToSource(days, opts), days }
+  return { read, days }
 }

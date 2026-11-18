@@ -93,11 +93,9 @@ async function readSite(ctx: ProviderContext): Promise<SourceRead> {
     },
     ctx.signal,
   )
-  const { days } = await readSchedulePosts(ctx, region, cherkasyPosts(posts), POSTS)
   // yesterday's first post (the evening before) is outside the window: its updates alone would
   // stand as the whole day
-  for (const date of [...days.keys()]) if (date < kyivDate(now)) days.delete(date)
-  return daysToSource(days, POSTS)
+  return (await readSchedulePosts(ctx, region, cherkasyPosts(posts), { ...POSTS, since: kyivDate(now) })).read
 }
 
 /**

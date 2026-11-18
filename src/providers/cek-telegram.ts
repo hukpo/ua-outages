@@ -4,7 +4,7 @@ import { makeDay, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
 import { OutageError } from '../errors.js'
-import { assembleDays, textPublications, textUnread } from './posts.js'
+import { assembleDays, publicationsRead, textPublications, textUnread } from './posts.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead, SourceSpec } from './sources.js'
 
@@ -70,7 +70,7 @@ export interface CekDay {
 export async function cekDays(
   ctx: ProviderContext,
   posts: readonly TelegramPost[],
-): Promise<Map<string, CekDay>> {
+): Promise<Map<string, CekDay> & { read: (since: string) => SourceRead }> {
   const region = 'dnipro-cek'
   const now = ctx.now()
   const sorted = [...posts].sort((a, b) => a.id - b.id)
@@ -82,14 +82,9 @@ export async function cekDays(
   const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer', layerFrom: 'stated' } as const
   // a post that couldn't be read (yet), or "графік оновлено, дивіться на сайті": the day stays
   // as read before it, flagged; it is read again on the next poll
-  const days = assembleDays(
-    analyzed,
-    textPublications(analyzed, region, now, opts),
-    textUnread(analyzed, region, now, opts),
-    region,
-    now,
-    opts,
-  )
+  const pubs = textPublications(analyzed, region, now, opts)
+  const items = textUnread(analyzed, region, now, opts)
+  const days = assembleDays(analyzed, pubs, items, region, now, opts)
   const out = new Map<string, CekDay>()
   for (const [date, day] of days) {
     const groups: Record<GroupId, MinuteSlot[] | null> = {}
@@ -105,16 +100,31 @@ export async function cekDays(
     })
   }
   // back to the hourly schedule after an emergency: the list stands again as of that post
+  const back: { date: string; at: number; url: string }[] = []
   for (const { input, analysis } of analyzed) {
     if (!analysis) continue
     const at = Date.parse(input.publishedAt)
     for (const e of analysis.events) {
       if (e.kind === 'gpv' || e.action !== 'cancel' || e.gpvApplies !== true) continue
-      const day = out.get(e.date ?? kyivDate(new Date(at)))
+      const date = e.date ?? kyivDate(new Date(at))
+      back.push({ date, at, url: input.url })
+      const day = out.get(date)
       if (day && at > day.at) Object.assign(day, { at, url: input.url })
     }
   }
-  return out
+  const read = (since: string): SourceRead => {
+    const r = publicationsRead(analyzed, pubs, items, region, now, {
+      ...opts,
+      since,
+      stamp: (p) => {
+        const t = Math.max(p.at, ...back.filter((b) => b.date === p.date).map((b) => b.at))
+        return Number.isFinite(t) ? toKyivIso(new Date(t)) : null
+      },
+    })
+    const newest = [...out.entries()].filter(([d]) => d >= since).sort(([, a], [, b]) => b.at - a.at)[0]
+    return { ...r, groups: [...CEK_GROUPS], ...(newest?.[1].url ? { url: newest[1].url } : {}) }
+  }
+  return Object.assign(out, { read })
 }
 
 /** The channel as a schedule source: today and later. Exported for tests. */
@@ -162,7 +172,7 @@ export function cekTelegramSource(): SourceSpec {
           `Telegram @${CEK_CHANNEL}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
           { region: 'dnipro-cek', url: `https://t.me/s/${CEK_CHANNEL}` },
         )
-      return cekDaysToSource(await cekDays(ctx, posts), now)
+      return (await cekDays(ctx, posts)).read(kyivDate(now))
     },
   }
 }

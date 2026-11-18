@@ -13,6 +13,7 @@ import { hourlySchedule, readingToDay } from './image-schedule.js'
 import {
   assembleDays,
   gpvEvents,
+  publicationsRead,
   isWhole,
   textPublications,
   textUnread,
@@ -22,6 +23,7 @@ import {
   type PostsOptions,
 } from './posts.js'
 import { aiOf, type ProviderContext } from './provider.js'
+import type { SourceRead } from './sources.js'
 
 /**
  * Channels that post the schedule as a picture (a poster, a table) with a caption, and correct
@@ -56,6 +58,8 @@ export interface PicturePostsRead {
   pictures: Record<string, PostedPicture[]>
   /** The newest post that shaped a day */
   url?: string
+  /** For `mergeSources`: the publications and what couldn't be read, days from `since` on */
+  read: (since: string) => SourceRead
 }
 
 const fail = (region: RegionId, url: string, message: string, cause?: unknown) =>
@@ -153,7 +157,17 @@ export async function readPicturePosts(
   const newest = [...days.values()]
     .filter((d) => !d.unread || Object.keys(d.groups).length)
     .sort((x, y) => y.at - x.at)[0]
-  return { days, analyzed, pictures, url: newest ? posts[newest.post]?.url : undefined }
+  const url = newest ? posts[newest.post]?.url : undefined
+  return {
+    days,
+    analyzed,
+    pictures,
+    url,
+    read: (since) => ({
+      ...publicationsRead(analyzed, pubs, unread, region, now, { ...opts, since }),
+      ...(url ? { url } : {}),
+    }),
+  }
 }
 
 /** One post's pictures → a publication per day they are for, with the pictures as drawn */
