@@ -1,6 +1,6 @@
 # AI processor eval set
 
-## Results (18.11.2026, prompts p7–p13)
+## Results (18.11.2026, prompts p7–p15)
 
 `npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800] [--min-short-edge 400] [--effort high]`.
 The CLI backends run the models through `claude -p` / `codex exec` (no API key; slower). Text on
@@ -16,6 +16,8 @@ The CLI backends run the models through `claude -p` / `codex exec` (no API key; 
 | GPT-6.2 Sol       |                          | 73/76                       |        |         |
 
 **Pictures, p10, `--long-edge 1000 --min-short-edge 400`** (the `openaiImageProcessor` defaults): GPT-6.1 Terra 75/76, the miss Zakarpattia 9718 (two cells off). At 800 px it lost Volyn's 1.1 10:00–12:00; 1000 and 1200 px read it. 1600 px with every small picture ×2 also gave 75/76 at three times the image tokens. OpenAI counts ~1 token per 800 px: Chernihiv's 471×800 poster ~470, Zakarpattia's grid ~230 (800×210) or ~860 (×2), Volyn's table ~620 (800 px) or ~2360 (1600 px).
+
+**Pictures, p15** (same sizes): GPT-6.1 Terra 76/76 and 75/76 in two runs (9718 again, cells off by one). Each queue is answered as one line, "1.1 08:30-13:00 ?16:00-18:00" ("1.1 -" for none), and the instructions were tightened (697 → ~590 tokens with the schema): output ~240 tokens a picture, from ~290. p15 adds that only what is printed on the picture counts, never the caption's hours (p14 read Zaporizhzhia's "Діятиме графік" banner as the schedule in its caption).
 
 **Text, p13**: GPT-6.1 Terra 150/150 in two runs in a row. p9–p13 came from its misses on these 150: ЦЕК's "до 22:00 відключаються черги" (a change), "діють ЕКСТРЕНІ … ГПВ не діють" (an emergency start), "повертаємось до графіків" (the emergency ends), "по області (крім …)" (no area), "станом на" as the time of the action, gpvApplies, a change's start time. `photosAreSchedules` is now scored only for the channels whose photos the SDK reads (Chernihiv, Zakarpattia, Sumy). An emergency change naming queues counts as a start (the state machine does the same with both).
 

@@ -290,18 +290,18 @@ Any other model works: a processor is an object with an `id` and `analyzePost(in
 
 **Which model.** Measured on the eval set (`eval/`, 18.11.2026; text: 150 of the 784 posts, the same ones for every model; pictures: all 76):
 
-| model             | posts read right                  | pictures read right           | Zakarpattia's colour grids | $ per 1M tokens in / out |
-| ----------------- | --------------------------------- | ----------------------------- | -------------------------- | ------------------------ |
-| GPT-6.1 Terra     | 150/150 twice (p13), 143/150 (p7) | 75/76 (p10, 1000 px, thin ×2) | 8/9                        | 1 / 5                    |
-| GPT-6.2 Sol       | —                                 | 73/76 (p7, 800 px)            | 6/8                        | 2 / 10                   |
-| GPT-6.2 Astra     | 135/150 (p7)                      | 75–76/76 (p7, 800 px)         | 8/8                        | 8 / 40                   |
-| Claude Sonnet 5.5 | 138/150 (p7)                      | 68/76 (p7, 800 px)            | 3/8                        |                          |
-| Claude Haiku 5.5  | 136/150 (p7)                      | 65/76 (p7, 800 px)            | 1/8                        |                          |
-| Claude Opus 5.5   | —                                 | —                             | 2/8                        |                          |
+| model             | posts read right                  | pictures read right                  | Zakarpattia's colour grids | $ per 1M tokens in / out |
+| ----------------- | --------------------------------- | ------------------------------------ | -------------------------- | ------------------------ |
+| GPT-6.1 Terra     | 150/150 twice (p13), 143/150 (p7) | 76/76, 75/76 (p15, 1000 px, thin ×2) | 8/9                        | 1 / 5                    |
+| GPT-6.2 Sol       | —                                 | 73/76 (p7, 800 px)                   | 6/8                        | 2 / 10                   |
+| GPT-6.2 Astra     | 135/150 (p7)                      | 75–76/76 (p7, 800 px)                | 8/8                        | 8 / 40                   |
+| Claude Sonnet 5.5 | 138/150 (p7)                      | 68/76 (p7, 800 px)                   | 3/8                        |                          |
+| Claude Haiku 5.5  | 136/150 (p7)                      | 65/76 (p7, 800 px)                   | 1/8                        |                          |
+| Claude Opus 5.5   | —                                 | —                                    | 2/8                        |                          |
 
 GPT-6.1 Terra for both is the pick: as accurate on pictures as Astra at an eighth of the price, with `openaiImageProcessor`'s defaults (1000 px, Zakarpattia's 800×210 grids blown up ×2 pixel for pixel). Claude models misread the grids at any size, and a misread grid is real times in the wrong cells, which no check can catch. A case passes only when every field the SDK uses matches the label. The 0.4.8 regex readers, scored the same way on what the SDK makes of the same 150 posts (emergency announcements, and hours per queue where the schedule is taken from text), get 144/150. Text processor and image processor are set separately, so they can come from different vendors. Run `npm run eval` on your own choice of model before relying on it.
 
-**What it costs.** With GPT-6.1 Terra, standard tier: a post is ~2.5k tokens in, of which the ~2.4k of instructions and schema are the same every time and come from OpenAI's prompt cache at a twentieth of the price, and ~180 out (≈ $0.0015); a picture ~1.3k in and ~290 out (≈ $0.003). About $6 a month for the posts of all 19 channels and $2–10 for the pictures. `onProcessed` reports each call's tokens and cached tokens.
+**What it costs.** With GPT-6.1 Terra, standard tier: a post is ~2.5k tokens in, of which the ~2.4k of instructions and schema are the same every time and come from OpenAI's prompt cache at a twentieth of the price, and ~180 out (≈ $0.0015); a picture ~600 tokens of instructions plus the picture itself (~230–1000, ~1 token per 800 px) in and ~240 out (≈ $0.0024). The operators post ~130 posts and 15–25 schedule pictures a day: about $6 a month for the posts and $1–2 for the pictures. `onProcessed` reports each call's tokens and cached tokens.
 
 **Parsed once.** Answers are cached by a hash of the processor id (vendor, model, prompt version) and the whole input. A post is analysed again only when its text changes (an edit); a picture is read once per content, however often it is reposted. Polling every region every 5 minutes then costs about what the operators post (an estimated ~130 posts and ~120 pictures a day across Ukraine), not what is polled. Failed answers are remembered for 30 min, so a post a model can't read isn't paid for on every poll; failures of the AI API itself are not cached. Pass `processorCache` (`get` / `set`, values are JSON) to keep answers across restarts.
 
