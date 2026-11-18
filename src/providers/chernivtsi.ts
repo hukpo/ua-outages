@@ -16,7 +16,14 @@ import type {
   ProviderInfo,
   Street,
 } from '../types.js'
-import { gpvEvents, newerThan, resolveUnread, textUnread, type DatedPublication } from './posts.js'
+import {
+  gpvEvents,
+  newerThan,
+  resolveUnread,
+  textPublications,
+  textUnread,
+  type DatedPublication,
+} from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
@@ -165,9 +172,11 @@ export function chernivtsiProvider(): Provider {
                 // no time of its own it loses the day to the post
                 const said = known?.text.get(p.date)
                 const behind = !!said && !saysTheSame(said, p.days)
+                // a newer post the channel couldn't read: its clock doesn't vouch for the page
+                const unread = known?.unread.get(p.date)
                 days[p.date] = {
                   schedules: p.days,
-                  publishedAt: behind ? null : (known?.clock.get(p.date) ?? null),
+                  publishedAt: behind || unread ? null : (known?.clock.get(p.date) ?? null),
                 }
               }
               return { days }
@@ -177,7 +186,7 @@ export function chernivtsiProvider(): Provider {
             id: `telegram:@${CHANNEL}`,
             url: `https://t.me/s/${CHANNEL}`,
             async read() {
-              const { clock, text } = await channel
+              const { clock, text, unread } = await channel
               const pages = await site.catch(() => [])
               const days: SourceRead['days'] = {}
               const today = kyivDate(ctx.now())
@@ -188,8 +197,12 @@ export function chernivtsiProvider(): Provider {
                 days[date] = {
                   schedules: page && saysTheSame(schedules, page.days) ? page.days : schedules,
                   publishedAt: clock.get(date) ?? null,
+                  ...(unread.has(date) ? { unread: unread.get(date)!.message } : {}),
                 }
               }
+              for (const [date, error] of unread)
+                if (date >= today && !days[date])
+                  days[date] = { schedules: {}, publishedAt: null, unread: error.message }
               return { days }
             },
           },
@@ -285,6 +298,8 @@ export interface ChannelDays {
   clock: Map<string, string>
   /** date → the day as text, when the newest post about that date carries it as text */
   text: Map<string, Record<GroupId, DaySchedule>>
+  /** date → why a newer post about it couldn't be read (yet): its clock and text may be behind */
+  unread: Map<string, OutageError>
 }
 
 /**
@@ -307,19 +322,24 @@ export async function parseChannelPosts(
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const analyzed = await analyzeAll(ctx, INFO.id, channelInputs(sorted, INFO.id))
   // a post that can't be read may be the newest version of a day: its clock and text are unknown
-  // what stands in for it: a newer list, picture announcement or cancellation of the day
-  const newer: DatedPublication[] = analyzed.flatMap((a, post) =>
-    a.analysis
-      ? gpvEvents(a.analysis, INFO.id)
-          .filter((e) => e.action === 'cancel' || e.action === 'start')
-          .map((e) => ({
-            date: e.date ?? kyivDate(new Date(a.input.publishedAt)),
-            at: Date.parse(a.input.publishedAt),
-            post,
-            pub: { groups: {}, from: 0 },
-          }))
-      : [],
-  )
+  // what stands in for it: a newer whole day (see `isWhole`): a list, a cancellation, or a post
+  // that names the day and says its whole schedule is in the picture
+  const now = ctx.now()
+  const newer: DatedPublication[] = [
+    ...textPublications(analyzed, INFO.id, now),
+    ...analyzed.flatMap((a, post) =>
+      a.analysis
+        ? gpvEvents(a.analysis, INFO.id)
+            .filter((e) => e.action === 'start' && !e.schedule.length && e.dateNamed && !e.at && !e.until)
+            .map((e) => ({
+              date: e.date ?? kyivDate(new Date(a.input.publishedAt)),
+              at: Date.parse(a.input.publishedAt),
+              post,
+              pub: { groups: {}, from: 0 },
+            }))
+        : [],
+    ),
+  ]
   const unread = new Map(
     [
       ...resolveUnread(
@@ -342,18 +362,16 @@ export async function parseChannelPosts(
       const days =
         ev.action === 'cancel'
           ? noOutages(date)
-          : ev.action === 'start' && ev.schedule.length
+          : // a window of the day ("з 10:00 до 12:00") is no whole day in text (the page has it)
+            ev.action === 'start' && ev.schedule.length && !ev.at && !ev.until
             ? textDay(ev.schedule, date)
             : null
       if (days) text.set(date, days)
       else text.delete(date)
     }
   }
-  // a day whose newest post can't be read: neither its time nor its text is known, and an older
-  // post's must not pass for them
-  // (today and later: this reader has no flag, the site stands alone instead)
-  for (const error of unread.values()) throw error
-  return { clock, text }
+  // a day whose newest post can't be read (yet): flagged, per day; the other days stand
+  return { clock, text, unread }
 }
 
 const noOutages = (date: string): Record<GroupId, DaySchedule> =>

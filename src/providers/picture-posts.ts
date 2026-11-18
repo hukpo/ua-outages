@@ -230,6 +230,7 @@ async function readPost(
         date,
         at: at.getTime(),
         post: i,
+        seq: post.id,
         pub: { groups: day.groups, from, ...(to !== undefined ? { to } : {}) },
       },
       picture: { publishedAt: post.at, url: post.url, schedules: day.schedules },

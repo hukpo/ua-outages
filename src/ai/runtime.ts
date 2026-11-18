@@ -190,9 +190,13 @@ export class AiRuntime {
     if (winner) return winner
     const message = `${input.url}: the readings of its emergency events disagree (${this.judge ? 'three ways' : 'no judgeProcessor'})`
     // the second and third readings are asked again after a while, like any misread (the first
-    // one stays: its schedule events are used elsewhere)
-    for (const p of [this.verify, this.judge])
-      if (p)
+    // one stays: its schedule events are used elsewhere). Only a reading that voted: one already
+    // remembered as failed keeps its time, or polls every 5 min would put it off for ever
+    for (const [p, vote] of [
+      [this.verify, second],
+      [this.judge, third],
+    ] as const)
+      if (p && vote)
         await this.setQuietly(
           sha('text', p.id, stable(input)),
           { ok: false, code: 'parse', message, until: Date.now() + FAILED_TTL_MS },

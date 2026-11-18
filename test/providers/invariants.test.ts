@@ -3,7 +3,6 @@ import type { Analyzed } from '../../src/ai/posts.js'
 import { OutageError } from '../../src/errors.js'
 import {
   assembleDays,
-  isWhole,
   layerPublications,
   type DatedPublication,
   type Publication,
@@ -43,17 +42,21 @@ const slotsOf = (r: ReturnType<typeof rng>): MinuteSlot[] => {
   return out
 }
 
-function randomPub(r: ReturnType<typeof rng>): Publication {
+type Kind = 'whole' | 'window' | 'rest' | 'add' | 'cancel'
+
+/** A random publication and what it is, as generated (not as the code under test decides) */
+function randomKindPub(r: ReturnType<typeof rng>): { kind: Kind; pub: Publication } {
   const kind = r.pick(['whole', 'whole', 'window', 'rest', 'add', 'cancel'] as const)
-  if (kind === 'cancel') return { groups: {}, from: 0, cancelled: true }
+  if (kind === 'cancel') return { kind, pub: { groups: {}, from: 0, cancelled: true } }
   const groups: Record<string, MinuteSlot[] | null> = {}
   for (const g of GROUPS) if (r.next() < 0.8) groups[g] = r.next() < 0.1 ? null : slotsOf(r)
-  if (kind === 'whole') return { groups, from: 0 }
-  if (kind === 'add') return { groups, from: 0, add: true }
+  if (kind === 'whole') return { kind, pub: { groups, from: 0 } }
+  if (kind === 'add') return { kind, pub: { groups, from: 0, add: true } }
   const from = (1 + r.int(20)) * 60
-  if (kind === 'rest') return { groups, from }
-  return { groups, from, to: Math.min(1440, from + (1 + r.int(8)) * 60) }
+  if (kind === 'rest') return { kind, pub: { groups, from } }
+  return { kind, pub: { groups, from, to: Math.min(1440, from + (1 + r.int(8)) * 60) } }
 }
+const randomPub = (r: ReturnType<typeof rng>) => randomKindPub(r).pub
 
 const toMinutes = (slots: MinuteSlot[]): boolean[] => {
   const m = Array<boolean>(1440).fill(false)
@@ -86,7 +89,7 @@ function model(pubs: readonly Publication[], omitted: 'unknown' | 'none') {
       continue
     }
     const to = pub.to ?? 1440
-    if (isWhole(pub)) {
+    if (!pub.add && pub.from <= 0 && (pub.to ?? 1440) >= 1440) {
       cur = Object.fromEntries(
         listed.map((g) => [g, pub.groups[g] === null ? null : toMinutes(pub.groups[g]!)]),
       )
@@ -170,14 +173,22 @@ describe('an unread post, on random sequences of posts', () => {
   it('flags every day today on that it may be about until a newer whole publication of that day, and no other', () => {
     const now = new Date('2026-11-18T12:00:00+02:00')
     const days = ['2026-11-17', '2026-11-18', '2026-11-19']
-    for (let seed = 1; seed <= 2000; seed++) {
+    for (let seed = 1; seed <= 3000; seed++) {
       const r = rng(seed)
+      // a page without times (newest first, the order is all there is), or a channel whose posts
+      // may share a second (the message id orders them then)
+      const timeless = r.next() < 0.3
       const n = 2 + r.int(6)
       const analyzed: Analyzed[] = []
       const pubs: DatedPublication[] = []
+      const kinds: Kind[] = []
       const items: UnreadItem[] = []
+      const times: number[] = []
+      let t = Date.parse('2026-11-17T18:00:00+02:00')
       for (let i = 0; i < n; i++) {
-        const publishedAt = new Date(Date.parse('2026-11-17T18:00:00+02:00') + i * 3600_000).toISOString()
+        if (r.next() < 0.6) t += 3600_000 // otherwise: the same second as the post before
+        times.push(t)
+        const publishedAt = new Date(t).toISOString()
         const url = `https://t.me/x/${i + 1}`
         const unread = r.next() < 0.3
         analyzed.push({
@@ -191,18 +202,31 @@ describe('an unread post, on random sequences of posts', () => {
             days: [r.pick(days), r.pick(days)],
             error: analyzed[i]!.error as OutageError,
           })
-        else pubs.push({ date: r.pick(days), at: Date.parse(publishedAt), post: i, pub: randomPub(r) })
+        else {
+          const { kind, pub } = randomKindPub(r)
+          kinds[i] = kind
+          pubs.push({ date: r.pick(days), at: t, post: i, seq: i + 1, pub })
+        }
       }
-      const out = assembleDays(analyzed, [...pubs], items, 'kharkiv', now, {})
-      const label = `seed ${seed}`
+      // newer, worked out here: on a page, higher up (a lower index); on a channel, later, then the
+      // higher message id
+      const newer = (a: number, b: number) =>
+        timeless ? a < b : times[a]! > times[b]! || (times[a] === times[b] && a > b)
+      const out = assembleDays(analyzed, [...pubs], items, 'kharkiv', now, { timeless })
       for (const d of days) {
         const expected =
           d >= '2026-11-18' &&
           items.some(
             (it) =>
-              it.days.includes(d) && !pubs.some((p) => p.date === d && isWhole(p.pub) && p.post > it.post),
+              it.days.includes(d) &&
+              !pubs.some(
+                (p) =>
+                  p.date === d &&
+                  (kinds[p.post] === 'whole' || kinds[p.post] === 'cancel') &&
+                  newer(p.post, it.post),
+              ),
           )
-        expect(!!out.get(d)?.unread, `${label} ${d}`).toBe(expected)
+        expect(!!out.get(d)?.unread, `seed ${seed} ${d}${timeless ? ' (page)' : ''}`).toBe(expected)
       }
     }
   })

@@ -570,7 +570,7 @@ describe('Chernivtsioblenergo: the site and @oe_cv_ua as two channels', () => {
     expect(assessFreshness(s, { now })).toMatchObject({ state: 'stale', today: 'missing' })
   })
 
-  it('fails the channel when its newest post about a schedule cannot be read', async () => {
+  it('flags the day whose newest post cannot be read; the page stands with no clock to vouch for it', async () => {
     // a misread (a time that doesn't exist) of 4054, the post for 17.11
     const bad = fakeText((input) =>
       postId(input) === 4054
@@ -578,7 +578,11 @@ describe('Chernivtsioblenergo: the site and @oe_cv_ua as two channels', () => {
         : ANSWERS[postId(input)],
     )
     const s = await setup({ text: bad }).client.getSchedules('chernivtsi')
-    expect(s.sources![1]).toMatchObject({ id: 'telegram:@oe_cv_ua', ok: false, error: { code: 'parse' } })
+    expect(s.sources![1]).toMatchObject({
+      id: 'telegram:@oe_cv_ua',
+      ok: true,
+      unread: [{ date: '2026-11-17' }],
+    })
     // the page stands, with no clock to vouch for it
     expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-17'], updatedAt: null })
     // an older unreadable post is outdated by the newer ones and doesn't matter

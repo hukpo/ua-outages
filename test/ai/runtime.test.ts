@@ -229,6 +229,12 @@ describe('AiRuntime: an emergency post is read twice, and a judge settles a disa
       clock.mockReturnValue(t0 + 11 * 60_000)
       await expect(ai.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
       expect(haiku.calls).toHaveLength(2)
+      // polled every 5 minutes, it is still asked every 10: a poll in between doesn't put it off
+      for (const m of [16, 21, 26]) {
+        clock.mockReturnValue(t0 + m * 60_000)
+        await expect(ai.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
+      }
+      expect(haiku.calls).toHaveLength(3)
     } finally {
       clock.mockRestore()
     }

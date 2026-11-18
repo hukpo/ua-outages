@@ -260,3 +260,63 @@ describe('final review', () => {
     expect(r.days.get('2026-11-18')!.unread).toBeDefined()
   })
 })
+
+describe('consolidation review', () => {
+  it('a cancellation until further notice in the same second as tomorrow’s list (a later message) cancels it', async () => {
+    const posts = [
+      tg('kharkivenergy', 1, '2026-11-18T20:00:00+02:00', 'list for 19'),
+      tg('kharkivenergy', 2, '2026-11-18T20:00:00+02:00', 'cancelled until further notice'),
+    ]
+    const text = fakeText((input) =>
+      input.text.startsWith('list')
+        ? [gpv({ date: '2026-11-19', schedule: gpvSchedule({ '1.1': '08:00-10:00' }) })]
+        : [gpv({ action: 'cancel', untilFurtherNotice: true })],
+    )
+    const { days } = await readSchedulePosts(
+      ctxOf('2026-11-18T21:00:00+02:00', text),
+      'kharkiv',
+      channelInputs(posts, 'kharkiv'),
+    )
+    expect(days.get('2026-11-19')!.cancelled).toBe(true)
+  })
+
+  describe('Chernivtsi', () => {
+    const run = async (posts: TelegramPost[], answers: Record<number, PostEvent[]>, now: string) => {
+      const { parseChannelPosts } = await import('../../src/providers/chernivtsi.js')
+      const text = fakeText((input) => answers[Number(input.url.split('/').pop())])
+      return parseChannelPosts(ctxOf(now, text), posts)
+    }
+    const cv = (o: Partial<PostEvent>) => gpv(o, 'chernivtsi')
+    const all = (hours: string) =>
+      gpvSchedule(Object.fromEntries(['1', '2', '3'].map((g) => [g, hours])), ['1', '2', '3'])
+
+    it('a window of the day after an unread post is no whole day: the day stays flagged, with no text', async () => {
+      const r = await run(
+        [
+          tg('oe_cv_ua', 1, '2026-11-17T21:00:00+02:00', 'unreadable'),
+          tg('oe_cv_ua', 2, '2026-11-18T09:00:00+02:00', 'window'),
+        ],
+        {
+          1: [cv({ at: '25:00' })],
+          2: [cv({ date: '2026-11-18', at: '10:00', until: '12:00', schedule: all('10:00-11:00') })],
+        },
+        '2026-11-18T09:30:00+02:00',
+      )
+      expect(r.unread.has('2026-11-18')).toBe(true)
+      expect(r.text.has('2026-11-18')).toBe(false)
+    })
+
+    it("an unread tomorrow doesn't throw away today's whole list", async () => {
+      const r = await run(
+        [
+          tg('oe_cv_ua', 1, '2026-11-18T07:00:00+02:00', 'unreadable'),
+          tg('oe_cv_ua', 2, '2026-11-18T08:00:00+02:00', 'today'),
+        ],
+        { 1: [cv({ at: '25:00' })], 2: [cv({ date: '2026-11-18', schedule: all('10:00-11:00') })] },
+        '2026-11-18T09:30:00+02:00',
+      )
+      expect([...r.unread.keys()]).toEqual(['2026-11-19'])
+      expect(r.text.has('2026-11-18')).toBe(true)
+    })
+  })
+})

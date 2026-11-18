@@ -330,6 +330,7 @@ export function untilFurtherNotice(
             date,
             at: opts.timeless ? NaN : at,
             post,
+            seq: seqOf(input, post),
             pub: { groups: {}, from: 0, cancelled: true },
           })
     }
