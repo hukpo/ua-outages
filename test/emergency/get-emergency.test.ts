@@ -215,6 +215,17 @@ describe('getEmergency', () => {
     })
   })
 
+  it("Sumy: the operator's apply with @Ukrenergo down is unknown (Ukrenergo may have cancelled it)", async () => {
+    const routes = [
+      { match: 't.me/s/SumyEnergo', body: page('SumyEnergo', [3919]) },
+      { match: 't.me/s/Ukrenergo', body: 'down', status: 503 },
+    ]
+    expect(await client('2026-11-15T20:00:00+02:00', routes).client.getEmergency('sumy')).toMatchObject({
+      state: 'unknown',
+      queues: null,
+    })
+  })
+
   it('Zhytomyr: an edited "UPD … скасовано" post is a cancellation', async () => {
     const routes = [{ match: 't.me/s/ztoe_ua', body: fixture('telegram/ztoe_ua-before-1875.trimmed.html') }]
     const s = await client('2026-11-04T15:00:00+02:00', routes).client.getEmergency('zhytomyr')

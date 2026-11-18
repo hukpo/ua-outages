@@ -62,8 +62,53 @@ describe('validatePostAnalysis', () => {
       'kirovohrad',
     ])
     const dtek = post({ regions: ['kyiv', 'kyiv-region'].map((r) => postRegion(r as never)) })
-    // a shared channel's post about none of its regions: dropped, not an error
-    expect(check([ev({ kind: 'emergency', action: 'start', regions: [] })], dtek).events).toEqual([])
+    // a shared channel's event naming none of its regions: the prompt asks for no event then, so
+    // a missing list is a misread (a dropped cancel would leave an apply running)
+    expect(() => check([ev({ kind: 'emergency', action: 'cancel', regions: [] })], dtek)).toThrow(
+      expect.objectContaining({ code: 'parse' }),
+    )
+  })
+
+  it.each([
+    ['queues null on a cancel (would end every queue)', { queues: null, queueCount: null, allQueues: false }],
+    ['allQueues null', { allQueues: null }],
+    ['all queues and only one of them', { allQueues: true, queues: ['3'] }],
+    ['all queues and a count of two', { allQueues: true, queueCount: 2 }],
+    ['a queue list squeezed into one name ("1,2-4" read as "1")', { queues: ['1,2-4'] }],
+    ['a range as one queue', { queues: ['2-4'] }],
+  ])('emergency scope: rejects %s', (_, over) => {
+    const zp = post({ regions: [postRegion('zaporizhzhia')] })
+    expect(() =>
+      check([{ ...ev({ kind: 'gav', action: 'cancel', regions: ['zaporizhzhia'] }), ...over }], zp),
+    ).toThrow(expect.objectContaining({ code: 'parse' }))
+  })
+
+  it("a ГПВ window through midnight is refused (one day's window can't say it)", () => {
+    const e = (until: string) =>
+      ev({
+        kind: 'gpv',
+        action: 'change',
+        regions: ['kirovohrad'],
+        at: '22:00',
+        until,
+        schedule: [{ queue: '1.1', intervals: [] }],
+      })
+    expect(() => check([e('06:00')])).toThrow(expect.objectContaining({ code: 'parse' }))
+    expect(() => check([e('22:00')])).toThrow(expect.objectContaining({ code: 'parse' }))
+    expect(check([e('24:00')]).events[0]!.at).toBe('22:00')
+  })
+
+  it('a cancel naming every queue of a fixed set one by one is a cancel of all of them', () => {
+    const zp = post({ regions: [postRegion('zaporizhzhia')] })
+    const all = Array.from({ length: 10 }, (_, i) => String(i + 1))
+    const a = check([ev({ kind: 'gav', action: 'cancel', regions: ['zaporizhzhia'], queues: all })], zp)
+    expect(a.events[0]!.allQueues).toBe(true)
+    // "черга 3" and "1(Р)" are still one queue each
+    const b = check(
+      [ev({ kind: 'gav', action: 'start', regions: ['zaporizhzhia'], queues: ['черга 3', '1(Р)'] })],
+      zp,
+    )
+    expect(b.events[0]!.queues).toEqual(['3', '1(Р)'])
   })
 
   it('normalizes queue names and checks ГПВ hours', () => {
@@ -290,7 +335,7 @@ describe('validate: what an answer must not leave open', () => {
     ).toThrow(/both/)
   })
 
-  it('a change that is "again" or additive stays a change', () => {
+  it('an emergency change stays a change (it replaces the queues off; a start adds to them)', () => {
     const e = {
       kind: 'gav',
       action: 'change',
@@ -301,7 +346,7 @@ describe('validate: what an answer must not leave open', () => {
       again: true,
     }
     expect(validatePostAnalysis(answer([e]), post()).events[0]!.action).toBe('change')
-    expect(validatePostAnalysis(answer([{ ...e, again: false }]), post()).events[0]!.action).toBe('start')
+    expect(validatePostAnalysis(answer([{ ...e, again: false }]), post()).events[0]!.action).toBe('change')
   })
 
   it('an interval object without its kind, or off and maybe over the same minutes, is refused', () => {

@@ -38,6 +38,12 @@ export function eventInstant(
   return { at: toKyivIso(t), timed: true }
 }
 
+/** "до 14:00" of an apply at 23:00: the next day's 14:00, never before its start */
+function untilInstant(day: string, hhmm: string, at: string): Date {
+  const t = clockInstant(day, hhmm, true)
+  return t.getTime() <= Date.parse(at) ? clockInstant(addDays(day, 1), hhmm, true) : t
+}
+
 const ACTION = { start: 'apply', cancel: 'cancel', change: 'update' } as const
 
 /** The emergency events of one post about `region` → announcements, in post order */
@@ -76,7 +82,7 @@ export function toAnnouncements(
       scheduleApplies: ev.gpvApplies,
       area: ev.area,
       edited: ev.addedInEdit,
-      until: ev.until ? toKyivIso(clockInstant(day, ev.until, true)) : null,
+      until: ev.until ? toKyivIso(untilInstant(day, ev.until, at)) : null,
     })
   }
   return out

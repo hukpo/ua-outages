@@ -176,7 +176,9 @@ export class AiRuntime {
     signal?: AbortSignal,
   ): Promise<PostAnalysis> {
     const first = await this.analyzePost(region, input, signal)
-    if (!this.verify || (this.verifyPosts === 'emergency' && !touchesEmergency(first, region))) return first
+    // any region of the channel: a first reading that puts an Odesa cancel under Kyiv must still be
+    // checked for Odesa
+    if (!this.verify || (this.verifyPosts === 'emergency' && !touchesEmergency(first))) return first
     const key = (a: PostAnalysis) => emergencyKey(a, input, region)
     const firstKey = key(first)
     const second = await this.readOrNull(this.verify, 'verify', region, input, signal)
@@ -443,9 +445,8 @@ export class AiRuntime {
   }
 }
 
-/** The post's events say an emergency measure starts, ends or changes in `region` */
-const touchesEmergency = (a: PostAnalysis, region: RegionId) =>
-  a.events.some((e) => e.kind !== 'gpv' && e.kind !== 'other' && e.regions.includes(region))
+/** The post's events say an emergency measure starts, ends or changes, in any region it reads for */
+const touchesEmergency = (a: PostAnalysis) => a.events.some((e) => e.kind !== 'gpv' && e.kind !== 'other')
 
 /**
  * What the state machine (`foldEvents`) gets from an analysis about `region`, in post order:

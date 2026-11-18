@@ -87,6 +87,8 @@ interface Track {
   lifted: Set<string>
   /** Said to last at least until then ("до кінця доби"), ms; 0 when not said */
   until: number
+  /** Ended by a cancel announced ahead of its time ("о 12:00 скасовуються"): then, ms; else 0 */
+  endsAt: number
 }
 
 const KINDS: readonly EmergencyKind[] = ['gav', 'sgav', 'emergency']
@@ -128,7 +130,13 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   /** The newest cancel that had nothing running to end (the apply was before the window) */
   let orphanCancel: EmergencyEvent | null = null
   let lastUnclear: EmergencyEvent | null = null
-  let lastDecisiveAt = 0
+  /**
+   * The tracks an unread post may have changed, until a word posted after it about each of them:
+   * ГАВ (with the unnamed ones) and СГАВ apart, so a СГАВ cancel says nothing about a ГАВ in doubt
+   */
+  const doubt = new Set<'main' | 'sgav'>()
+  const groupsOf = (k: EmergencyKind): ('main' | 'sgav')[] =>
+    k === 'emergency' ? ['main', 'sgav'] : k === 'sgav' ? ['sgav'] : ['main']
 
   const timeOf = (e: EmergencyEvent) => Math.max(Date.parse(e.posted), Date.parse(e.announcement.at))
   const keyOf = (kind: EmergencyKind, area: string | null) => `${kind}|${areaKey(area)}`
@@ -178,6 +186,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       inferred: false,
       lifted: new Set(),
       until: a.until ? Date.parse(a.until) : 0,
+      endsAt: 0,
     }
     tracks.set(keyOf(kind, a.area), t)
     return t
@@ -238,11 +247,17 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     expire(timeOf(e))
     if (a.action === 'unclear') {
       // a post that can't be read may end what runs as well as start something: the state is
-      // not known until a word that can be read, and it doesn't keep an episode alive either
+      // not known until a word that can be read, and it doesn't keep an episode alive either.
+      // In doubt: what runs, and ГАВ in any case (what an unread post most often starts)
       lastUnclear = e
+      doubt.add('main')
+      for (const t of tracks.values()) if (t.active) for (const g of groupsOf(t.kind)) doubt.add(g)
       continue
     }
-    lastDecisiveAt = Math.max(lastDecisiveAt, timeOf(e))
+    // a word posted after the unread one settles its kinds; one posted before it but taking
+    // effect later ("об 11:00 вводяться", posted 10:40) doesn't
+    if (lastUnclear && Date.parse(e.posted) >= Date.parse(lastUnclear.posted))
+      for (const g of groupsOf(a.kind)) doubt.delete(g)
 
     if (a.action === 'cancel') {
       const kinds: EmergencyKind[] =
@@ -254,9 +269,12 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       // with no area followed separately, the one whole-region episode is what it ends
       if (a.area && !targets.length && ![...tracks.values()].some((t) => t.active && t.area))
         targets = on.filter((t) => !t.area)
+      const ahead = a.timed && Date.parse(a.at) > Date.parse(e.posted)
       for (const t of targets) {
-        if (!a.partial || lift(t, a)) end(t, e)
-        else touch(t, e)
+        if (!a.partial || lift(t, a)) {
+          end(t, e)
+          if (ahead) t.endsAt = Date.parse(a.at)
+        } else touch(t, e)
       }
       if (!targets.length && a.edited) {
         // "UPD: … скасовано" written into the apply post: it was in force from the post time
@@ -267,15 +285,36 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       continue
     }
 
+    // a word that took effect before a cancel announced for later ("о 12:00 скасовуються" at
+    // 08:00, "ГАВ діють" at 09:00): the state before that cancel, not after it
+    const ended = tracks.get(keyOf(a.kind, a.area))
+    if (ended && !ended.active && ended.endsAt > Date.parse(a.at)) continue
+
     if (a.action === 'update') {
       const t = running(a.kind, a.area)
       if (!t) {
-        if (a.queues?.length) start(a, e, a.kind)
+        // "тепер відключено 2 черги" with nothing known before: on, with those queues or that many
+        if (a.queues?.length || a.count !== null) start(a, e, a.kind)
         continue
       }
-      // "знеструмлюються 6-10, вмикаються 1-5": the new set
+      if (a.add) {
+        if (a.queues) t.queues = t.queues ? new Set([...t.queues, ...a.queues]) : null
+        t.count = t.queues ? t.queues.size : t.count !== null && a.count !== null ? t.count + a.count : null
+      } else if (a.queues) {
+        // "заміна черг: тепер 3 та 4": the new set. Queues it neither names off nor back on, while
+        // it names some back on ("9,10,1,2 знеструмлюємо; 3-6 заживлені" while 3-8 were off):
+        // whether 7 and 8 stay off isn't said
+        const left = t.queues
+          ? [...t.queues].filter((q) => !a.queues!.includes(q) && !(a.restored ?? []).includes(q))
+          : []
+        t.queues = a.restored?.length && left.length ? null : new Set(a.queues)
+        t.count = t.queues ? t.queues.size : null
+      } else if (a.count !== null) {
+        // the volume now; queue ids that don't fit it are no longer known
+        if (t.queues && t.queues.size !== a.count) t.queues = null
+        t.count = a.count
+      }
       if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
-      if (a.queues) t.queues = new Set([...(t.queues ?? []), ...a.queues])
       if (t.queues) t.count = t.queues.size
       touch(t, e)
       if (t.queues && !t.queues.size) end(t, e)
@@ -325,7 +364,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   })
 
   // the newest word can't be read: say so rather than guess (it expires with the TTL)
-  if (lastUnclear && timeOf(lastUnclear) > lastDecisiveAt && now < lapse(timeOf(lastUnclear)))
+  if (lastUnclear && doubt.size && now < lapse(timeOf(lastUnclear)))
     return status({
       state: 'unknown',
       kind: lastUnclear.announcement.kind,

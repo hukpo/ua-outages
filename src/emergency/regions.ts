@@ -362,6 +362,16 @@ export async function getEmergency(
   if (!errors.length && !short) return status
   // a source failed: "nothing in force" from the others alone isn't known
   if (status.state === 'inactive') return { ...status, state: 'unknown' }
+  // an apply read from one channel while the other channel that may have cancelled it since is
+  // down (Sumy: @SumyEnergo's apply, @Ukrenergo's later cancel): not known either. A live
+  // state (YASNO's EmergencyShutdowns, a running Mykolaiv feed row) still says it is on
+  const channelDown = (cfg.channels?.length && !telegram) || (cfg.ukrenergo && !national)
+  if (
+    status.state === 'active' &&
+    channelDown &&
+    (status.source === 'telegram' || status.source === 'ukrenergo')
+  )
+    return { ...status, state: 'unknown', since: null, queues: null, queueCount: null }
   if (status.state === 'active') return carryOver(status, previous, now, ttlHours)
   return status
 }

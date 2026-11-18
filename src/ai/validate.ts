@@ -93,7 +93,10 @@ function scheduleQueue(raw: string, regions: readonly PostRegion[]): string {
 function emergencyQueueList(raw: string[], regions: readonly PostRegion[], what: string): string[] {
   const out: string[] = []
   for (const q of raw) {
-    const names = queueNames(q.replace(/^(?:черга|queue)\s*/iu, ''))
+    const one = q.trim().replace(/^(?:черга|queue)\s*/iu, '')
+    // one queue and nothing else: "1,2-4" would split into "1" and a dropped "2-4"
+    if (!/^\d{1,2}\s*(?:\([РрPp]\))?$/u.test(one)) fail(`${what}: "${q}" is not one queue`)
+    const names = queueNames(one)
     if (names.length !== 1) fail(`${what}: "${q}" is not a queue`)
     out.push(names[0]!)
   }
@@ -153,8 +156,9 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
   let regions = strings(o.regions, `${w}.regions`)
   // a single-region source: an empty list can only mean that region
   if (!regions.length && ids.length === 1) regions = [...ids]
-  // a shared channel's post about none of its regions (a national post naming other oblasts)
-  if (!regions.length) return null
+  // a shared channel's event naming none of its regions: the prompt asks for no event then, so
+  // a missing list is a misread (a dropped cancel would leave an apply running)
+  if (!regions.length) fail(`${w}.regions empty on a channel of ${ids.join(', ')}`)
   const unknown = regions.findIndex((r) => !ids.includes(r))
   if (unknown >= 0) fail(`${w}.regions: "${regions[unknown]}" isn't one of ${ids.join(', ')}`)
   regions = [...new Set(regions)]
@@ -175,13 +179,21 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
 
   const emergency = kind !== 'gpv'
   // how much is affected must be said, not left out: a cancel with none of these would end all
-  if (emergency)
+  if (emergency) {
     for (const f of ['allQueues', 'queues', 'queueCount'] as const)
       if (!(f in o)) fail(`${w}.${f} missing for ${kind}`)
+    // null is no scope: a cancel reading as "all" from it would end every queue
+    if (!Array.isArray(o.queues)) fail(`${w}.queues is not a list`)
+    if (typeof o.allQueues !== 'boolean') fail(`${w}.allQueues is not a boolean`)
+  }
   const queues = emergency ? emergencyQueueList(strings(o.queues, `${w}.queues`), scope, `${w}.queues`) : []
   const queuesRestored = emergency
     ? emergencyQueueList(strings(o.queuesRestored, `${w}.queuesRestored`), scope, `${w}.queuesRestored`)
     : []
+
+  // a ГПВ window through midnight ("з 22:00 до 06:00") is two days: the window of one day can't say it
+  if (!emergency && at && until && clockMinutes(until, true) <= clockMinutes(at))
+    fail(`${w}: window ${at}-${until} doesn't go forward`)
 
   const area = nullableStr(o.area, `${w}.area`)
   const schedule: PostEvent['schedule'] = []
@@ -205,18 +217,24 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
     // the hours may be in the post's picture
   }
 
-  // "9,10,1,2 знеструмлюємо; 3-6 будуть заживлені" read as a change or as a start with those
-  // queues: the state machine adds the queues and drops the restored ones either way
-  const additiveRaw = o.additive === true
-  const againRaw = o.again === true
-  const effective: EventAction =
-    emergency && action === 'change' && queues.length && !additiveRaw && !againRaw ? 'start' : action
+  // an emergency change ("заміна черг: тепер 3 та 4") replaces the queues off; a start adds
+  // to them: kept apart
+  const effective: EventAction = action
   const both = queues.find((q) => queuesRestored.includes(q))
   if (both) fail(`${w}: queue ${both} both off and restored`)
   const fixed = scope.find((r) => r.emergencyQueues.length)?.emergencyQueues.length
   if (emergency && fixed && queueCount !== null && queueCount > fixed)
     fail(`${w}.queueCount ${queueCount} is more than the ${fixed} queues there are`)
-  const allQueues = emergency ? bool(o.allQueues ?? false, `${w}.allQueues`) : false
+  const allRaw = emergency ? bool(o.allQueues ?? false, `${w}.allQueues`) : false
+  // "all queues" and a part of them at once: which one is meant can't be told
+  if (emergency && allRaw && fixed && (queues.length || queueCount !== null)) {
+    const plain = new Set(queues.map((q) => q.replace('(Р)', '')))
+    if ((queues.length && plain.size < fixed) || (queueCount !== null && queueCount < fixed))
+      fail(`${w}: all queues and only some of them`)
+  }
+  // every queue there is, named one by one: all of them
+  const allQueues =
+    allRaw || (emergency && !!fixed && new Set(queues.map((q) => q.replace('(Р)', ''))).size >= fixed)
   const additive = bool(o.additive ?? false, `${w}.additive`)
   const again = bool(o.again ?? false, `${w}.again`)
   const gpvApplies = nullableBool(o.gpvApplies, `${w}.gpvApplies`)
