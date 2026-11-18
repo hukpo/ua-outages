@@ -11,7 +11,7 @@ import { clockMinutes } from './validate.js'
  */
 
 /** "HH:MM" on `day` as an instant; "24:00" is the next midnight */
-export function clockInstant(day: string, hhmm: string): Date {
+function clockInstant(day: string, hhmm: string): Date {
   const m = clockMinutes(hhmm, true)
   return m === 1440 ? kyivInstant(addDays(day, 1), 0) : kyivInstant(day, m)
 }

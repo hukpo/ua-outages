@@ -93,7 +93,7 @@ export function diffImage(exp: ImageReading, got: ImageReading): string[] {
  * Elsewhere the photos are never opened, so whether a post's photos are a schedule changes nothing
  * and isn't scored
  */
-export const PICTURE_CHANNELS: ReadonlySet<string> = new Set([
+const PICTURE_CHANNELS: ReadonlySet<string> = new Set([
   'chernigivoblenergo',
   'zakarpatenergyofficial',
   'SumyEnergo',

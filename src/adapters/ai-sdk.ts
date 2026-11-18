@@ -63,7 +63,7 @@ export interface AiSdkImageProcessorOptions extends AiSdkProcessorOptions {
 const VENDOR = 'AI SDK'
 
 /** "openai:gpt-6.1-terra" for a provider's model, the id itself for a Gateway one */
-export function modelName(model: LanguageModel): string {
+function modelName(model: LanguageModel): string {
   if (typeof model === 'string') return model
   const m = model as { provider?: string; modelId?: string }
   return `${m.provider ?? 'model'}:${m.modelId ?? 'unknown'}`

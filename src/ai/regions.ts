@@ -68,7 +68,7 @@ export function postRegion(id: RegionId): PostRegion {
 }
 
 /** Telegram channels and the regions each one's posts may be about */
-export const CHANNEL_REGIONS: Record<string, readonly RegionId[]> = {
+const CHANNEL_REGIONS: Record<string, readonly RegionId[]> = {
   dtek_ua: ['kyiv', 'kyiv-region', 'dnipro', 'odesa', 'donetsk'],
   // national posts, read only for regions whose operator announces nothing itself
   Ukrenergo: ['chernivtsi', 'zakarpattia', 'volyn', 'rivne'],

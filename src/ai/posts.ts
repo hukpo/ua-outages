@@ -7,7 +7,7 @@ import { channelRegions, postRegion } from './regions.js'
 import type { PostAnalysis, PostInput, PostRegion } from './types.js'
 
 /** A Telegram post as a processor input: its text, the post it replies to, how many photos */
-export function telegramInput(post: TelegramPost, regions: readonly PostRegion[]): PostInput {
+function telegramInput(post: TelegramPost, regions: readonly PostRegion[]): PostInput {
   return {
     url: post.url,
     source: { kind: 'telegram', channel: post.channel },

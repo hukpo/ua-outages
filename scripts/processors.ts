@@ -18,7 +18,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { OutageClientOptions, ProcessedEvent, ProcessorCache } from '../src/index.js'
 
-export const DEFAULT_OPENAI_MODEL = 'gpt-6.1-terra'
+const DEFAULT_OPENAI_MODEL = 'gpt-6.1-terra'
 
 export async function processorsFromEnv(): Promise<
   Pick<OutageClientOptions, 'textProcessor' | 'imageProcessor' | 'verifyProcessor' | 'judgeProcessor'>
