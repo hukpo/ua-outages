@@ -32,8 +32,8 @@ describe('compactImage', () => {
   it('blows a thin grid up by a whole factor, pixel for pixel, and leaves a poster alone', () => {
     const grid = fixtureBytes('zakarpattia/posters/10104_2026-04-10T0946.jpg')
     expect(compactImage(grid, { maxLongEdge: 1000, minShortEdge: 400 })).toMatchObject({
-      width: 1600,
-      height: 420,
+      width: 2400,
+      height: 630,
       mediaType: 'image/png',
       compacted: true,
     })
@@ -82,7 +82,7 @@ describe('trimMargins', () => {
 describe('upscale', () => {
   it('copies each pixel into an f×f block, keeping cell edges sharp', () => {
     const img = { width: 2, height: 1, data: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]) }
-    const up = upscale(img, 3)
+    const up = upscale(img, 3, 6)
     expect(up).toMatchObject({ width: 6, height: 3 })
     const px = (x: number, y: number) => up.data[(y * 6 + x) * 4]
     expect([px(0, 0), px(2, 2), px(3, 0), px(5, 2)]).toEqual([0, 0, 255, 255])

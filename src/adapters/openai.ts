@@ -51,8 +51,9 @@ export interface OpenAIImageProcessorOptions extends OpenAIProcessorOptions {
    */
   maxLongEdge?: number
   /**
-   * A picture with a shorter short side is scaled up by a whole factor, pixel for pixel, px;
-   * default 400 (Zakarpattia's 800×210 grid goes as 1600×420), 0 for none
+   * A picture with a shorter short side, px, is scaled up, pixel for pixel, by the largest whole
+   * factor that keeps its long edge within 2400 px; default 400 (Zakarpattia's 800×210 grid goes
+   * as 2400×630, ~1900 tokens), 0 for none
    */
   minShortEdge?: number
   /** Run the cheap "is it a schedule?" check on bare photos, default true */

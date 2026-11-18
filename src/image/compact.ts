@@ -6,7 +6,7 @@ import { decodePng, isPng, MAX_IMAGE_PIXELS, type RgbaImage } from './png.js'
  * Makes a picture cheap to send to an image processor without losing what matters on it.
  * Vision models bill by pixels (Claude: ⌈w/28⌉·⌈h/28⌉ tokens), so the picture is scaled down to
  * `maxLongEdge` after trimming plain margins; a thin one (a Telegram preview of a dense grid,
- * 800×210) is blown up by a whole factor until its short side reaches `minShortEdge`, pixel for
+ * 800×210) with a short side under `minShortEdge` is blown up by a whole factor, pixel for
  * pixel, so thin cells stay sharp. Pure JS on the bundled decoders; a
  * picture they can't read (a progressive JPEG) is sent as it is, and the API scales it itself.
  *
@@ -18,8 +18,8 @@ export interface CompactOptions {
   /** Long edge in px after scaling down */
   maxLongEdge: number
   /**
-   * A picture whose short side is below this is scaled up by a whole factor (nearest neighbour)
-   * until it isn't, its long edge kept within 2048 px; default none. Vision models read a thin
+   * A picture whose short side is below this is scaled up by the largest whole factor (nearest
+   * neighbour) that keeps its long edge within 2400 px; default none. Vision models read a thin
    * grid's cells better that way
    */
   minShortEdge?: number
@@ -150,14 +150,14 @@ export function trimMargins(img: RgbaImage): RgbaImage {
   return { width: nw, height: nh, data: out }
 }
 
-/** Nearest-neighbour scaling up by a whole factor until the short side reaches `minShortEdge` */
-export function upscale(img: RgbaImage, minShortEdge: number, maxLongEdge = 2048): RgbaImage {
-  const short = Math.min(img.width, img.height)
-  if (short >= minShortEdge) return img
-  const f = Math.min(
-    Math.ceil(minShortEdge / short),
-    Math.floor(maxLongEdge / Math.max(img.width, img.height)),
-  )
+/**
+ * A picture whose short side is under `minShortEdge` (a thin grid) is scaled up, nearest
+ * neighbour, by the largest whole factor that keeps its long edge within `maxLongEdge`:
+ * Zakarpattia's 800×210 goes as 2400×630, where Terra read all its cells (×2 still misplaced some)
+ */
+export function upscale(img: RgbaImage, minShortEdge: number, maxLongEdge = 2400): RgbaImage {
+  if (Math.min(img.width, img.height) >= minShortEdge) return img
+  const f = Math.floor(maxLongEdge / Math.max(img.width, img.height))
   if (f < 2) return img
   const w = img.width * f
   const h = img.height * f

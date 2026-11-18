@@ -179,8 +179,9 @@ export interface ImageProcessor {
   /** Long edge, px, the picture is scaled down to before `readImage`; default 800 */
   readonly maxLongEdge?: number
   /**
-   * A picture whose short side is below this is scaled up by a whole factor, pixel for pixel;
-   * default none. Helps a model read a thin grid posted small (Zakarpattia's 800×210)
+   * A picture whose short side is below this is scaled up, pixel for pixel, by the largest whole
+   * factor within 2400 px; default none. Helps a model read a thin grid posted small (Zakarpattia's
+   * 800×210)
    */
   readonly minShortEdge?: number
 }
