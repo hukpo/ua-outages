@@ -247,7 +247,16 @@ export function validateImageReading(raw: unknown, input: ImageInput): ImageRead
     const date = o.date === null || o.date === undefined ? null : realDate(o.date, postDay, 2, 3)
     const seen = new Map<string, ClockInterval[]>()
     for (const [j, x] of arr(o.schedule, 'schedule').entries()) {
-      const e = obj(x, `schedule[${j}]`)
+      // "1.1 08:00-12:00 ?16:00-18:00" ("1.1 -": no outages), or {queue, intervals} before p14
+      let e: Record<string, unknown>
+      if (typeof x === 'string') {
+        // "? 16:00-18:00": the mark may stand apart from its span
+        const [head = '', ...spans] = x
+          .trim()
+          .replace(/\?\s+/g, '?')
+          .split(/[\s,]+/)
+        e = { queue: head.replace(/:$/, ''), intervals: spans.filter((s) => s !== '-') }
+      } else e = obj(x, `schedule[${j}]`)
       const queue = scheduleQueue(str(e.queue, `schedule[${j}].queue`), [input.region])
       if (seen.has(queue)) fail(`schedule: queue ${queue} twice`)
       seen.set(queue, intervals(e.intervals, `schedule[${j}].intervals`))

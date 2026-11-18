@@ -151,6 +151,22 @@ describe('validateImageReading', () => {
     ).toThrow(/not HH:MM-HH:MM/)
   })
 
+  it('reads one line per queue, "-" for a queue without outages', () => {
+    const lines = STANDARD_GROUPS.map((q, i) => (i ? `${q} -` : `${q} 08:00-12:00 ?16:00-18:30`))
+    const r = validateImageReading(
+      { isSchedule: true, kind: 'gpv', date: '2026-11-17', statedAt: null, schedule: lines },
+      input,
+    )
+    expect(r.schedule[0]).toEqual({
+      queue: '1.1',
+      intervals: [
+        { from: '08:00', to: '12:00', kind: 'off' },
+        { from: '16:00', to: '18:30', kind: 'maybe' },
+      ],
+    })
+    expect(r.schedule[1]).toEqual({ queue: '1.2', intervals: [] })
+  })
+
   it('needs every queue of the region, once', () => {
     const ok = validateImageReading(
       { isSchedule: true, kind: 'gpv', date: '2026-11-17', statedAt: null, schedule: full },

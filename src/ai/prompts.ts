@@ -5,7 +5,7 @@ import type { ImageInput, PostInput } from './types.js'
  * anyone writing a processor for another vendor can too. Bump `PROMPT_VERSION` with any change
  * here: it is part of the processor id, so cached answers made with the old prompt are not used.
  */
-export const PROMPT_VERSION = 'p13'
+export const PROMPT_VERSION = 'p15'
 
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] })
 const CLOCK = { type: 'string', description: 'HH:MM, 24-hour Kyiv time' }
@@ -86,7 +86,11 @@ export const TEXT_SCHEMA = {
   },
 } as const
 
-/** JSON schema of `ImageReading` */
+/**
+ * JSON schema of `ImageReading`. Each queue is one line, "1.1 08:00-12:00 ?16:00-18:00" ("1.1 -"
+ * for none): a fifth fewer output tokens than a list per queue, and output is most of a picture's
+ * price
+ */
 export const IMAGE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -98,12 +102,7 @@ export const IMAGE_SCHEMA = {
     statedAt: nullable(CLOCK),
     schedule: {
       type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['queue', 'intervals'],
-        properties: { queue: { type: 'string' }, intervals: { type: 'array', items: INTERVAL } },
-      },
+      items: { type: 'string', description: '"<queue> HH:MM-HH:MM …", "<queue> -" for none' },
     },
   },
 } as const
@@ -153,16 +152,17 @@ Rules:
 - photosAreSchedules: true when the post's photos are a schedule (a table or poster of hours per queue), also when the text lists the same hours; false otherwise (crews, damage, infographics, no photos).
 - Never invent queues, hours or times that the post doesn't state.`
 
-export const IMAGE_SYSTEM = `You read pictures published by Ukrainian power grid operators. Decide whether the picture is an outage schedule (a table or poster of hours per queue: ГПВ, ГАВ or СГАВ) and, if it is, read it exactly. Answer only with JSON in the given schema.
+export const IMAGE_SYSTEM = `You read pictures of Ukrainian power grid operators. Is it an outage schedule (a table or poster of hours per queue: ГПВ, ГАВ, СГАВ)? If so, read it exactly. Answer with JSON in the schema.
 
-- isSchedule: false for anything else (crews at work, damage, infographics, maps, appeals, text without hours, and text that changes the hours of some queues only, e.g. "підчерга 2.1 - відключення триватимуть з 16:00 до 17:00"); then kind, date and statedAt are null and schedule is [].
-- kind: "gpv" for the hourly schedule ("графік погодинних відключень", "ГПВ", queues 1.1…6.2), "gav" or "sgav" for emergency ones.
-- date: the day the schedule is for, YYYY-MM-DD. Take the year from the publication date. null if the picture shows no date.
-- statedAt: "станом на HH:MM", "оновлено HH:MM" printed on it, else null.
-- schedule: one entry for EVERY queue the region has, with the queue names given. intervals: each span without power as "HH:MM-HH:MM" ("08:30-13:00"); a possible outage (often a lighter colour or a separate legend entry) starts with "?": "?16:00-18:00". A queue with no outages: []. Merge adjacent cells of the same kind into one span. Half-hour cells count: 08:30 is a valid boundary. Times HH:MM, the end of the day is "24:00".
-- A grid of coloured cells without a legend: a filled (coloured) cell is a span WITHOUT power, a white or empty one is power — even when most cells are filled. Follow a legend when there is one.
-- A day split into two tables (00:00–12:00 and 12:00–24:00): read both; a span running to 12:00 in the first and on from 12:00 in the second is one span.
-- Read every digit carefully; if a part is unreadable, still give your best reading of the rest — never skip a queue.`
+- Read only what is printed on the picture. The caption is context (its date), never hours: a banner or title ("Діятиме графік погодинних відключень") is not a schedule, even when the caption lists the hours.
+- isSchedule false for anything else: crews, damage, infographics, maps, appeals, text without hours, text changing a few queues ("підчерга 2.1 - відключення з 16:00 до 17:00"). Then kind, date, statedAt null, schedule [].
+- kind: "gpv" hourly schedule (ГПВ, queues 1.1…6.2); "gav" / "sgav" emergency ones.
+- date: the day it is for, YYYY-MM-DD, year from the publication date; null if not shown.
+- statedAt: "станом на HH:MM" / "оновлено HH:MM" printed on it, else null.
+- schedule: one line for EVERY queue of the region, with the names given: the queue, then each span without power: "1.1 08:30-13:00 20:00-24:00". A possible outage (lighter colour, own legend entry) starts with "?": "2.2 ?16:00-18:00". No outages: "3.1 -". Merge adjacent cells of a kind; half-hour boundaries count; the day ends at "24:00".
+- A coloured grid without a legend: filled cell = no power, white = power, even when most are filled. A legend overrides.
+- A day split into two tables (00–12, 12–24): read both; a span to 12:00 in the first and on from 12:00 in the second is one.
+- Read every digit; if part is unreadable, give your best reading of the rest; never skip a queue.`
 
 /** The user turn for a post: its input as JSON */
 export function textPrompt(input: PostInput): string {
