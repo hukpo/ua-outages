@@ -1,4 +1,4 @@
-import { toKyivIso } from '../time.js'
+import { kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { EmergencyStatus, RegionId } from '../types.js'
 import { aiOf, type ProviderContext } from '../providers/provider.js'
 import { abortable } from '../util.js'
@@ -27,6 +27,8 @@ export interface EmergencyConfig {
   ukrenergo?: boolean
   /** An apply without a later word ends after this long, default 12 h */
   ttlHours?: number
+  /** …or at the end of its Kyiv day instead (see `FoldOptions.holdToEndOfDay`) */
+  holdToEndOfDay?: boolean
 }
 
 export interface ChannelConfig {
@@ -65,7 +67,11 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
   // no main channel: 21 district channels post the same text; the city one stands for all
   kirovohrad: { channels: [channel('SvitloKropyvnytskyiMisto')] },
   // never posts a cancel; the same Ukrenergo commands last minutes to ~4 h in Poltava next door
-  sumy: { channels: [channel('SumyEnergo')], ttlHours: 6 },
+  // never posts a cancel; its ГАВ run for hours and are announced anew each morning (09.11: 1-5 at
+  // 09:44, 6-10 added at 10:28; 10.11: 1-5 at 09:07, 6-10 added at 14:10), so an apply holds to
+  // the end of the day. Ukrenergo names Sumy in its national updates ("у … Сумській областях
+  // застосовуються аварійні відключення", 18.11 10:37)
+  sumy: { channels: [channel('SumyEnergo')], ukrenergo: true, holdToEndOfDay: true },
   poltava: { channels: [channel('poltavaOE')] },
   mykolaiv: { mykolaivFeed: true, channels: [channel('mk_energy_ua')] },
   chernivtsi: { channels: [channel('oe_cv_ua')], ukrenergo: true },
@@ -258,7 +264,11 @@ export async function getEmergency(
     // nothing to read the posts with: not worth fetching them
     aiOf(ctx).requireText(region)
     const read = await hub.posts(ctx, region, handle, fresh)
-    if (Date.parse(read.from) > now.getTime() - ttlHours * 3600_000) short = true
+    // an apply holding to the end of its day: only today's posts can still be in force
+    const reach = cfg.holdToEndOfDay
+      ? kyivInstant(kyivDate(now), 0).getTime()
+      : now.getTime() - ttlHours * 3600_000
+    if (Date.parse(read.from) > reach) short = true
     return read.posts
   }
   const attempt = async <T>(work: () => Promise<T>): Promise<T | undefined> => {
@@ -307,7 +317,7 @@ export async function getEmergency(
       OutageError | undefined
     if (config && errors.every((e) => e instanceof OutageError && e.code === 'config'))
       return {
-        ...foldEvents([], { region, now, ttlHours, source: 'telegram' }),
+        ...foldEvents([], { region, now, ttlHours, holdToEndOfDay: cfg.holdToEndOfDay, source: 'telegram' }),
         state: 'unknown',
         message: { text: config.message, url: null, at: toKyivIso(now) },
       }
@@ -316,7 +326,7 @@ export async function getEmergency(
 
   const fetchedAt = toKyivIso(now)
   const fold = (events: EmergencyEvent[], source: EmergencyStatus['source']) =>
-    foldEvents(events, { region, now, ttlHours, source, previous })
+    foldEvents(events, { region, now, ttlHours, holdToEndOfDay: cfg.holdToEndOfDay, source, previous })
 
   // the operator's channel and the national one (Chernivtsi), merged by time: a newer
   // @Ukrenergo apply naming the oblast is newer news than the channel's cancel of yesterday

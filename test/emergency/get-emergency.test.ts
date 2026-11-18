@@ -175,8 +175,12 @@ describe('folding announcements (Poltava, 02.11.2026)', () => {
 })
 
 describe('getEmergency', () => {
-  it('Sumy never cancels: the swap sets the queues, the TTL ends it', async () => {
-    const routes = [{ match: 't.me/s/SumyEnergo', body: page('SumyEnergo', [3919, 3921]) }]
+  it('Sumy never cancels: the swap sets the queues, the ГАВ hold to the end of the day', async () => {
+    const routes = [
+      { match: 't.me/s/SumyEnergo', body: page('SumyEnergo', [3919, 3921]) },
+      // read too for Sumy: nothing newer about it than 11.11, which ended that night
+      { match: 't.me/s/Ukrenergo', body: page('Ukrenergo', [5631]) },
+    ]
     const during = await client('2026-11-15T23:00:00+02:00', routes).client.getEmergency('sumy')
     expect(during).toMatchObject({
       region: 'sumy',
@@ -193,9 +197,20 @@ describe('getEmergency', () => {
       state: 'inactive',
       kind: 'gav',
       inferred: true,
-      // Sumy's TTL is 6 h, counted from the last word (the 19:00 swap)
-      endedAt: '2026-11-16T01:00:00+02:00',
+      // Sumy announces anew each morning and never cancels: the 19:00 swap holds to midnight
+      endedAt: '2026-11-16T00:00:00+02:00',
       queues: null,
+    })
+    // an apply with no word after it (16:50, as 18.11 08:05) still holds late in the evening,
+    // where a 6-hour TTL had ended it at 22:54
+    const alone = [
+      { match: 't.me/s/SumyEnergo', body: page('SumyEnergo', [3919]) },
+      { match: 't.me/s/Ukrenergo', body: page('Ukrenergo', [5631]) },
+    ]
+    expect(await client('2026-11-15T23:30:00+02:00', alone).client.getEmergency('sumy')).toMatchObject({
+      state: 'active',
+      kind: 'gav',
+      since: '2026-11-15T16:50:00+02:00',
     })
   })
 

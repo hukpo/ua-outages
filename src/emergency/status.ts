@@ -1,4 +1,4 @@
-import { toKyivIso } from '../time.js'
+import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { EmergencyStatus, RegionId } from '../types.js'
 import { sortQueues } from './queues.js'
 
@@ -56,6 +56,12 @@ export interface FoldOptions {
   now: Date
   /** An apply without a later cancel or update for this long has ended (inferred) */
   ttlHours: number
+  /**
+   * Instead: an apply without a later word lasts to the end of its Kyiv day (inferred then). For
+   * operators that never post a cancel and whose emergency outages run for hours, announced anew
+   * each morning (Sumy)
+   */
+  holdToEndOfDay?: boolean
   source: EmergencyStatus['source']
   /** The status the caller got last time: dates an "UPD: … скасовано" edit (see `end`) */
   previous?: EmergencyStatus
@@ -208,7 +214,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   const expire = (at: number) => {
     for (const t of tracks.values()) {
       // "до кінця доби": not before then
-      const end = Math.max(t.lastAt + ttl, t.until)
+      const end = Math.max(opts.holdToEndOfDay ? endOfKyivDay(t.lastAt) : t.lastAt + ttl, t.until)
       if (t.active && at > end) {
         t.active = false
         t.endedAt = toKyivIso(new Date(end))
@@ -436,4 +442,10 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     inferred: false,
     message: null,
   })
+}
+
+/** The next Kyiv midnight after `ms` */
+function endOfKyivDay(ms: number): number {
+  const day = kyivDate(new Date(ms))
+  return kyivInstant(addDays(day, 1), 0).getTime()
 }

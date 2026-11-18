@@ -60,7 +60,10 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
   Several areas on: listed by start, queues only when they agree. Inactive shows the episode that
   ended last (Kirovohrad 22.01: СГАВ cancelled 12:58, ГАВ ended by the TTL at 20:25). TTL: 12 h
   after the last word, applied between posts too, so a new post after the gap starts a new
-  episode (Sumy 6 h: it never cancels, and the same commands last minutes to ~4 h in Poltava;
+  episode (Sumy: to the end of the apply's Kyiv day, not a TTL. It never cancels, and its ГАВ run
+  for hours, announced anew each morning: 09.11 1–5 at 09:44 and 6–10 added at 10:28, 10.11 1–5
+  at 09:07 and 6–10 added at 14:10; up to 0.4.x 6 h, which on 18.11.2026 ended the 08:05 apply at
+  14:09 while Ukrenergo still named Sumy at 10:37;
   Kharkiv stays 12 h: its own episodes ran from ~1 h to ~16 h, 10.10.2025 07:56 → "станом на
   23:54", and Ukrenergo still listed it on 04.11.2026 after the 02.11 apply). Posts that take
   effect later count from their time.

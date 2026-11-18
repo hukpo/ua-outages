@@ -71,7 +71,7 @@ export function postRegion(id: RegionId): PostRegion {
 const CHANNEL_REGIONS: Record<string, readonly RegionId[]> = {
   dtek_ua: ['kyiv', 'kyiv-region', 'dnipro', 'odesa', 'donetsk'],
   // national posts, read only for regions whose operator announces nothing itself
-  Ukrenergo: ['chernivtsi', 'zakarpattia', 'volyn', 'rivne'],
+  Ukrenergo: ['chernivtsi', 'zakarpattia', 'volyn', 'rivne', 'sumy'],
   cek_info: ['dnipro-cek'],
   Zaporizhzhyaoblenergo_news: ['zaporizhzhia'],
   kharkivenergy: ['kharkiv'],

@@ -26,6 +26,7 @@ Posts and pictures are read by AI processors you plug in, instead of patterns an
 ### Changed
 
 - `sumy` reads `@SumyEnergo`'s schedule pictures with the image processor: tomorrow, from the evening before (its API has today only).
+- `sumy`: `getEmergency` holds a ГАВ apply to the end of its Kyiv day (was 6 h after the last word: Sumyoblenergo never posts a cancel, and its ГАВ run for hours, announced anew each morning; 18.11.2026 it showed none from 14:09 while Ukrenergo still named Sumy at 10:37), and reads @Ukrenergo as well.
 - `zakarpattia`: `getEmergency` reads the operator's own channel `@zakarpatenergyofficial` first, `@Ukrenergo` after.
 - A source left unread because no processor is configured (`config` in `sources`) doesn't count as failed in `assessFreshness` (`source-failed`) or `healthCheck` (`degraded`).
 
