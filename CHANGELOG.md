@@ -9,6 +9,7 @@ Posts and pictures are read by AI processors you plug in, instead of patterns an
 ### Added
 
 - `OutageClientOptions.textProcessor` and `imageProcessor`, two separate pluggable processors (`TextProcessor`: `PostInput` → `PostAnalysis`; `ImageProcessor`: `ImageInput` → `ImageReading`), plus `processorCache`, `onProcessed` and `processorConcurrency`.
+- `ua-outages/ai-sdk` (`aiSdkTextProcessor`, `aiSdkImageProcessor`: any model of the Vercel AI SDK 7) and `ua-outages/tanstack-ai` (`tanstackTextProcessor`, `tanstackImageProcessor`: any TanStack AI text adapter); `ai` and `@tanstack/ai` are optional peer dependencies.
 - `ua-outages/anthropic` (`anthropicTextProcessor`, `anthropicImageProcessor`; Claude Haiku 5.5 by default) and `ua-outages/openai` (`openaiTextProcessor`, `openaiImageProcessor`), on structured outputs. `@anthropic-ai/sdk` and `openai` are optional peer dependencies; the core has no runtime dependency and holds no key.
 - Every answer is validated (`validatePostAnalysis`, `validateImageReading`): times and dates must exist and be near the post, queues must exist in the region, a schedule picture must give every queue. A failed answer is `parse`, never a guess.
 - Each post and picture is parsed once: answers are cached by a hash of the processor id and the whole input (a picture by its bytes), concurrent callers share one call, failed answers are remembered for 30 min. `MemoryProcessorCache` is the default; pass your own to persist.

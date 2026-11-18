@@ -31,8 +31,8 @@ jobs:
       # DTEK's Donetsk site answers non-browser clients with a bot check; drop it from the skip
       # list once that changes
       HEALTH_ARGS: --address --json --skip donetsk
-      # posts and pictures are read with Claude (answers cached between runs)
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # posts and pictures are read with GPT-6.1 Terra (answers cached between runs)
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       UA_OUTAGES_PROCESSOR_CACHE: .processor-cache.json
     steps:
       - uses: actions/checkout@v4

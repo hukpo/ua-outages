@@ -8,10 +8,11 @@ import { OutageError } from '../errors.js'
 export function vendorError(vendor: string, e: unknown, signal?: AbortSignal): unknown {
   if (signal?.aborted) return signal.reason
   if (e instanceof OutageError) return e
-  const err = e as { name?: string; status?: unknown; message?: string }
+  const err = e as { name?: string; status?: unknown; statusCode?: unknown; message?: string }
   const message = `${vendor}: ${err?.message ?? String(e)}`
-  if (typeof err?.status === 'number')
-    return new OutageError('http', message, { status: err.status, cause: e })
+  // `status` (OpenAI, Anthropic, TanStack AI), `statusCode` (AI SDK's APICallError)
+  const status = typeof err?.status === 'number' ? err.status : err?.statusCode
+  if (typeof status === 'number') return new OutageError('http', message, { status, cause: e })
   if (err?.name === 'AbortError' || err?.name === 'APIUserAbortError') return e
   return new OutageError('network', message, { cause: e })
 }

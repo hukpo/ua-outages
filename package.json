@@ -30,6 +30,14 @@
     "./openai": {
       "types": "./dist/adapters/openai.d.ts",
       "import": "./dist/adapters/openai.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/adapters/ai-sdk.d.ts",
+      "import": "./dist/adapters/ai-sdk.js"
+    },
+    "./tanstack-ai": {
+      "types": "./dist/adapters/tanstack-ai.d.ts",
+      "import": "./dist/adapters/tanstack-ai.js"
     }
   },
   "main": "./dist/index.js",
@@ -59,7 +67,9 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
+    "@tanstack/ai": "^1.5.0",
     "@types/node": "^22.10.0",
+    "ai": "^7.0.176",
     "openai": "^7.59.0",
     "prettier": "^3.9.10",
     "tsx": "^4.19.0",
@@ -68,13 +78,21 @@
   },
   "peerDependencies": {
     "@anthropic-ai/sdk": ">=1.10.0",
-    "openai": ">=7.0.0"
+    "openai": ">=7.0.0",
+    "ai": ">=7.0.0",
+    "@tanstack/ai": ">=1.5.0"
   },
   "peerDependenciesMeta": {
     "@anthropic-ai/sdk": {
       "optional": true
     },
     "openai": {
+      "optional": true
+    },
+    "ai": {
+      "optional": true
+    },
+    "@tanstack/ai": {
       "optional": true
     }
   },

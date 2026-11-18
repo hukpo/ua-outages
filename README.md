@@ -31,15 +31,17 @@ nextOutage(schedule.days) // { from: '2026-11-05T19:30:00+02:00', to: '2026-11-0
 Regions whose operators publish only posts or pictures, and every ГАВ / СГАВ announcement, need a processor (see [Posts and pictures](#posts-and-pictures-ai-processors)):
 
 ```ts
-import Anthropic from '@anthropic-ai/sdk'
-import { anthropicImageProcessor, anthropicTextProcessor } from 'ua-outages/anthropic'
+import OpenAI from 'openai'
+import { openaiImageProcessor, openaiTextProcessor } from 'ua-outages/openai'
 
-const anthropic = new Anthropic() // your key, ANTHROPIC_API_KEY
+const openai = new OpenAI() // your key, OPENAI_API_KEY
 const outages = new OutageClient({
-  textProcessor: anthropicTextProcessor({ client: anthropic }),
-  imageProcessor: anthropicImageProcessor({ client: anthropic }),
+  textProcessor: openaiTextProcessor({ client: openai, model: 'gpt-6.1-terra' }),
+  imageProcessor: openaiImageProcessor({ client: openai, model: 'gpt-6.1-terra' }),
 })
 ```
+
+Any other model goes through the Vercel AI SDK (`ua-outages/ai-sdk`) or TanStack AI (`ua-outages/tanstack-ai`).
 
 ## Regions
 
@@ -274,7 +276,14 @@ Many operators publish for people, not programs: a Telegram post "ГПВ на 17
 - **Image processor**: a picture (with its caption) → whether it is a schedule, its date, and each queue's `off` / `maybe` hours (`ImageInput` → `ImageReading`).
 - **Checked, never guessed**: a time like "25:10", a date that doesn't exist or is days away from the post, a queue the region doesn't have, a schedule picture missing a queue — the whole answer is refused (`parse`). A post that can't be read never ends an emergency, and a schedule source whose newest post can't be read fails rather than show an older version.
 
-`ua-outages/anthropic` and `ua-outages/openai` are ready-made processors on structured outputs (JSON schemas). The vendors' SDKs are optional peer dependencies: install the one you use, and pass your own client, the SDK holds no key.
+Ready-made processors, each a separate entry point on structured outputs (JSON schemas). The libraries are optional peer dependencies: install the one you use. The SDK holds no key: you pass your own client or model.
+
+| entry point              | for                                                                                     | peer dependency     |
+| ------------------------ | --------------------------------------------------------------------------------------- | ------------------- |
+| `ua-outages/openai`      | OpenAI's Responses API                                                                  | `openai`            |
+| `ua-outages/anthropic`   | Anthropic's Messages API                                                                | `@anthropic-ai/sdk` |
+| `ua-outages/ai-sdk`      | any model of the Vercel AI SDK: OpenAI, Anthropic, Google, Mistral, Ollama, AI Gateway… | `ai` (7+)           |
+| `ua-outages/tanstack-ai` | any text adapter of TanStack AI: OpenAI, Anthropic, Gemini, Ollama…                     | `@tanstack/ai`      |
 
 ```ts
 import OpenAI from 'openai'
@@ -282,12 +291,36 @@ import { openaiImageProcessor, openaiTextProcessor } from 'ua-outages/openai'
 
 const openai = new OpenAI()
 const outages = new OutageClient({
-  textProcessor: openaiTextProcessor({ client: openai, model: '<model id>' }),
-  imageProcessor: openaiImageProcessor({ client: openai, model: '<model id>' }),
+  textProcessor: openaiTextProcessor({ client: openai, model: 'gpt-6.1-terra' }),
+  imageProcessor: openaiImageProcessor({ client: openai, model: 'gpt-6.1-terra' }),
 })
 ```
 
-Any other model works: a processor is an object with an `id` and `analyzePost(input)` / `readImage(input)` returning `{ value, usage? }`. `TEXT_SYSTEM`, `TEXT_SCHEMA`, `textPrompt()`, `IMAGE_SYSTEM`, `IMAGE_SCHEMA` and `imagePrompt()` are exported to build one on.
+```ts
+// Vercel AI SDK: any provider's model, or an AI Gateway id ('openai/gpt-6.1-terra')
+import { openai } from '@ai-sdk/openai'
+import { aiSdkImageProcessor, aiSdkTextProcessor } from 'ua-outages/ai-sdk'
+
+const outages = new OutageClient({
+  textProcessor: aiSdkTextProcessor({ model: openai('gpt-6.1-terra') }),
+  imageProcessor: aiSdkImageProcessor({ model: openai('gpt-6.1-terra') }),
+})
+```
+
+```ts
+// TanStack AI: any text adapter
+import { openaiText } from '@tanstack/ai-openai'
+import { tanstackImageProcessor, tanstackTextProcessor } from 'ua-outages/tanstack-ai'
+
+const outages = new OutageClient({
+  textProcessor: tanstackTextProcessor({ adapter: openaiText('gpt-6.1-terra') }),
+  imageProcessor: tanstackImageProcessor({ adapter: openaiText('gpt-6.1-terra') }),
+})
+```
+
+The two processors are set separately, so posts and pictures can go to different models. The picture defaults (1000 px, thin grids ×3) were measured with GPT-6.1 Terra; measure another model on the eval set before relying on it (`npm run eval`, see `eval/README.md`). Settings that change the answers (`providerOptions`, `modelOptions`) aren't part of the processor id by themselves: pass a `variant` so cached answers made without them aren't reused.
+
+Any other model works too: a processor is an object with an `id` and `analyzePost(input)` / `readImage(input)` returning `{ value, usage? }`. `TEXT_SYSTEM`, `TEXT_SCHEMA`, `textPrompt()`, `IMAGE_SYSTEM`, `IMAGE_SCHEMA` and `imagePrompt()` are exported to build one on.
 
 **Which model.** Measured on the eval set (`eval/`, 18.11.2026; text: 150 of the 784 posts, the same ones for every model; pictures: all 76):
 

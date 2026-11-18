@@ -1,8 +1,10 @@
 /**
  * Processors for this repo's own scripts (health check, site build, relay, live tests), from the
- * environment: `ANTHROPIC_API_KEY` (model `UA_OUTAGES_MODEL`, default Claude Haiku 5.5), or
- * `OPENAI_API_KEY` with `OPENAI_MODEL`. Neither set: no processors, and the regions that need one
- * answer `config` / `unknown`, as for any client without them.
+ * environment: `OPENAI_API_KEY` with GPT-6.1 Terra for posts and pictures (`OPENAI_MODEL` to
+ * change it; the model the eval measured: posts 150/150, pictures 76/76), else
+ * `ANTHROPIC_API_KEY` (`UA_OUTAGES_MODEL`, default Claude Haiku 5.5: weaker on pictures). Neither
+ * set: no processors, and the regions that need one answer `config` / `unknown`, as for any
+ * client without them.
  *
  * `UA_OUTAGES_PROCESSOR_CACHE=<file>` keeps the answers in a JSON file between runs (the site is
  * rebuilt every 15 minutes: without it every post would be parsed again each time).
@@ -10,24 +12,26 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { OutageClientOptions, ProcessedEvent, ProcessorCache } from '../src/index.js'
 
+export const DEFAULT_OPENAI_MODEL = 'gpt-6.1-terra'
+
 export async function processorsFromEnv(): Promise<
   Pick<OutageClientOptions, 'textProcessor' | 'imageProcessor'>
 > {
   const env = process.env
+  if (env.OPENAI_API_KEY) {
+    const { default: OpenAI } = await import('openai')
+    const { openaiImageProcessor, openaiTextProcessor } = await import('../src/adapters/openai.js')
+    const o = { client: new OpenAI(), model: env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL }
+    return { textProcessor: openaiTextProcessor(o), imageProcessor: openaiImageProcessor(o) }
+  }
   if (env.ANTHROPIC_API_KEY) {
     const { default: Anthropic } = await import('@anthropic-ai/sdk')
     const { anthropicImageProcessor, anthropicTextProcessor } = await import('../src/adapters/anthropic.js')
     const o = { client: new Anthropic(), model: env.UA_OUTAGES_MODEL || undefined }
     return { textProcessor: anthropicTextProcessor(o), imageProcessor: anthropicImageProcessor(o) }
   }
-  if (env.OPENAI_API_KEY && env.OPENAI_MODEL) {
-    const { default: OpenAI } = await import('openai')
-    const { openaiImageProcessor, openaiTextProcessor } = await import('../src/adapters/openai.js')
-    const o = { client: new OpenAI(), model: env.OPENAI_MODEL }
-    return { textProcessor: openaiTextProcessor(o), imageProcessor: openaiImageProcessor(o) }
-  }
   console.warn(
-    'no ANTHROPIC_API_KEY or OPENAI_API_KEY + OPENAI_MODEL: regions that publish posts or pictures read as config / unknown',
+    'no OPENAI_API_KEY or ANTHROPIC_API_KEY: regions that publish posts or pictures read as config / unknown',
   )
   return {}
 }
