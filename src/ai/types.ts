@@ -99,6 +99,11 @@ export interface PostEvent {
   addedInEdit: boolean
   /** cancel: "до окремого розпорядження" — also void for the days after, until a new order */
   untilFurtherNotice: boolean
+  /**
+   * The post names or implies the day ("сьогодні", "на 17.11"): `date` null then means the post's
+   * own day for certain, not a day to be inferred. Set by the validator
+   */
+  dateNamed: boolean
   /** gpv start/change: per queue the hours; `intervals: null` = named without hours */
   schedule: { queue: string; intervals: ClockInterval[] | null }[]
 }

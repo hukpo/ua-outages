@@ -96,7 +96,8 @@ const MESSAGE_MAX = 2000
  * One area, however it is written: "у Ніжинському і Прилуцькому районах" and "…та Прилуцькому…",
  * "м. Полтава" and "м. Полтаві"
  */
-const areaKey = (area: string | null) =>
+/** An area's wording reduced to what tells it apart ("м. Павлоград" = "м. Павлограді") */
+export const areaKey = (area: string | null) =>
   area
     ? area
         .toLowerCase()

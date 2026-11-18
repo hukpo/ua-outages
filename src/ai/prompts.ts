@@ -5,7 +5,7 @@ import type { ImageInput, PostInput } from './types.js'
  * anyone writing a processor for another vendor can too. Bump `PROMPT_VERSION` with any change
  * here: it is part of the processor id, so cached answers made with the old prompt are not used.
  */
-export const PROMPT_VERSION = 'p15'
+export const PROMPT_VERSION = 'p16'
 
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] })
 const CLOCK = { type: 'string', description: 'HH:MM, 24-hour Kyiv time' }
@@ -142,8 +142,8 @@ Rules:
 - General or explanatory text is "other": how ГАВ works, that they "запроваджуються за вказівкою Укренерго", that a cancel "не означає" anything ("не означає його застосування"), appeals to save power, warnings that schedules "можуть бути застосовані" / "у разі" / "МОЖЛИВЕ" / "прогнозується застосування", repairs, damage, attacks, restored supply. A conditional or possible future measure is never a start. (A post that opens with "Попереджаємо" and then states that ГАВ "застосовуються" now is a start: what counts is whether it says the measure is in force.)
 - regions: ids from the input list the event is about. An operator's own channel posting about its area: its region. A national post naming oblasts: only those oblasts. "в усіх регіонах" / "по всій Україні": every listed id. "у частині областей", "в окремих регіонах" without naming them: about none of them (kind "other"). A post about none of the listed regions: kind "other" with regions [].
 - area: a part of the region when the event is limited to it ("м. Павлоград", "Бучанський район"); null when it covers the whole region, also "по області (крім …)": the region except some parts is the region's own schedule. Write it as in the post. A schedule for one town with its own queue numbering is gpv with that area, its queues as the post names them.
-- date: the day the event is about. Resolve "сьогодні", "завтра", weekday names and dates without a year from the post's own date. null when it is the day of the post.
-- at: the time it takes effect when the text gives one ("В 14:05 відміна", "з 19:00", "О 11:11 отримана команда … ввести ГАВ" → "11:11", "станом на 22:02 деактивовані всі черги ГАВ" → "22:02": "станом на" is the time of the action when the post gives no other), as HH:MM; otherwise null. A whole-day schedule "з 00:00 до 24:00" has at null. If the time is on the day before the post (posted after midnight about "23:55"), set date to that day. until: "до 18:00" → "18:00", "до кінця доби" → "24:00".
+- date: the day the event is about, whenever the post names or implies one: "сьогодні" is the post's own date, "завтра" the next; resolve weekday names and dates without a year from the post's own date. null only when the post names no day at all.
+- at: the time it takes effect when the text gives one ("В 14:05 відміна", "з 19:00", "О 11:11 отримана команда … ввести ГАВ" → "11:11", "станом на 22:02 деактивовані всі черги ГАВ" → "22:02": for gav, sgav and emergency events "станом на" is the time of the action when the post gives no other; for a gpv list it is only statedAt), as HH:MM; otherwise null. A whole-day schedule "з 00:00 до 24:00" has at null. If the time is on the day before the post (posted after midnight about "23:55"), set date to that day. until: "до 18:00" → "18:00", "до кінця доби" → "24:00".
 - statedAt: the time the post says it was issued or updated ("Інформація станом на 21:00", "(оновлено 21:25)"), else null. "Станом на 19:05 відновлено…" is a report of what happened by then, not the issue time: null.
 - queues: emergency queue numbers as plain strings ("1", "2", … "10"); a reserve queue as "1(Р)". "1-5 черги" lists 1, 2, 3, 4, 5. "в повному обсязі" sets allQueues. "N черг" without numbers sets queueCount.
 - untilFurtherNotice: a cancel "до окремого розпорядження" / "до особливого розпорядження" (it holds for the following days too).

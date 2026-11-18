@@ -10,26 +10,31 @@ import { clockMinutes } from './validate.js'
  * state machine (`foldEvents`), minute slots for the schedule layering (`layerPublications`).
  */
 
-/** "HH:MM" on `day` as an instant; "24:00" is the next midnight */
-function clockInstant(day: string, hhmm: string): Date {
-  const m = clockMinutes(hhmm, true)
+/** "HH:MM" on `day` as an instant; as an end, "24:00" (or "23:59") is the next midnight */
+function clockInstant(day: string, hhmm: string, end = false): Date {
+  const m = clockMinutes(hhmm, end)
   return m === 1440 ? kyivInstant(addDays(day, 1), 0) : kyivInstant(day, m)
 }
 
 /**
- * When an event took effect: its time on its day. Without a date, the day of the post, or the
- * day before when that would put it more than 12 h after the post ("О 23:55 скасовано" posted at
- * 00:20 is last night).
+ * When an event took effect: its time on its day. A day of its own without a time: the start of
+ * that day ("Завтра діятимуть ГАВ" is not in force tonight). No day named: the day of the post,
+ * or the day before when that would put it more than 12 h after the post ("О 23:55 скасовано"
+ * posted at 00:20 is last night); "сьогодні о 19:00" posted at 00:30 is tonight.
  */
 export function eventInstant(
-  ev: Pick<PostEvent, 'date' | 'at'>,
+  ev: Pick<PostEvent, 'date' | 'at'> & { dateNamed?: boolean },
   posted: string,
 ): { at: string; timed: boolean } {
-  if (!ev.at) return { at: posted, timed: false }
   const postedMs = Date.parse(posted)
   const postDay = kyivDate(new Date(postedMs))
+  if (!ev.at) {
+    if (ev.date && ev.date !== postDay) return { at: toKyivIso(kyivInstant(ev.date, 0)), timed: true }
+    return { at: posted, timed: false }
+  }
   let t = clockInstant(ev.date ?? postDay, ev.at)
-  if (!ev.date && t.getTime() - postedMs > 12 * 3600_000) t = clockInstant(addDays(postDay, -1), ev.at)
+  if (!ev.date && !ev.dateNamed && t.getTime() - postedMs > 12 * 3600_000)
+    t = clockInstant(addDays(postDay, -1), ev.at)
   return { at: toKyivIso(t), timed: true }
 }
 
@@ -71,7 +76,7 @@ export function toAnnouncements(
       scheduleApplies: ev.gpvApplies,
       area: ev.area,
       edited: ev.addedInEdit,
-      until: ev.until ? toKyivIso(clockInstant(day, ev.until)) : null,
+      until: ev.until ? toKyivIso(clockInstant(day, ev.until, true)) : null,
     })
   }
   return out

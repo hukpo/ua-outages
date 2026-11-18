@@ -108,3 +108,28 @@ describe('layerPublications: a correction adds to the schedule', () => {
     })
   })
 })
+
+describe('eventInstant: a day of its own, and a day named for certain', () => {
+  it('"завтра діятимуть ГАВ" without a time starts that day, not at the post', () => {
+    expect(eventInstant({ date: '2026-11-19', at: null }, '2026-11-18T20:00:00+02:00')).toEqual({
+      at: '2026-11-19T00:00:00+02:00',
+      timed: true,
+    })
+  })
+
+  it('"сьогодні о 19:00" posted at 00:30 is tonight, not last night', () => {
+    expect(eventInstant({ date: null, at: '19:00', dateNamed: true }, '2026-11-18T00:30:00+02:00').at).toBe(
+      '2026-11-18T19:00:00+02:00',
+    )
+    // no day named: still last night
+    expect(eventInstant({ date: null, at: '19:00' }, '2026-11-18T00:30:00+02:00').at).toBe(
+      '2026-11-17T19:00:00+02:00',
+    )
+  })
+
+  it('a start at 23:59 is 23:59, not the next midnight', () => {
+    expect(eventInstant({ date: null, at: '23:59' }, '2026-11-18T20:00:00+02:00').at).toBe(
+      '2026-11-18T23:59:00+02:00',
+    )
+  })
+})

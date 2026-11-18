@@ -201,3 +201,39 @@ describe('validateImageReading', () => {
     })
   })
 })
+
+describe('validatePostAnalysis: a ГПВ list "станом на" starts with its day', () => {
+  it('takes no start time equal to the issue time', () => {
+    const input = {
+      url: 'https://t.me/SvitloKropyvnytskyiMisto/1795',
+      source: { kind: 'telegram' as const, channel: 'SvitloKropyvnytskyiMisto' },
+      publishedAt: '2026-11-12T21:03:45+02:00',
+      edited: false,
+      title: null,
+      text: 'внесено зміни до графіка … станом на 21:03 12.11.2026: Черга 1.1: 10-12',
+      replyTo: null,
+      photoCount: 0,
+      regions: [postRegion('kirovohrad')],
+    }
+    const a = validatePostAnalysis(
+      {
+        statedAt: '21:03',
+        photosAreSchedules: false,
+        events: [
+          {
+            kind: 'gpv',
+            action: 'start',
+            regions: ['kirovohrad'],
+            at: '21:03',
+            schedule: ['1.1 10:00-12:00'.split(' ')[0]].map((q) => ({
+              queue: q,
+              intervals: ['10:00-12:00'],
+            })),
+          },
+        ],
+      },
+      input,
+    )
+    expect(a.events[0]!.at).toBeNull()
+  })
+})

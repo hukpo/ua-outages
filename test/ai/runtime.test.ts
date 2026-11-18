@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { postRegion } from '../../src/ai/regions.js'
 import { AiRuntime, MemoryProcessorCache } from '../../src/ai/runtime.js'
-import type { PostInput, ProcessedEvent } from '../../src/ai/types.js'
+import type { PostEvent, PostInput, ProcessedEvent } from '../../src/ai/types.js'
 import { STANDARD_GROUPS } from '../../src/schedule.js'
 import { ev, fakeImage, fakeText, fixtureBytes } from '../helpers.js'
 
@@ -246,5 +246,51 @@ describe('AiRuntime: an emergency post is read twice, and a judge settles a disa
       verifyProcessor: gpv,
     }).analyzePost('poltava', post)
     expect(gpv.calls).toHaveLength(0)
+  })
+})
+
+describe('AiRuntime: what two readers must agree on', () => {
+  const post = input('ГАВ: оновлення')
+  const run = async (a: PostEvent[], b: PostEvent[], c?: PostEvent[]) => {
+    const judge = c ? fakeText(() => c, 'opus') : undefined
+    const ai = new AiRuntime({
+      textProcessor: fakeText(() => a, 'terra'),
+      verifyProcessor: fakeText(() => b, 'haiku'),
+      ...(judge ? { judgeProcessor: judge } : {}),
+    })
+    const r = await ai.analyzeEmergencyPost('poltava', post).catch((e) => e)
+    return { r, judged: judge?.calls.length ?? 0 }
+  }
+  const start = ev({ kind: 'gav', action: 'start', regions: ['poltava'], allQueues: true })
+  const cancel = ev({ kind: 'gav', action: 'cancel', regions: ['poltava'] })
+
+  it('the order of a post’s events: "start, cancel" and "cancel, start" end apart', async () => {
+    const { r, judged } = await run([start, cancel], [cancel, start])
+    expect(r).toMatchObject({ code: 'parse' })
+    expect(judged).toBe(0)
+  })
+
+  it('which area, not only that there is one', async () => {
+    const at = (area: string) => ev({ kind: 'gav', action: 'cancel', regions: ['poltava'], area })
+    expect((await run([at('м. Павлоград')], [at('м. Павлограді')])).r).toMatchObject({
+      events: [{ area: 'м. Павлоград' }],
+    })
+    expect((await run([at('м. Павлоград')], [at('м. Дніпро')])).r).toMatchObject({ code: 'parse' })
+  })
+
+  it('"ще 2 черги" and "2 черги": additive counts apart', async () => {
+    const two = (additive: boolean) =>
+      ev({ kind: 'gav', action: 'start', regions: ['poltava'], queueCount: 2, additive })
+    expect((await run([two(true)], [two(false)])).r).toMatchObject({ code: 'parse' })
+  })
+
+  it('a reader with another’s id is refused: it would answer from that one’s cache', () => {
+    expect(
+      () =>
+        new AiRuntime({
+          textProcessor: fakeText(() => [], 'same'),
+          verifyProcessor: fakeText(() => [], 'same'),
+        }),
+    ).toThrow(expect.objectContaining({ code: 'config' }))
   })
 })

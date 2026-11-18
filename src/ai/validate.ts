@@ -148,7 +148,7 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
   const until = o.until === null || o.until === undefined ? null : clock(clockMinutes(o.until, true))
   // a site page read against today may still show the last days' articles: up to a week back
   const named = o.date === null || o.date === undefined ? null : realDate(o.date, postDay, 7, 3)
-  // the post's own day is no date of its own
+  // the post's own day is no date of its own; that it was named is kept (`dateNamed`)
   const date = named === postDay ? null : named
   const queueCount =
     o.queueCount === null || o.queueCount === undefined
@@ -212,6 +212,7 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
     gpvApplies: emergency ? gpvApplies : null,
     addedInEdit: bool(o.addedInEdit ?? false, `${w}.addedInEdit`) && input.edited,
     untilFurtherNotice: action === 'cancel' && bool(o.untilFurtherNotice ?? false, `${w}.untilFurtherNotice`),
+    dateNamed: named !== null,
     schedule,
   }
 }
@@ -221,13 +222,17 @@ export function validatePostAnalysis(raw: unknown, input: PostInput): PostAnalys
   return guard(input.url, input.regions[0]?.id, () => {
     const o = obj(raw, 'answer')
     const postDay = kyivDate(new Date(input.publishedAt))
+    const statedAt = o.statedAt === null || o.statedAt === undefined ? null : clock(clockMinutes(o.statedAt))
     const events = arr(o.events, 'events')
       .map((e, i) => event(e, i, input, postDay))
       .filter((e): e is PostEvent => e !== null)
+      // a ГПВ list "станом на 21:03" is issued then, it doesn't start then: taking the issue time
+      // for the start would keep the old version of the day until it
+      .map((e) => (e.kind === 'gpv' && e.at && e.at === statedAt ? { ...e, at: null, until: null } : e))
     return {
       events,
       photosAreSchedules: bool(o.photosAreSchedules ?? false, 'photosAreSchedules') && input.photoCount > 0,
-      statedAt: o.statedAt === null || o.statedAt === undefined ? null : clock(clockMinutes(o.statedAt)),
+      statedAt,
     }
   })
 }

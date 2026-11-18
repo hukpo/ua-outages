@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { OutageError } from '../errors.js'
+import { areaKey } from '../emergency/status.js'
 import { compactImage } from '../image/compact.js'
 import type { RegionId } from '../types.js'
 import { SharedTask } from '../util.js'
@@ -124,7 +125,16 @@ export class AiRuntime {
     this.image = opts.imageProcessor
     this.cache = opts.processorCache ?? new MemoryProcessorCache()
     this.emit = opts.onProcessed
-    this.limit = Math.max(1, opts.processorConcurrency ?? 4)
+    const limit = opts.processorConcurrency ?? 4
+    this.limit = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 4
+    // a reader with the first one's id would answer from its cache: one reading counted twice
+    const ids = [this.text?.id, this.verify?.id, this.judge?.id].filter((id): id is string => !!id)
+    if (new Set(ids).size !== ids.length)
+      throw new OutageError(
+        'config',
+        'textProcessor, verifyProcessor and judgeProcessor need distinct ids (another model, or a `variant`): ' +
+          "a reader with another's id is answered from its cache, and its vote is not a second reading",
+      )
   }
 
   /** Throws `config` when the region needs posts read and no text processor is set */
@@ -166,13 +176,14 @@ export class AiRuntime {
     signal?: AbortSignal,
   ): Promise<PostAnalysis> {
     const first = await this.analyzePost(region, input, signal)
-    const firstKey = emergencyKey(first, input)
-    if (!this.verify || (this.verifyPosts === 'emergency' && !touchesEmergency(first))) return first
+    if (!this.verify || (this.verifyPosts === 'emergency' && !touchesEmergency(first, region))) return first
+    const key = (a: PostAnalysis) => emergencyKey(a, input, region)
+    const firstKey = key(first)
     const second = await this.readOrNull(this.verify, 'verify', region, input, signal)
-    if (second && emergencyKey(second, input) === firstKey) return first
+    if (second && key(second) === firstKey) return first
     const third = this.judge ? await this.readOrNull(this.judge, 'judge', region, input, signal) : null
     const votes = [first, second, third].filter((a): a is PostAnalysis => !!a)
-    const keys = votes.map((a) => emergencyKey(a, input))
+    const keys = votes.map(key)
     const winner = votes.find((_, i) => keys.filter((k) => k === keys[i]).length >= 2)
     if (winner) return winner
     throw new OutageError(
@@ -182,7 +193,11 @@ export class AiRuntime {
     )
   }
 
-  /** A second or third reading; one that fails validation is no vote */
+  /**
+   * A second or third reading. One that fails validation is no vote; so is one its API can't
+   * give now (overloaded, down): the post is then unclear rather than taken on one reading, and
+   * the channel's other posts are still read
+   */
   private async readOrNull(
     p: TextProcessor,
     role: 'verify' | 'judge',
@@ -193,7 +208,9 @@ export class AiRuntime {
     try {
       return await this.readPost(p, role, region, input, signal)
     } catch (e) {
-      if (e instanceof OutageError && e.code === 'parse') return null
+      signal?.throwIfAborted()
+      if (e instanceof OutageError && (e.code === 'parse' || e.code === 'http' || e.code === 'network'))
+        return null
       throw e
     }
   }
@@ -396,41 +413,38 @@ export class AiRuntime {
   }
 }
 
-/** The post's events say an emergency measure starts, ends or changes */
-const touchesEmergency = (a: PostAnalysis) => a.events.some((e) => e.kind !== 'gpv' && e.kind !== 'other')
+/** The post's events say an emergency measure starts, ends or changes in `region` */
+const touchesEmergency = (a: PostAnalysis, region: RegionId) =>
+  a.events.some((e) => e.kind !== 'gpv' && e.kind !== 'other' && e.regions.includes(region))
 
 /**
- * What the state machine gets from an analysis, per region of the post: kind, action, time,
- * queues, whether ГПВ applies, whether it is limited to an area (not the area's wording: readers
- * name the same place differently, and the state machine keeps the first reader's words)
+ * What the state machine (`foldEvents`) gets from an analysis about `region`, in post order:
+ * every field it reads. The area by its key ("м. Павлоград" and "м. Павлограді" agree, Павлоград
+ * and Дніпро don't); the time as resolved, with its date
  */
-function emergencyKey(a: PostAnalysis, input: PostInput): string {
-  return input.regions
-    .map(
-      (r) =>
-        `${r.id}:` +
-        toAnnouncements(a.events, r.id, r, input.publishedAt)
-          .map((x) =>
-            [
-              x.kind,
-              x.action,
-              x.timed ? x.at : '-',
-              x.action === 'cancel' && x.all && !x.partial
-                ? '-'
-                : x.all
-                  ? 'all'
-                  : x.queues
-                    ? [...x.queues].sort().join('+')
-                    : `n${x.count ?? '-'}`,
-              x.partial ? 'partial' : '',
-              x.restored ? [...x.restored].sort().join('+') : '',
-              x.scheduleApplies ?? '',
-              x.area ? 'area' : '',
-              x.until ?? '',
-            ].join('|'),
-          )
-          .sort()
-          .join(';'),
+function emergencyKey(a: PostAnalysis, input: PostInput, region: RegionId): string {
+  const info = input.regions.find((r) => r.id === region)
+  if (!info) return ''
+  const sorted = (q: readonly string[] | null) => (q ? [...q].sort().join('+') : '-')
+  return toAnnouncements(a.events, region, info, input.publishedAt)
+    .map((x) =>
+      [
+        x.kind,
+        x.action,
+        x.at,
+        x.timed,
+        sorted(x.queues),
+        x.count ?? '-',
+        x.all,
+        x.partial,
+        sorted(x.restored),
+        x.add,
+        x.again,
+        x.edited,
+        x.scheduleApplies ?? '-',
+        areaKey(x.area) ?? '-',
+        x.until ?? '-',
+      ].join('|'),
     )
-    .join('||')
+    .join(';')
 }

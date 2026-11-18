@@ -143,6 +143,7 @@ export function ev(e: Partial<PostEvent> & Pick<PostEvent, 'kind' | 'action' | '
     addedInEdit: false,
     untilFurtherNotice: false,
     schedule: [],
+    dateNamed: e.date != null,
     ...e,
   }
 }
