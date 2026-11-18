@@ -195,7 +195,9 @@ export async function channelEvents(
 ): Promise<EmergencyEvent[]> {
   const info = postRegion(region)
   const events: EmergencyEvent[] = []
-  for (const { input, analysis } of await analyzeAll(ctx, region, channelInputs(posts, region))) {
+  for (const { input, analysis } of await analyzeAll(ctx, region, channelInputs(posts, region), {
+    emergency: true,
+  })) {
     const post = { text: input.text, url: input.url, posted: input.publishedAt }
     if (!analysis) {
       events.push({ ...post, announcement: unclear(input.publishedAt) })

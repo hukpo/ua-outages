@@ -71,13 +71,18 @@ export async function analyzeAll(
   ctx: ProviderContext,
   region: RegionId,
   inputs: readonly PostInput[],
+  /** For an emergency state: checked by the second (and third) reader, see `analyzeEmergencyPost` */
+  opts: { emergency?: boolean } = {},
 ): Promise<Analyzed[]> {
   const ai = aiOf(ctx)
   ai.requireText(region)
   return Promise.all(
     inputs.map(async (input) => {
       try {
-        return { input, analysis: await ai.analyzePost(region, input, ctx.signal), error: null }
+        const analysis = opts.emergency
+          ? await ai.analyzeEmergencyPost(region, input, ctx.signal)
+          : await ai.analyzePost(region, input, ctx.signal)
+        return { input, analysis, error: null }
       } catch (e) {
         if (e instanceof OutageError && e.code === 'parse') return { input, analysis: null, error: e }
         throw e

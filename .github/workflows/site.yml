@@ -42,6 +42,8 @@ jobs:
           PREVIOUS_SITE: https://hukpo.github.io/ua-outages/
           # posts and pictures are read with GPT-6.1 Terra; without the secret those regions are skipped
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # with it, ГАВ / СГАВ posts are read again by Claude Haiku, Claude Opus judging a disagreement
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           UA_OUTAGES_PROCESSOR_CACHE: .processor-cache.json
       - uses: actions/cache/save@v4
         if: always()

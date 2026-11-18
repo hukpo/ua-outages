@@ -167,3 +167,84 @@ describe('AiRuntime: pictures', () => {
     expect(image.calls).toHaveLength(0)
   })
 })
+
+describe('AiRuntime: an emergency post is read twice, and a judge settles a disagreement', () => {
+  const start = (queues: string[]) => [ev({ kind: 'gav', action: 'start', regions: ['poltava'], queues })]
+  const post = input('ГАВ: 9,10,1,2 черги знеструмлюємо')
+
+  it('takes the post when the second reader agrees, without asking the judge', async () => {
+    const text = fakeText(() => start(['1', '2']), 'terra')
+    const verify = fakeText(() => start(['2', '1']), 'haiku')
+    const judge = fakeText(() => start(['5']), 'opus')
+    const events: ProcessedEvent[] = []
+    const ai = new AiRuntime({
+      textProcessor: text,
+      verifyProcessor: verify,
+      judgeProcessor: judge,
+      onProcessed: (e) => events.push(e),
+    })
+    expect((await ai.analyzeEmergencyPost('poltava', post)).events[0]!.queues).toEqual(['1', '2'])
+    expect([text.calls.length, verify.calls.length, judge.calls.length]).toEqual([1, 1, 0])
+    expect(events.map((e) => e.role)).toEqual([undefined, 'verify'])
+  })
+
+  it('lets two of three decide, and returns a reading of the majority', async () => {
+    const ai = new AiRuntime({
+      textProcessor: fakeText(() => start(['1', '2', '9', '10']), 'terra'),
+      verifyProcessor: fakeText(() => start(['1', '2']), 'haiku'),
+      judgeProcessor: fakeText(() => start(['1', '2']), 'opus'),
+    })
+    expect((await ai.analyzeEmergencyPost('poltava', post)).events[0]!.queues).toEqual(['1', '2'])
+  })
+
+  it('three readings, or two without a judge, that differ: parse, never a guess', async () => {
+    const three = new AiRuntime({
+      textProcessor: fakeText(() => start(['1']), 'terra'),
+      verifyProcessor: fakeText(() => start(['2']), 'haiku'),
+      judgeProcessor: fakeText(() => start(['3']), 'opus'),
+    })
+    await expect(three.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({
+      code: 'parse',
+      message: expect.stringContaining('disagree'),
+    })
+    const two = new AiRuntime({
+      textProcessor: fakeText(() => start(['1']), 'terra'),
+      verifyProcessor: fakeText(() => start(['2']), 'haiku'),
+    })
+    await expect(two.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
+  })
+
+  it('a second reader that fails validation is no vote: the judge decides with the first', async () => {
+    const ai = new AiRuntime({
+      textProcessor: fakeText(() => start(['1']), 'terra'),
+      verifyProcessor: fakeText(
+        () => [ev({ kind: 'gav', action: 'start', regions: ['poltava'], at: '25:00' })],
+        'haiku',
+      ),
+      judgeProcessor: fakeText(() => start(['1']), 'opus'),
+    })
+    expect((await ai.analyzeEmergencyPost('poltava', post)).events[0]!.queues).toEqual(['1'])
+  })
+
+  it('checks only posts with emergency events, unless asked to check all', async () => {
+    const plain = input('Шановні споживачі, економте електроенергію')
+    const verify = fakeText(() => undefined, 'haiku')
+    const ai = new AiRuntime({ textProcessor: fakeText(() => undefined, 'terra'), verifyProcessor: verify })
+    await ai.analyzeEmergencyPost('poltava', plain)
+    expect(verify.calls).toHaveLength(0)
+    const all = new AiRuntime({
+      textProcessor: fakeText(() => undefined, 'terra'),
+      verifyProcessor: verify,
+      verifyPosts: 'all',
+    })
+    await all.analyzeEmergencyPost('poltava', plain)
+    expect(verify.calls).toHaveLength(1)
+    // a schedule reader isn't checked at all
+    const gpv = fakeText(() => undefined, 'haiku-2')
+    await new AiRuntime({
+      textProcessor: fakeText(() => start(['1']), 'terra'),
+      verifyProcessor: gpv,
+    }).analyzePost('poltava', post)
+    expect(gpv.calls).toHaveLength(0)
+  })
+})

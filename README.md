@@ -335,6 +335,19 @@ Any other model works too: a processor is an object with an `id` and `analyzePos
 
 GPT-6.1 Terra for both is the pick: as accurate on pictures as Astra at an eighth of the price, with `openaiImageProcessor`'s defaults (1000 px, Zakarpattia's 800×210 grids blown up ×3 pixel for pixel). Claude models misread the grids at any size, and a misread grid is real times in the wrong cells, which no check can catch. A case passes only when every field the SDK uses matches the label. The 0.4.8 regex readers, scored the same way on what the SDK makes of the same 150 posts (emergency announcements, and hours per queue where the schedule is taken from text), get 144/150. Text processor and image processor are set separately, so they can come from different vendors. Run `npm run eval` on your own choice of model before relying on it.
 
+**Emergency posts read twice.** A wrong ГАВ state is the worst thing the SDK could show, so a post that starts, ends or changes one can be read by a second model as well, best another vendor's (`verifyProcessor`), and counts only when both agree on what the state machine gets: kind, action, time, queues, whether ГПВ applies, whether it is limited to an area. When they don't, a third (`judgeProcessor`) reads it and two of the three decide; with no majority the post is unclear and the state stands. `verifyPosts: 'all'` checks every post of an emergency channel, also those the first reader found nothing in.
+
+```ts
+const outages = new OutageClient({
+  textProcessor: openaiTextProcessor({ client: openai, model: 'gpt-6.1-terra' }),
+  verifyProcessor: anthropicTextProcessor({ client: anthropic, model: 'claude-haiku-5-5' }),
+  judgeProcessor: anthropicTextProcessor({ client: anthropic, model: 'claude-opus-5-5' }),
+  imageProcessor: openaiImageProcessor({ client: openai, model: 'gpt-6.1-terra' }),
+})
+```
+
+On the eval's 37 posts that change an emergency state, Terra and Haiku read 3 differently (Haiku wrong each time); Opus as the judge settled all 3 right, Sonnet got one wrong and left one unclear (models of one vendor tend to share a mistake). The second reading costs ≈ $0.001 a post, for the few dozen such posts a day: about $1 a month; the judge is asked for a few a day.
+
 **What it costs.** With GPT-6.1 Terra, standard tier: a post is ~2.5k tokens in, of which the ~2.4k of instructions and schema are the same every time and come from OpenAI's prompt cache at a twentieth of the price, and ~180 out (≈ $0.0015); a picture ~600 tokens of instructions plus the picture itself (~230–1000, ~1 token per 800 px) in and ~240 out (≈ $0.0024). The operators post ~130 posts and 15–25 schedule pictures a day: about $6 a month for the posts and $1–2 for the pictures. `onProcessed` reports each call's tokens and cached tokens.
 
 **Parsed once.** Answers are cached by a hash of the processor id (vendor, model, prompt version) and the whole input. A post is analysed again only when its text changes (an edit); a picture is read once per content, however often it is reposted. Polling every region every 5 minutes then costs about what the operators post (an estimated ~130 posts and ~120 pictures a day across Ukraine), not what is polled. Failed answers are remembered for 30 min, so a post a model can't read isn't paid for on every poll; failures of the AI API itself are not cached. Pass `processorCache` (`get` / `set`, values are JSON) to keep answers across restarts.

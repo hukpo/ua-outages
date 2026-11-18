@@ -202,6 +202,8 @@ export interface ProcessedEvent {
   type: 'text' | 'image' | 'image-check'
   url: string
   processor: string
+  /** A second reading of an emergency post (`verifyProcessor`), or the third (`judgeProcessor`) */
+  role?: 'verify' | 'judge'
   cached: boolean
   ok: boolean
   error?: string

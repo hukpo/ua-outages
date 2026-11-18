@@ -53,6 +53,19 @@ export interface OutageClientOptions extends HttpOptions {
    * `ua-outages/anthropic` and `ua-outages/openai` have ready ones.
    */
   textProcessor?: TextProcessor
+  /**
+   * A second reader of the posts that change an emergency state (ГАВ, СГАВ, emergency outages),
+   * best another vendor's model than `textProcessor`'s: such a post counts only when both read
+   * the same. Optional; see `judgeProcessor`, `verifyPosts`
+   */
+  verifyProcessor?: TextProcessor
+  /**
+   * A third reader, asked only when the first two disagree: two of the three decide. Without it
+   * (or with three different readings) the post is unclear and the emergency state stands
+   */
+  judgeProcessor?: TextProcessor
+  /** `emergency` (default): verify the posts the first reader takes for an emergency event; `all`: every post read for an emergency state */
+  verifyPosts?: 'emergency' | 'all'
   /** Reads schedule pictures (posters, tables). Without it, regions that publish only pictures answer `OutageError('config')` */
   imageProcessor?: ImageProcessor
   /**
@@ -141,6 +154,9 @@ export class OutageClient {
       now: opts.now ?? (() => new Date()),
       ai: new AiRuntime({
         textProcessor: opts.textProcessor,
+        verifyProcessor: opts.verifyProcessor,
+        judgeProcessor: opts.judgeProcessor,
+        verifyPosts: opts.verifyPosts,
         imageProcessor: opts.imageProcessor,
         processorCache: opts.processorCache,
         onProcessed: opts.onProcessed,

@@ -15,10 +15,21 @@ import type {
   ProcessorResult,
   TextProcessor,
 } from './types.js'
+import { toAnnouncements } from './map.js'
 import { validateImageCheck, validateImageReading, validatePostAnalysis } from './validate.js'
 
 export interface AiOptions {
   textProcessor?: TextProcessor
+  /** A second reader of the posts that change an emergency state; see `analyzeEmergencyPost` */
+  verifyProcessor?: TextProcessor
+  /** A third reader, asked when the first two disagree; the majority of the three decides */
+  judgeProcessor?: TextProcessor
+  /**
+   * Which posts the second reader checks: `emergency` (default), those the first reads as an
+   * emergency event (a ГАВ / СГАВ / emergency start, cancel or change); `all`, every post read
+   * for an emergency state, which also catches one the first missed (more calls)
+   */
+  verifyPosts?: 'emergency' | 'all'
   imageProcessor?: ImageProcessor
   processorCache?: ProcessorCache
   onProcessed?: (e: ProcessedEvent) => void
@@ -94,6 +105,9 @@ export interface ImageSource {
  */
 export class AiRuntime {
   readonly text?: TextProcessor
+  readonly verify?: TextProcessor
+  readonly judge?: TextProcessor
+  private readonly verifyPosts: 'emergency' | 'all'
   readonly image?: ImageProcessor
   private readonly cache: ProcessorCache
   private readonly emit?: (e: ProcessedEvent) => void
@@ -104,6 +118,9 @@ export class AiRuntime {
 
   constructor(opts: AiOptions = {}) {
     this.text = opts.textProcessor
+    this.verify = opts.verifyProcessor
+    this.judge = opts.judgeProcessor
+    this.verifyPosts = opts.verifyPosts ?? 'emergency'
     this.image = opts.imageProcessor
     this.cache = opts.processorCache ?? new MemoryProcessorCache()
     this.emit = opts.onProcessed
@@ -131,12 +148,68 @@ export class AiRuntime {
 
   /** One post → its checked analysis (cached by the whole input) */
   async analyzePost(region: RegionId, input: PostInput, signal?: AbortSignal): Promise<PostAnalysis> {
-    const p = this.requireText(region)
+    return this.readPost(this.requireText(region), undefined, region, input, signal)
+  }
+
+  /**
+   * One post read for an emergency state. With a `verifyProcessor`, a post the first reader takes
+   * for an emergency event (or every post, `verifyPosts: 'all'`) is read again, and what the
+   * state machine would get from the two (per region: kind, action, time, queues, whether ГПВ
+   * applies, whether it is limited to an area) must agree. When it doesn't, the
+   * `judgeProcessor` reads it too and two of the three decide; without a judge, or with three
+   * different readings, the post is a `parse` error (an "unclear" event: the state stands).
+   * The answer of a reader in the majority is returned, the first's when it is one of them.
+   */
+  async analyzeEmergencyPost(
+    region: RegionId,
+    input: PostInput,
+    signal?: AbortSignal,
+  ): Promise<PostAnalysis> {
+    const first = await this.analyzePost(region, input, signal)
+    const firstKey = emergencyKey(first, input)
+    if (!this.verify || (this.verifyPosts === 'emergency' && !touchesEmergency(first))) return first
+    const second = await this.readOrNull(this.verify, 'verify', region, input, signal)
+    if (second && emergencyKey(second, input) === firstKey) return first
+    const third = this.judge ? await this.readOrNull(this.judge, 'judge', region, input, signal) : null
+    const votes = [first, second, third].filter((a): a is PostAnalysis => !!a)
+    const keys = votes.map((a) => emergencyKey(a, input))
+    const winner = votes.find((_, i) => keys.filter((k) => k === keys[i]).length >= 2)
+    if (winner) return winner
+    throw new OutageError(
+      'parse',
+      `${input.url}: the readings of its emergency events disagree (${this.judge ? 'three ways' : 'no judgeProcessor'})`,
+      { region, url: input.url },
+    )
+  }
+
+  /** A second or third reading; one that fails validation is no vote */
+  private async readOrNull(
+    p: TextProcessor,
+    role: 'verify' | 'judge',
+    region: RegionId,
+    input: PostInput,
+    signal?: AbortSignal,
+  ): Promise<PostAnalysis | null> {
+    try {
+      return await this.readPost(p, role, region, input, signal)
+    } catch (e) {
+      if (e instanceof OutageError && e.code === 'parse') return null
+      throw e
+    }
+  }
+
+  private readPost(
+    p: TextProcessor,
+    role: 'verify' | 'judge' | undefined,
+    region: RegionId,
+    input: PostInput,
+    signal?: AbortSignal,
+  ): Promise<PostAnalysis> {
     const key = sha('text', p.id, stable(input))
     return this.run(
       key,
       signal,
-      { region, type: 'text', url: input.url, processor: p.id },
+      { region, type: 'text', url: input.url, processor: p.id, ...(role ? { role } : {}) },
       async (sig, ev) => {
         const r = await p.analyzePost(input, { signal: sig })
         ev.usage = r.usage
@@ -321,4 +394,43 @@ export class AiRuntime {
     this.running--
     this.queue.shift()?.()
   }
+}
+
+/** The post's events say an emergency measure starts, ends or changes */
+const touchesEmergency = (a: PostAnalysis) => a.events.some((e) => e.kind !== 'gpv' && e.kind !== 'other')
+
+/**
+ * What the state machine gets from an analysis, per region of the post: kind, action, time,
+ * queues, whether ГПВ applies, whether it is limited to an area (not the area's wording: readers
+ * name the same place differently, and the state machine keeps the first reader's words)
+ */
+function emergencyKey(a: PostAnalysis, input: PostInput): string {
+  return input.regions
+    .map(
+      (r) =>
+        `${r.id}:` +
+        toAnnouncements(a.events, r.id, r, input.publishedAt)
+          .map((x) =>
+            [
+              x.kind,
+              x.action,
+              x.timed ? x.at : '-',
+              x.action === 'cancel' && x.all && !x.partial
+                ? '-'
+                : x.all
+                  ? 'all'
+                  : x.queues
+                    ? [...x.queues].sort().join('+')
+                    : `n${x.count ?? '-'}`,
+              x.partial ? 'partial' : '',
+              x.restored ? [...x.restored].sort().join('+') : '',
+              x.scheduleApplies ?? '',
+              x.area ? 'area' : '',
+              x.until ?? '',
+            ].join('|'),
+          )
+          .sort()
+          .join(';'),
+    )
+    .join('||')
 }

@@ -1,13 +1,19 @@
 /**
  * Processors for this repo's own scripts (health check, site build, relay, live tests), from the
- * environment: `OPENAI_API_KEY` with GPT-6.1 Terra for posts and pictures (`OPENAI_MODEL` to
- * change it; the model the eval measured: posts 150/150, pictures 76/76), else
- * `ANTHROPIC_API_KEY` (`UA_OUTAGES_MODEL`, default Claude Haiku 5.5: weaker on pictures). Neither
- * set: no processors, and the regions that need one answer `config` / `unknown`, as for any
- * client without them.
+ * environment:
  *
- * `UA_OUTAGES_PROCESSOR_CACHE=<file>` keeps the answers in a JSON file between runs (the site is
- * rebuilt every 15 minutes: without it every post would be parsed again each time).
+ * - `OPENAI_API_KEY`: GPT-6.1 Terra reads posts and pictures (`OPENAI_MODEL` to change it; the
+ *   eval measured it: posts 150/150, pictures 76/76).
+ * - with `ANTHROPIC_API_KEY` too: the posts that change an emergency state are read again by
+ *   Claude Haiku 5.5, and Claude Opus 5.5 judges when the two disagree (`verifyProcessor`,
+ *   `judgeProcessor`); on the eval's 37 such posts that settled every disagreement right.
+ * - `ANTHROPIC_API_KEY` alone: Claude reads everything (`UA_OUTAGES_MODEL`, default Haiku 5.5:
+ *   weaker, especially on pictures).
+ *
+ * Neither set: no processors, and the regions that need one answer `config` / `unknown`, as for
+ * any client without them. `UA_OUTAGES_PROCESSOR_CACHE=<file>` keeps the answers in a JSON file
+ * between runs (the site is rebuilt every 15 minutes: without it every post would be parsed
+ * again each time).
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import type { OutageClientOptions, ProcessedEvent, ProcessorCache } from '../src/index.js'
@@ -15,20 +21,31 @@ import type { OutageClientOptions, ProcessedEvent, ProcessorCache } from '../src
 export const DEFAULT_OPENAI_MODEL = 'gpt-6.1-terra'
 
 export async function processorsFromEnv(): Promise<
-  Pick<OutageClientOptions, 'textProcessor' | 'imageProcessor'>
+  Pick<OutageClientOptions, 'textProcessor' | 'imageProcessor' | 'verifyProcessor' | 'judgeProcessor'>
 > {
   const env = process.env
+  const anthropic = async () => {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk')
+    const adapters = await import('../src/adapters/anthropic.js')
+    return { client: new Anthropic(), ...adapters }
+  }
   if (env.OPENAI_API_KEY) {
     const { default: OpenAI } = await import('openai')
     const { openaiImageProcessor, openaiTextProcessor } = await import('../src/adapters/openai.js')
     const o = { client: new OpenAI(), model: env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL }
-    return { textProcessor: openaiTextProcessor(o), imageProcessor: openaiImageProcessor(o) }
+    const out = { textProcessor: openaiTextProcessor(o), imageProcessor: openaiImageProcessor(o) }
+    if (!env.ANTHROPIC_API_KEY) return out
+    const a = await anthropic()
+    return {
+      ...out,
+      verifyProcessor: a.anthropicTextProcessor({ client: a.client, model: 'claude-haiku-5-5' }),
+      judgeProcessor: a.anthropicTextProcessor({ client: a.client, model: 'claude-opus-5-5' }),
+    }
   }
   if (env.ANTHROPIC_API_KEY) {
-    const { default: Anthropic } = await import('@anthropic-ai/sdk')
-    const { anthropicImageProcessor, anthropicTextProcessor } = await import('../src/adapters/anthropic.js')
-    const o = { client: new Anthropic(), model: env.UA_OUTAGES_MODEL || undefined }
-    return { textProcessor: anthropicTextProcessor(o), imageProcessor: anthropicImageProcessor(o) }
+    const a = await anthropic()
+    const o = { client: a.client, model: env.UA_OUTAGES_MODEL || undefined }
+    return { textProcessor: a.anthropicTextProcessor(o), imageProcessor: a.anthropicImageProcessor(o) }
   }
   console.warn(
     'no OPENAI_API_KEY or ANTHROPIC_API_KEY: regions that publish posts or pictures read as config / unknown',

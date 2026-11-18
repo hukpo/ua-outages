@@ -33,6 +33,8 @@ jobs:
       HEALTH_ARGS: --address --json --skip donetsk
       # posts and pictures are read with GPT-6.1 Terra (answers cached between runs)
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # with it, ГАВ / СГАВ posts are read again by Claude Haiku, Claude Opus judging a disagreement
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       UA_OUTAGES_PROCESSOR_CACHE: .processor-cache.json
     steps:
       - uses: actions/checkout@v4
