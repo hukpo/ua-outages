@@ -2,6 +2,8 @@
 
 ## Results (18.11.2026, prompts p7–p17)
 
+**p18** (a row that can't be read for certain is the queue's name alone, i.e. `parse`, never a guess; an album picture gives only its queues): GPT-6.1 Terra 75/76 pictures, the miss Volyn 1.1 (10:00–12:30 for 10:00–14:00), read right in 3 runs after. A first p18 run without the album line had Chernivtsi's album 4/6 (the queues on the other picture given as names alone).
+
 **p17, after the review fixes**: GPT-6.1 Terra 150/150 text and 76/76 pictures (1000 px, thin ×3), recorded in `test/fixtures/ai/codex-cli-gpt-6.1-terra*`. Zakarpattia 10934 relabelled: a repost of Ukrenergo 5608 ("лише у Харківській" ends ГАВ for the rest).
 
 `npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800] [--min-short-edge 400] [--effort high]`.

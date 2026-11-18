@@ -324,14 +324,14 @@ Any other model works too: a processor is an object with an `id` and `analyzePos
 
 **Which model.** Measured on the eval set (`eval/`, 18.11.2026; text: 150 of the 784 posts, the same ones for every model; pictures: all 76):
 
-| model             | posts read right                  | pictures read right           | Zakarpattia's colour grids | $ per 1M tokens in / out |
-| ----------------- | --------------------------------- | ----------------------------- | -------------------------- | ------------------------ |
-| GPT-6.1 Terra     | 150/150 twice (p13), 143/150 (p7) | 76/76 (p15, 1000 px, thin ×3) | 9/9                        | 1 / 5                    |
-| GPT-6.2 Sol       | —                                 | 73/76 (p7, 800 px)            | 6/8                        | 2 / 10                   |
-| GPT-6.2 Astra     | 135/150 (p7)                      | 75–76/76 (p7, 800 px)         | 8/8                        | 8 / 40                   |
-| Claude Sonnet 5.5 | 138/150 (p7)                      | 68/76 (p7, 800 px)            | 3/8                        |                          |
-| Claude Haiku 5.5  | 136/150 (p7)                      | 65/76 (p7, 800 px)            | 1/8                        |                          |
-| Claude Opus 5.5   | —                                 | —                             | 2/8                        |                          |
+| model             | posts read right            | pictures read right              | Zakarpattia's colour grids | $ per 1M tokens in / out |
+| ----------------- | --------------------------- | -------------------------------- | -------------------------- | ------------------------ |
+| GPT-6.1 Terra     | 150/150 (p17; twice at p13) | 75–76/76 (p18, 1000 px, thin ×3) | 9/9                        | 1 / 5                    |
+| GPT-6.2 Sol       | —                           | 73/76 (p7, 800 px)               | 6/8                        | 2 / 10                   |
+| GPT-6.2 Astra     | 135/150 (p7)                | 75–76/76 (p7, 800 px)            | 8/8                        | 8 / 40                   |
+| Claude Sonnet 5.5 | 138/150 (p7)                | 68/76 (p7, 800 px)               | 3/8                        |                          |
+| Claude Haiku 5.5  | 136/150 (p7)                | 65/76 (p7, 800 px)               | 1/8                        |                          |
+| Claude Opus 5.5   | —                           | —                                | 2/8                        |                          |
 
 GPT-6.1 Terra for both is the pick: as accurate on pictures as Astra at an eighth of the price, with `openaiImageProcessor`'s defaults (1000 px, Zakarpattia's 800×210 grids blown up ×3 pixel for pixel). Claude models misread the grids at any size, and a misread grid is real times in the wrong cells, which no check can catch. A case passes only when every field the SDK uses matches the label. The 0.4.8 regex readers, scored the same way on what the SDK makes of the same 150 posts (emergency announcements, and hours per queue where the schedule is taken from text), get 144/150. Text processor and image processor are set separately, so they can come from different vendors. Run `npm run eval` on your own choice of model before relying on it.
 
