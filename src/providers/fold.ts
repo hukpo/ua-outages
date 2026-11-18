@@ -79,7 +79,13 @@ export function dayPublication(
   }
   // a day that says nothing ("not published here") is no publication
   if (!published) return null
-  return { groups, from: 0, omitted: 'unknown', ...(Object.keys(status).length ? { status } : {}) }
+  return {
+    groups,
+    from: 0,
+    omitted: 'unknown',
+    original: schedules,
+    ...(Object.keys(status).length ? { status } : {}),
+  }
 }
 
 /** Oldest first: by time; among the same time, a later source in the list is older (the earlier spec wins a tie), then by `seq` */
@@ -97,8 +103,14 @@ function toDays(
 } {
   const day = layerPublications(pubs)
   const out: Record<GroupId, DaySchedule> = {}
+  // the newest publication a source's own day, nothing after it: as the source gave it (its
+  // instants are exact where minutes of the day are not, on the night the clocks go back)
+  const last = pubs.at(-1)
+  if (last?.original && !day.cancelled)
+    for (const [g, d] of Object.entries(last.original)) if (d.status !== 'unknown') out[g] = { ...d, date }
   for (const g of new Set([...groups, ...Object.keys(day.groups)])) {
     const slots = day.groups[g]
+    if (out[g]) continue
     if (day.cancelled || slots === null) out[g] = { date, status: 'unknown', intervals: [] }
     else if (slots) out[g] = makeDay(date, slots, day.status[g])
     // a group the day's whole list leaves out: none, when that list names only the groups that
@@ -119,7 +131,7 @@ export function foldPublications(
   groups: readonly GroupId[],
 ): Map<string, FoldedDay> {
   const byDate = new Map<string, SourcedPublication[]>()
-  for (const p of pubs) byDate.set(p.date, [...(byDate.get(p.date) ?? []), p])
+  for (const p of withNotice(pubs)) byDate.set(p.date, [...(byDate.get(p.date) ?? []), p])
   const out = new Map<string, FoldedDay>()
   for (const date of [...byDate.keys()].sort()) {
     const list = byDate.get(date)!.sort(order)
@@ -141,6 +153,24 @@ export function foldPublications(
   return out
 }
 
+/**
+ * "скасовано до окремого розпорядження": the days after it are cancelled too, whichever channel
+ * published them (a newer list brings one back: it is newer than the cancellation)
+ */
+export function withNotice(pubs: readonly SourcedPublication[]): SourcedPublication[] {
+  const notices = pubs.filter((p) => p.pub.untilFurtherNotice)
+  if (!notices.length) return [...pubs]
+  const dates = [...new Set(pubs.map((p) => p.date))]
+  return [
+    ...pubs,
+    ...notices.flatMap((n) =>
+      dates
+        .filter((d) => d > n.date)
+        .map((date) => ({ ...n, date, pub: { groups: {}, from: 0, cancelled: true } })),
+    ),
+  ]
+}
+
 /** What one source alone makes of a day (to tell whether it disagrees with the result) */
 export function foldOne(
   pubs: readonly SourcedPublication[],
@@ -150,8 +180,8 @@ export function foldOne(
 ): { days: Record<GroupId, DaySchedule>; cancelled: boolean } {
   return toDays(
     date,
-    pubs
-      .filter((p) => p.source === source && p.date === date)
+    withNotice(pubs.filter((p) => p.source === source))
+      .filter((p) => p.date === date)
       .sort(order)
       .map((p) => p.pub),
     groups,

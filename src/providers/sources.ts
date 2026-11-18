@@ -2,7 +2,14 @@ import { OutageError } from '../errors.js'
 import { compareGroups } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionId, RegionSchedule, SourceStatus } from '../types.js'
-import { dayPublication, foldOne, foldPublications, time, type SourcedPublication } from './fold.js'
+import {
+  dayPublication,
+  foldOne,
+  foldPublications,
+  time,
+  withNotice,
+  type SourcedPublication,
+} from './fold.js'
 import { isWhole, type Publication } from './posts.js'
 import type { ProviderContext } from './provider.js'
 
@@ -177,13 +184,16 @@ export async function mergeSources(
       const at = time(u.at)
       for (const date of u.days) {
         if (date < today) continue
-        // with no time of its own (a page), only a newer one on its own page is known to be newer
-        const covered = pubs.some(
+        // with no time of its own (a page), only a newer one on its own page is known to be newer,
+        // by its place there; the same list published again is no newer word on the day
+        const covered = withNotice(pubs).some(
           (p) =>
             p.date === date &&
             isWhole(p.pub) &&
-            ((p.at > at && Number.isFinite(at)) ||
-              (p.at === at && p.source === source && p.seq > (u.seq ?? 0))),
+            !p.pub.reissue &&
+            (Number.isFinite(at)
+              ? p.at > at || (p.at === at && p.source === source && p.seq > (u.seq ?? 0))
+              : p.source === source && p.seq > (u.seq ?? 0)),
         )
         if (covered) continue
         const mine = flagged.get(source) ?? new Map<string, string>()
@@ -202,17 +212,13 @@ export async function mergeSources(
   const schedules: Record<GroupId, DaySchedule[]> = {}
   for (const g of groups) schedules[g] = []
   let updated = -Infinity
-  let updatedIso: string | null = null
   for (const date of dates) {
     const day = folded.get(date)
     for (const g of groups) schedules[g]!.push(day?.groups[g] ?? { date, status: 'unknown', intervals: [] })
     if (!day) continue
     const status = statuses[day.winner]!
     status.dates.push(date)
-    if (day.at > updated) {
-      updated = day.at
-      updatedIso = day.iso
-    }
+    if (day.at > updated) updated = day.at
     if (day.at > time(status.updatedAt)) status.updatedAt = day.iso
     // another source that published the day another way: behind, or the trace if the newer is wrong
     for (const i of day.sources) {
@@ -243,7 +249,7 @@ export async function mergeSources(
     region,
     groups,
     schedules,
-    updatedAt: Number.isFinite(updated) ? updatedIso : null,
+    updatedAt: Number.isFinite(updated) ? toKyivIso(new Date(updated)) : null,
     fetchedAt: toKyivIso(ctx.now()),
     sources: statuses,
   }

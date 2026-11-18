@@ -67,6 +67,18 @@ export interface Publication {
   omitted?: 'unknown' | 'none'
   /** A whole day's groups whose status isn't `scheduled` ("no outages", emergency) */
   status?: Record<string, DayStatus>
+  /**
+   * "скасовано до окремого розпорядження": the days after this one are cancelled too, whichever
+   * channel published them, until a newer list brings one back (see `foldPublications`)
+   */
+  untilFurtherNotice?: boolean
+  /**
+   * The same list published again ("повертаємось до ГПВ"): newer than what came between for which
+   * one stands, but no newer word on the day itself, so it doesn't stand in for an unread post
+   */
+  reissue?: boolean
+  /** The day as its source gave it (an API's instants): kept when nothing changes it after */
+  original?: Record<string, DaySchedule>
 }
 
 /**
@@ -111,6 +123,8 @@ export function layerPublications(
   let baseOmitted = omitted
   for (const pub of pubs) {
     const omitted = pub.omitted ?? baseOmitted
+    const statusBefore = status
+    status = { ...status }
     // a group the publication changes is scheduled hours from then on
     for (const g of Object.keys(pub.groups)) delete status[g]
     if (pub.cancelled) {
@@ -125,8 +139,12 @@ export function layerPublications(
       for (const [g, slots] of Object.entries(pub.groups)) {
         const prev = cur[g]
         // added to what? without the day it adds to (no whole day, or one that didn't list the
-        // group and lists every group that has outages only with `omitted: 'none'`), not known
-        const unknownBase = prev === null || !based || (prev === undefined && omitted !== 'none')
+        // group when that day lists every group, by its own rule), not known; nor to an emergency
+        const unknownBase =
+          prev === null ||
+          !based ||
+          (prev === undefined && baseOmitted !== 'none') ||
+          statusBefore[g] === 'emergency'
         next[g] = slots === null || unknownBase ? null : [...(prev ?? []), ...slots]
       }
       cur = next
@@ -169,15 +187,26 @@ export function layerPublications(
         ?.filter((s) => s.end > pub.from && s.start < to)
         // …and ends with it: after `to` the earlier publications stand
         .map((s) => (s.end > to ? { ...s, end: to } : s))
+      // an emergency's hours aren't a schedule: outside a window they aren't known
+      const emergency = statusBefore[g] === 'emergency'
       if (now === null) next[g] = null
       // the hours outside the window weren't known: they still aren't (a group the base didn't
-      // list, when the base lists every group, is one of them)
+      // list, when the base lists every group by its own rule, is one of them)
       else if (inside)
-        next[g] = prev === null || (prev === undefined && omitted !== 'none') ? null : [...outside, ...inside]
+        next[g] =
+          prev === null || emergency || (prev === undefined && baseOmitted !== 'none')
+            ? null
+            : [...outside, ...inside]
+      // a group the window doesn't list: by the window's own rule, none in it or not said
       else if (prev !== undefined)
         next[g] =
-          prev &&
-          (omitted === 'none' || prev.every((s) => s.end <= pub.from || s.start >= to) ? outside : null)
+          prev && !emergency
+            ? omitted === 'none' || prev.every((s) => s.end <= pub.from || s.start >= to)
+              ? outside
+              : null
+            : prev === null || emergency
+              ? null
+              : prev
     }
     cur = next
   }
@@ -320,6 +349,7 @@ export function textPublications(
           // a list for a window of the day ("з 10:00 до 16:00") leaves the hours after it alone
           ...(ev.at && ev.until ? { to: clockMinutes(ev.until, true) } : {}),
           ...(cancelled ? { cancelled } : {}),
+          ...(cancelled && ev.untilFurtherNotice ? { untilFurtherNotice: true } : {}),
           ...(ev.action === 'change' ? { add: true } : {}),
         },
       })
@@ -534,19 +564,18 @@ export function publicationsRead(
     stamp?: (p: DatedPublication) => string | null
   } = {},
 ): SourceRead {
-  const all = untilFurtherNotice([...pubs], analyzed, region, now, opts).filter(
-    (p) => !opts.since || p.date >= opts.since,
-  )
+  // "до окремого розпорядження" is carried to the fold, which reaches every channel's days
+  const all = pubs.filter((p) => !opts.since || p.date >= opts.since || p.pub.untilFurtherNotice)
   const seq = (p: DatedPublication) => p.seq ?? -p.post
-  // on a page without times only the newest publication of a day has the operator's time: an
-  // older one stamped would pass the newer
+  // on a page without times only the newest post of a day has the operator's time (every event of
+  // it, in its order): an older one stamped would pass the newer
   const newest = new Map<string, DatedPublication>()
   for (const p of all) {
     const n = newest.get(p.date)
     if (!n || seq(p) > seq(n)) newest.set(p.date, p)
   }
   const atOf = (p: DatedPublication) =>
-    opts.stamp && newest.get(p.date) === p
+    opts.stamp && newest.get(p.date)?.post === p.post
       ? opts.stamp(p)
       : Number.isFinite(p.at)
         ? toKyivIso(new Date(p.at))

@@ -4,7 +4,7 @@ import { makeDay, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
 import { OutageError } from '../errors.js'
-import { assembleDays, publicationsRead, textPublications, textUnread } from './posts.js'
+import { assembleDays, isWhole, publicationsRead, textPublications, textUnread } from './posts.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead, SourceSpec } from './sources.js'
 
@@ -112,15 +112,25 @@ export async function cekDays(
       if (day && at > day.at) Object.assign(day, { at, url: input.url })
     }
   }
-  const read = (since: string): SourceRead => {
-    const r = publicationsRead(analyzed, pubs, items, region, now, {
-      ...opts,
-      since,
-      stamp: (p) => {
-        const t = Math.max(p.at, ...back.filter((b) => b.date === p.date).map((b) => b.at))
-        return Number.isFinite(t) ? toKyivIso(new Date(t)) : null
-      },
+  // …which is that list published again: newer than an emergency in between for which one
+  // stands, but no newer word on the day itself (it doesn't stand in for an unread post)
+  const reissues = back.flatMap((b) => {
+    const before = pubs
+      .filter((p) => p.date === b.date && p.at < b.at)
+      .sort((x, y) => x.at - y.at || (x.seq ?? 0) - (y.seq ?? 0))
+    // the day as it stood: its last whole list and the changes after it, in their order
+    let from = -1
+    before.forEach((p, i) => {
+      if (isWhole(p.pub) && !p.pub.cancelled) from = i
     })
+    if (from === -1) return []
+    const seq = Number(b.url.split('/').pop()) || 0
+    return before
+      .slice(from)
+      .map((p, i) => ({ ...p, at: b.at, seq: seq + i / 100, pub: { ...p.pub, reissue: true } }))
+  })
+  const read = (since: string): SourceRead => {
+    const r = publicationsRead(analyzed, [...pubs, ...reissues], items, region, now, { ...opts, since })
     const newest = [...out.entries()].filter(([d]) => d >= since).sort(([, a], [, b]) => b.at - a.at)[0]
     return { ...r, groups: [...CEK_GROUPS], ...(newest?.[1].url ? { url: newest[1].url } : {}) }
   }
