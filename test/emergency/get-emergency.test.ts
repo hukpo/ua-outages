@@ -197,8 +197,9 @@ describe('getEmergency', () => {
       state: 'inactive',
       kind: 'gav',
       inferred: true,
-      // Sumy announces anew each morning and never cancels: the 19:00 swap holds to midnight
-      endedAt: '2026-11-16T00:00:00+02:00',
+      // Sumy never cancels: an apply holds to the end of its day, and at least 6 h, so the 19:00
+      // swap runs to 01:00
+      endedAt: '2026-11-16T01:00:00+02:00',
       queues: null,
     })
     // an apply with no word after it (16:50, as 18.11 08:05) still holds late in the evening,
@@ -600,11 +601,10 @@ describe('posts read wrong by the 0.4 regex classifier', () => {
       now: () => new Date('2026-11-17T15:00:00+02:00'),
       textProcessor: text,
     }).getEmergency('kirovohrad')
-    // 1835 (СГАВ cancelled) can't be read: СГАВ from 10:12 stands, with that post as its newest word
+    // 1835 (СГАВ cancelled) can't be read: it may end the СГАВ from 10:12 as well as not, so the
+    // state is not known (neither "inactive" nor kept alive by it)
     expect(s).toMatchObject({
-      state: 'active',
-      kind: 'sgav',
-      since: '2026-11-17T10:12:00+02:00',
+      state: 'unknown',
       message: { url: 'https://t.me/SvitloKropyvnytskyiMisto/1835' },
     })
   })

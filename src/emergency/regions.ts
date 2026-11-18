@@ -71,7 +71,7 @@ export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
   // 09:44, 6-10 added at 10:28; 10.11: 1-5 at 09:07, 6-10 added at 14:10), so an apply holds to
   // the end of the day. Ukrenergo names Sumy in its national updates ("у … Сумській областях
   // застосовуються аварійні відключення", 18.11 10:37)
-  sumy: { channels: [channel('SumyEnergo')], ukrenergo: true, holdToEndOfDay: true },
+  sumy: { channels: [channel('SumyEnergo')], ukrenergo: true, holdToEndOfDay: true, ttlHours: 6 },
   poltava: { channels: [channel('poltavaOE')] },
   mykolaiv: { mykolaivFeed: true, channels: [channel('mk_energy_ua')] },
   chernivtsi: { channels: [channel('oe_cv_ua')], ukrenergo: true },
@@ -266,7 +266,7 @@ export async function getEmergency(
     const read = await hub.posts(ctx, region, handle, fresh)
     // an apply holding to the end of its day: only today's posts can still be in force
     const reach = cfg.holdToEndOfDay
-      ? kyivInstant(kyivDate(now), 0).getTime()
+      ? Math.min(kyivInstant(kyivDate(now), 0).getTime(), now.getTime() - ttlHours * 3600_000)
       : now.getTime() - ttlHours * 3600_000
     if (Date.parse(read.from) > reach) short = true
     return read.posts
@@ -346,8 +346,11 @@ export async function getEmergency(
   // or with an episode of its own after the feed's
   if (feed) {
     const posted = status?.message ? Date.parse(status.message.at) : NaN
+    const feedTime = Date.parse(feed.endedAt ?? feed.since ?? '')
     const channelNewer =
       status?.state === 'active' ||
+      // a newer post the channel can't read: what it says isn't known, the feed's history doesn't say
+      (status?.state === 'unknown' && posted > feedTime) ||
       (status?.state === 'inactive' &&
         posted > Date.parse((status.inferred ? feed.endedAt : null) ?? feed.since ?? ''))
     if (feed.state === 'active' || !channelNewer) status = { ...feed, fetchedAt }

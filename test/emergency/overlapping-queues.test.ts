@@ -104,3 +104,43 @@ describe('several announcements in force: queues only when they are the whole pi
     expect(s.state).not.toBe('inactive')
   })
 })
+
+describe('holdToEndOfDay: an apply holds to its midnight, the end exclusive', () => {
+  it('on at 23:59, ended at 00:00', async () => {
+    const { foldEvents } = await import('../../src/emergency/status.js')
+    const apply = {
+      text: 'введені ГАВ',
+      url: 'https://t.me/SumyEnergo/1',
+      posted: '2026-11-18T08:09:00+02:00',
+      announcement: {
+        action: 'apply' as const,
+        kind: 'gav' as const,
+        at: '2026-11-18T08:05:00+02:00',
+        timed: true,
+        queues: null,
+        restored: null,
+        count: 10,
+        all: true,
+        add: false,
+        again: false,
+        partial: false,
+        scheduleApplies: null,
+        area: null,
+        edited: false,
+      },
+    }
+    const at = (now: string) =>
+      foldEvents([apply], {
+        region: 'sumy',
+        now: new Date(now),
+        ttlHours: 6,
+        holdToEndOfDay: true,
+        source: 'telegram',
+      })
+    expect(at('2026-11-18T23:59:00+02:00').state).toBe('active')
+    expect(at('2026-11-19T00:00:00+02:00')).toMatchObject({
+      state: 'inactive',
+      endedAt: '2026-11-19T00:00:00+02:00',
+    })
+  })
+})

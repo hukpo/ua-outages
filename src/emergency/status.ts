@@ -211,12 +211,18 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
 
   const ttl = opts.ttlHours * 3600_000
   const now = opts.now.getTime()
-  /** Episodes nobody followed up on for the TTL ended then (operators that never cancel) */
+  /**
+   * When a word nobody followed up on stops counting: after the TTL; with `holdToEndOfDay`, at the
+   * end of its day, and not sooner than the TTL (an apply at 21:00 runs into the night). The same
+   * for an apply, an unread post and a cancel of part of the queues
+   */
+  const lapse = (at: number) => (opts.holdToEndOfDay ? Math.max(endOfKyivDay(at), at + ttl) : at + ttl)
+  /** Episodes nobody followed up on ended then (operators that never cancel); the end is exclusive */
   const expire = (at: number) => {
     for (const t of tracks.values()) {
       // "до кінця доби": not before then
-      const end = Math.max(opts.holdToEndOfDay ? endOfKyivDay(t.lastAt) : t.lastAt + ttl, t.until)
-      if (t.active && at > end) {
+      const end = Math.max(lapse(t.lastAt), t.until)
+      if (t.active && at >= end) {
         t.active = false
         t.endedAt = toKyivIso(new Date(end))
         t.inferred = true
@@ -231,10 +237,9 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     // a new post after a long silence starts a new episode, it doesn't continue yesterday's
     expire(timeOf(e))
     if (a.action === 'unclear') {
-      // "ГАВ: …" that can't be read while one runs: it is still news about it, the state stands
-      const on = [...tracks.values()].filter((t) => t.active && (t.kind === a.kind || a.kind === 'emergency'))
-      if (on.length) for (const t of on) touch(t, e)
-      else lastUnclear = e
+      // a post that can't be read may end what runs as well as start something: the state is
+      // not known until a word that can be read, and it doesn't keep an episode alive either
+      lastUnclear = e
       continue
     }
     lastDecisiveAt = Math.max(lastDecisiveAt, timeOf(e))
@@ -320,7 +325,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   })
 
   // the newest word can't be read: say so rather than guess (it expires with the TTL)
-  if (lastUnclear && timeOf(lastUnclear) > lastDecisiveAt && now - timeOf(lastUnclear) <= ttl)
+  if (lastUnclear && timeOf(lastUnclear) > lastDecisiveAt && now < lapse(timeOf(lastUnclear)))
     return status({
       state: 'unknown',
       kind: lastUnclear.announcement.kind,
@@ -388,7 +393,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     const a = orphanCancel.announcement
     // "скасовано ГАВ для 6-10 черг", "м. Павлоград: скасовано" with nothing known before: the
     // rest may still be on, so not a region-wide "cancelled"…
-    const recent = now - timeOf(orphanCancel) <= ttl
+    const recent = now < lapse(timeOf(orphanCancel))
     if ((a.partial || a.area) && recent)
       return status({
         state: 'unknown',
@@ -409,7 +414,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
         kind: a.kind,
         scheduleApplies: null,
         since: null,
-        endedAt: toKyivIso(new Date(timeOf(orphanCancel) + ttl)),
+        endedAt: toKyivIso(new Date(lapse(timeOf(orphanCancel)))),
         queues: null,
         queueCount: null,
         area: null,
