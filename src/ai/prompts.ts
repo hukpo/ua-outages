@@ -5,7 +5,7 @@ import type { ImageInput, PostInput } from './types.js'
  * anyone writing a processor for another vendor can too. Bump `PROMPT_VERSION` with any change
  * here: it is part of the processor id, so cached answers made with the old prompt are not used.
  */
-export const PROMPT_VERSION = 'p7'
+export const PROMPT_VERSION = 'p8'
 
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] })
 const CLOCK = { type: 'string', description: 'HH:MM, 24-hour Kyiv time' }
@@ -158,6 +158,8 @@ export const IMAGE_SYSTEM = `You read pictures published by Ukrainian power grid
 - date: the day the schedule is for, YYYY-MM-DD. Take the year from the publication date. null if the picture shows no date.
 - statedAt: "станом на HH:MM", "оновлено HH:MM" printed on it, else null.
 - schedule: one entry for EVERY queue the region has, with the queue names given. intervals: each span without power, {from, to, kind}; "off" for a planned outage, "maybe" for a possible one (often a lighter colour or a separate legend entry). A queue with no outages: []. Merge adjacent cells of the same kind into one span. Half-hour cells count: 08:30 is a valid boundary. Times HH:MM, the end of the day is "24:00".
+- A grid of coloured cells without a legend: a filled (coloured) cell is a span WITHOUT power, a white or empty one is power — even when most cells are filled. Follow a legend when there is one.
+- A day split into two tables (00:00–12:00 and 12:00–24:00): read both; a span running to 12:00 in the first and on from 12:00 in the second is one span.
 - Read every digit carefully; if a part is unreadable, still give your best reading of the rest — never skip a queue.`
 
 /** The user turn for a post: its input as JSON */

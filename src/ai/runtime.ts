@@ -152,12 +152,14 @@ export class AiRuntime {
   async readImage(region: RegionId, src: ImageSource, signal?: AbortSignal): Promise<ImageReading> {
     const p = this.requireImage(region)
     const edge = p.maxLongEdge ?? DEFAULT_MAX_LONG_EDGE
+    const min = p.minLongEdge ?? 0
     // the picture itself, not where it was found: a repost or an unchanged edit is read once. The
     // caption can date it; an album lets a picture give some of the queues
     const key = sha(
       'image',
       p.id,
       String(edge),
+      String(min),
       src.bytes,
       src.caption ?? '',
       src.region.id,
@@ -168,7 +170,7 @@ export class AiRuntime {
       signal,
       { region, type: 'image', url: src.url, processor: p.id },
       async (sig, ev) => {
-        const input = this.imageInput(src, edge, ev)
+        const input = this.imageInput(src, edge, ev, min)
         const r = await p.readImage(input, { signal: sig })
         ev.usage = r.usage
         return validateImageReading(r.value, input)
@@ -198,10 +200,15 @@ export class AiRuntime {
     ) as Promise<boolean>
   }
 
-  private imageInput(src: ImageSource, edge: number, ev: Partial<ProcessedEvent>): ImageInput {
+  private imageInput(
+    src: ImageSource,
+    edge: number,
+    ev: Partial<ProcessedEvent>,
+    minLongEdge = 0,
+  ): ImageInput {
     let c
     try {
-      c = compactImage(src.bytes, { maxLongEdge: edge })
+      c = compactImage(src.bytes, { maxLongEdge: edge, minLongEdge })
     } catch (e) {
       throw new OutageError('parse', `${src.url}: ${e instanceof Error ? e.message : String(e)}`, {
         region: src.region.id,

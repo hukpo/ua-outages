@@ -160,6 +160,8 @@ describe('ua-outages/openai', () => {
     const content = (
       requests[0]!.input as { content: { type: string; image_url?: string; detail?: string }[] }[]
     )[0]!.content
+    const p = openaiImageProcessor({ client, model: 'gpt-6-luna' })
+    expect([p.maxLongEdge, p.minLongEdge]).toEqual([1600, 1600])
     expect(content[0]).toEqual({
       type: 'input_image',
       detail: 'high',

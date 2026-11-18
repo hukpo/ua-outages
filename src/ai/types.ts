@@ -173,6 +173,11 @@ export interface ImageProcessor {
   isSchedule?(input: ImageInput, opts: CallOptions): Promise<ProcessorResult>
   /** Long edge, px, the picture is scaled down to before `readImage`; default 800 */
   readonly maxLongEdge?: number
+  /**
+   * A smaller picture is scaled up by a whole factor, pixel for pixel, while its long edge stays
+   * within this; default none. Helps a model read a dense grid posted small (Zakarpattia's 800×210)
+   */
+  readonly minLongEdge?: number
 }
 
 /**

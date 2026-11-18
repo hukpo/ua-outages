@@ -42,8 +42,14 @@ export interface OpenAIProcessorOptions {
 }
 
 export interface OpenAIImageProcessorOptions extends OpenAIProcessorOptions {
-  /** Long edge the picture is scaled to before it is sent, px; default 800 */
+  /**
+   * Long edge the picture is scaled down to before it is sent, px; default 1600. OpenAI bills a
+   * picture by its size after scaling the short side to 768 px itself, so a larger one costs
+   * little more and keeps small cells legible
+   */
   maxLongEdge?: number
+  /** A smaller picture is scaled up by a whole factor towards this, px; default 1600, 0 for none */
+  minLongEdge?: number
   /** Run the cheap "is it a schedule?" check on bare photos, default true */
   check?: boolean
   /** `detail` of the image input, default `high` */
@@ -122,7 +128,8 @@ const imageItem = (input: ImageInput, detail: 'low' | 'high' | 'auto') =>
 export function openaiImageProcessor(o: OpenAIImageProcessorOptions): ImageProcessor {
   return {
     id: `openai:${o.model}:${o.reasoningEffort ?? 'default'}:${o.detail ?? 'high'}:${PROMPT_VERSION}`,
-    maxLongEdge: o.maxLongEdge,
+    maxLongEdge: o.maxLongEdge ?? 1600,
+    minLongEdge: o.minLongEdge ?? 1600,
     readImage: (input, call) =>
       ask(
         o,

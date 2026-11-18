@@ -288,21 +288,22 @@ const outages = new OutageClient({
 
 Any other model works: a processor is an object with an `id` and `analyzePost(input)` / `readImage(input)` returning `{ value, usage? }`. `TEXT_SYSTEM`, `TEXT_SCHEMA`, `textPrompt()`, `IMAGE_SYSTEM`, `IMAGE_SCHEMA` and `imagePrompt()` are exported to build one on.
 
-**Which model.** Measured on the eval set (`eval/`, prompt p7, 18.11.2026; text: 150 of the 784 posts, the same ones for every model; pictures: all 76 at an 800 px long edge):
+**Which model.** Measured on the eval set (`eval/`, 18.11.2026; text: 150 of the 784 posts, the same ones for every model, prompt p7; pictures: all 76):
 
-| model             | posts read right | pictures read right | Zakarpattia's colour grids |
-| ----------------- | ---------------- | ------------------- | -------------------------- |
-| GPT-6.1 Terra     | 143/150 (95%)    | 71/76               | 7/8                        |
-| GPT-6.2 Astra     | 135/150 (90%)    | 75–76/76            | 8/8                        |
-| Claude Sonnet 5.5 | 138/150 (92%)    | 68/76               | 3/8                        |
-| Claude Haiku 5.5  | 136/150 (91%)    | 65/76               | 1/8                        |
-| Claude Opus 5.5   | —                | —                   | 2/8                        |
+| model             | posts read right | pictures read right           | Zakarpattia's colour grids | $ per 1M tokens in / out |
+| ----------------- | ---------------- | ----------------------------- | -------------------------- | ------------------------ |
+| GPT-6.1 Terra     | 143/150 (95%)    | 75/76 (p8, 1600 px, small ×2) | 8/9 (p8), 7/8 (p7, 800 px) | 1 / 5                    |
+| GPT-6.2 Sol       | —                | 73/76 (p7, 800 px)            | 6/8                        | 2 / 10                   |
+| GPT-6.2 Astra     | 135/150 (90%)    | 75–76/76 (p7, 800 px)         | 8/8                        | 8 / 40                   |
+| Claude Sonnet 5.5 | 138/150 (92%)    | 68/76 (p7, 800 px)            | 3/8                        |                          |
+| Claude Haiku 5.5  | 136/150 (91%)    | 65/76 (p7, 800 px)            | 1/8                        |                          |
+| Claude Opus 5.5   | —                | —                             | 2/8                        |                          |
 
-Pictures decide it: a table of 48 coloured half-hour cells (Zakarpattia) is read right only by the GPT models, and a misread grid is real times in the wrong cells, which no check can catch. So a GPT model for pictures; for posts any of them, Terra making the fewest mistakes that matter (Haiku's included a false "emergency started" and a missed cancel). Text processor and image processor are set separately, so they can come from different vendors. 800 px is the smallest edge that keeps accuracy (600 px lost 2 more pictures; 1100 px read no better). Run `npm run eval` on your own choice of model before relying on it.
+GPT-6.1 Terra for both is the pick: as accurate on pictures as Astra at an eighth of the price, once pictures go at up to 1600 px and Zakarpattia's 800×210 grids are blown up ×2 pixel for pixel (`openaiImageProcessor`'s defaults). At 800 px Terra misread a Volyn table whose cells had shrunk to a few pixels and shifted grid cells by one; Claude models misread the grids at any size, and a misread grid is real times in the wrong cells, which no check can catch. Text processor and image processor are set separately, so they can come from different vendors. Run `npm run eval` on your own choice of model before relying on it.
 
 **Parsed once.** Answers are cached by a hash of the processor id (vendor, model, prompt version) and the whole input. A post is analysed again only when its text changes (an edit); a picture is read once per content, however often it is reposted. Polling every region every 5 minutes then costs about what the operators post (an estimated ~130 posts and ~120 pictures a day across Ukraine), not what is polled. Failed answers are remembered for 30 min, so a post a model can't read isn't paid for on every poll; failures of the AI API itself are not cached. Pass `processorCache` (`get` / `set`, values are JSON) to keep answers across restarts.
 
-**Pictures are compacted first** (pure JS, no native libraries): scaled down to a long edge of 800 px by default (`maxLongEdge` on the processor; never up), flat margins trimmed. Telegram's own previews (≤ 800 px) go as they are. Only pictures that matter are read: a post's photos when its text says they are the schedule, and a bare photo only after a cheap check on a 256 px copy (`isSchedule`). `onProcessed` reports each picture's original and sent size and the tokens each call used.
+**Pictures are compacted first** (pure JS, no native libraries): scaled down to a long edge of 800 px by default (`maxLongEdge` on the processor; 1600 px for `openaiImageProcessor`, since OpenAI bills by the size after scaling the short side to 768 px itself), flat margins trimmed. A smaller picture can be blown up by a whole factor, pixel for pixel, towards `minLongEdge` (1600 px for `openaiImageProcessor`, off otherwise): a model reads a dense grid of thin cells better that way. Only pictures that matter are read: a post's photos when its text says they are the schedule, and a bare photo only after a cheap check on a 256 px copy (`isSchedule`). `onProcessed` reports each picture's original and sent size and the tokens each call used.
 
 **Without a processor** nothing wrong is reported. `RegionInfo.capabilities.requires` lists what a region's schedule needs:
 

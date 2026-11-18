@@ -7,7 +7,7 @@
  *   npm run eval -- --backend openai --model <id>                 needs OPENAI_API_KEY
  *
  * Options: --only text|image, --filter <substring of the case name>, --tag <tag>, --sample N,
- * --long-edge 800,1100 (image sweep), --concurrency 4, --effort low|medium|high,
+ * --long-edge 800,1100 (image sweep), --min-edge 1600 (scale small pictures up towards it), --concurrency 4, --effort low|medium|high,
  * --record (save the raw answers to test/fixtures/ai/<backend>/ for the CI replay tests),
  * --price-in / --price-out ($ per 1M tokens, for the cost line).
  *
@@ -41,6 +41,7 @@ const { values: args } = parseArgs({
     filter: { type: 'string' },
     tag: { type: 'string' },
     'long-edge': { type: 'string' },
+    'min-edge': { type: 'string' },
     concurrency: { type: 'string', default: '4' },
     effort: { type: 'string' },
     record: { type: 'boolean', default: false },
@@ -92,6 +93,7 @@ async function processors(
 ): Promise<{ text: TextProcessor; image: ImageProcessor; tag: string }> {
   const model = args.model
   const effort = args.effort as 'low' | 'medium' | 'high' | undefined
+  const minEdge = args['min-edge'] ? Number(args['min-edge']) : undefined
   switch (args.backend) {
     case 'claude-cli':
       return {
@@ -101,8 +103,8 @@ async function processors(
       }
     case 'codex-cli':
       return {
-        text: codexCliText(model),
-        image: codexCliImage(model, edge),
+        text: codexCliText(model, effort),
+        image: codexCliImage(model, edge, minEdge, effort),
         tag: `codex-cli-${model ?? 'gpt-6.1-terra'}`,
       }
     case 'anthropic': {
@@ -124,7 +126,7 @@ async function processors(
       const o = { client, model, reasoningEffort: effort }
       return {
         text: openaiTextProcessor(o),
-        image: openaiImageProcessor({ ...o, maxLongEdge: edge }),
+        image: openaiImageProcessor({ ...o, maxLongEdge: edge, minLongEdge: minEdge }),
         tag: `openai-${model}`,
       }
     }

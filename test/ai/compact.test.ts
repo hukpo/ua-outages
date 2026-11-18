@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { compactImage, downscale, encodePng, jpegSize, trimMargins } from '../../src/image/compact.js'
+import {
+  compactImage,
+  downscale,
+  encodePng,
+  jpegSize,
+  trimMargins,
+  upscale,
+} from '../../src/image/compact.js'
 import { decodeJpeg } from '../../src/image/jpeg.js'
 import { decodePng } from '../../src/image/png.js'
 import { fixtureBytes } from '../helpers.js'
@@ -20,6 +27,16 @@ describe('compactImage', () => {
       maxLongEdge: 1100,
     })
     expect(small).toMatchObject({ width: 800, height: 210, mediaType: 'image/jpeg', compacted: false })
+  })
+
+  it('blows a small dense grid up by a whole factor, pixel for pixel, within the edges', () => {
+    const grid = fixtureBytes('zakarpattia/posters/10104_2026-04-10T0946.jpg')
+    const up = compactImage(grid, { maxLongEdge: 1600, minLongEdge: 1600 })
+    expect(up).toMatchObject({ width: 1600, height: 420, mediaType: 'image/png', compacted: true })
+    // never past the long edge cap
+    expect(compactImage(grid, { maxLongEdge: 1100, minLongEdge: 1600 })).toMatchObject({ width: 800 })
+    // a factor below 2 changes nothing
+    expect(compactImage(grid, { maxLongEdge: 1600, minLongEdge: 1200 })).toMatchObject({ width: 800 })
   })
 
   it('sends a picture the decoders cannot read as it is, with its size from the header', () => {
@@ -54,6 +71,16 @@ describe('trimMargins', () => {
     for (let y = 5; y < 395; y++)
       for (let x = 5; x < 395; x++) img.data.set([20, 20, 20, 255], (y * 400 + x) * 4)
     expect(trimMargins(img)).toBe(img)
+  })
+})
+
+describe('upscale', () => {
+  it('copies each pixel into an f×f block, keeping cell edges sharp', () => {
+    const img = { width: 2, height: 1, data: new Uint8Array([0, 0, 0, 255, 255, 255, 255, 255]) }
+    const up = upscale(img, 6)
+    expect(up).toMatchObject({ width: 6, height: 3 })
+    const px = (x: number, y: number) => up.data[(y * 6 + x) * 4]
+    expect([px(0, 0), px(2, 2), px(3, 0), px(5, 2)]).toEqual([0, 0, 255, 255])
   })
 })
 

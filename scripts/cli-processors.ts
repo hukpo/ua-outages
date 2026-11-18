@@ -121,6 +121,7 @@ export function claudeCliImage(model = 'haiku', maxLongEdge?: number): ImageProc
 
 async function codex(
   model: string,
+  effort: string | undefined,
   system: string,
   schema: object,
   prompt: string,
@@ -133,6 +134,7 @@ async function codex(
     const outFile = join(dir, 'out.json')
     writeFileSync(schemaFile, JSON.stringify(schema))
     const args = ['exec', '-m', model, '--skip-git-repo-check', '--ephemeral', '-s', 'read-only']
+    if (effort) args.push('-c', `model_reasoning_effort="${effort}"`)
     args.push('--output-schema', schemaFile, '-o', outFile)
     if (image) {
       const file = join(dir, `picture.${ext(image)}`)
@@ -147,19 +149,34 @@ async function codex(
   }
 }
 
-export function codexCliText(model = 'gpt-6.1-terra'): TextProcessor {
+export function codexCliText(model = 'gpt-6.1-terra', effort?: string): TextProcessor {
   return {
-    id: `codex-cli:${model}:${PROMPT_VERSION}`,
-    analyzePost: (input, o) => codex(model, TEXT_SYSTEM, TEXT_SCHEMA, textPrompt(input), o.signal),
+    id: `codex-cli:${model}:${effort ?? 'default'}:${PROMPT_VERSION}`,
+    analyzePost: (input, o) => codex(model, effort, TEXT_SYSTEM, TEXT_SCHEMA, textPrompt(input), o.signal),
   }
 }
 
-export function codexCliImage(model = 'gpt-6.1-terra', maxLongEdge?: number): ImageProcessor {
+export function codexCliImage(
+  model = 'gpt-6.1-terra',
+  maxLongEdge?: number,
+  minLongEdge?: number,
+  effort?: string,
+): ImageProcessor {
   return {
-    id: `codex-cli:${model}:${PROMPT_VERSION}`,
+    id: `codex-cli:${model}:${effort ?? 'default'}:${PROMPT_VERSION}`,
     maxLongEdge,
-    readImage: (input, o) => codex(model, IMAGE_SYSTEM, IMAGE_SCHEMA, imagePrompt(input), o.signal, input),
+    minLongEdge,
+    readImage: (input, o) =>
+      codex(model, effort, IMAGE_SYSTEM, IMAGE_SCHEMA, imagePrompt(input), o.signal, input),
     isSchedule: (input, o) =>
-      codex(model, IMAGE_CHECK_SYSTEM, IMAGE_CHECK_SCHEMA, input.caption ?? 'No caption.', o.signal, input),
+      codex(
+        model,
+        effort,
+        IMAGE_CHECK_SYSTEM,
+        IMAGE_CHECK_SCHEMA,
+        input.caption ?? 'No caption.',
+        o.signal,
+        input,
+      ),
   }
 }

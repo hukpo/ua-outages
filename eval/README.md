@@ -1,8 +1,8 @@
 # AI processor eval set
 
-## Results (18.11.2026, prompt p7)
+## Results (18.11.2026, prompts p7–p8)
 
-`npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800]`.
+`npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800] [--min-edge 1600] [--effort high]`.
 The CLI backends run the models through `claude -p` / `codex exec` (no API key; slower, and no
 token counts for Codex). Text on `--sample 150`, the same 150 cases for every model; pictures on
 all 76.
@@ -14,6 +14,9 @@ all 76.
 | Claude Sonnet 5.5 | 138/150 | 68/76                       |        | 66/76   |
 | Claude Haiku 5.5  | 136/150 | 65/76                       |        | 62/76   |
 | Claude Opus 5.5   |         | Zakarpattia grids only: 2/8 |        |         |
+| GPT-6.2 Sol       |         | 73/76                       |        |         |
+
+**p8 with 1600 px and small pictures ×2** (`--long-edge 1600 --min-edge 1600`, the `openaiImageProcessor` defaults): GPT-6.1 Terra 75/76; on a second run of the hard cases, Zakarpattia 8/9 and Volyn 2/2 again. Its only miss left is Zakarpattia 9718 (two cells off). p8 adds two rules to `IMAGE_SYSTEM`: a filled cell in a grid without a legend is an outage even when most cells are filled (Sol and Terra had read 9718 inverted), and a day split over two half-day tables is read across the break (Terra lost Volyn 1.1's 10:00–12:00). Terra at 800 px with `--effort high` also got Volyn right and Zakarpattia 8/9, at the price of more output tokens.
 
 - Claude models misread Zakarpattia's 48-cell colour grids at Telegram's 800×210 (Haiku 1/8, Sonnet 3/8, Opus 2/8); the GPT models read them (Astra 8/8, Terra 7/8).
 - On the full 784 posts, Haiku went from 554 (prompt p4, scored strictly) to 627 after the scoring compared only what the SDK uses; prompts p5–p7 fixed the patterns behind most remaining misses.
