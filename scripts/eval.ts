@@ -98,7 +98,7 @@ async function processors(
     case 'claude-cli':
       return {
         text: claudeCliText(model),
-        image: claudeCliImage(model, edge),
+        image: claudeCliImage(model, edge, minEdge),
         tag: `claude-cli-${model ?? 'haiku'}`,
       }
     case 'codex-cli':

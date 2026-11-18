@@ -343,11 +343,11 @@ GPT-6.1 Terra for both is the pick: as accurate on pictures as Astra at an eight
 
 **Without a processor** nothing wrong is reported. `RegionInfo.capabilities.requires` lists what a region's schedule needs:
 
-| needs            | regions                                                                                                                                   |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `textProcessor`  | `zaporizhzhia`, `kharkiv`, `cherkasy`, `lviv`, `dnipro-cek` (with YASNO), `kirovohrad` (with the site grid), `chernivtsi` (with the site) |
-| `imageProcessor` | `volyn`                                                                                                                                   |
-| both             | `khmelnytskyi`, `chernihiv`, `zakarpattia`                                                                                                |
+| needs            | regions                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `textProcessor`  | `zaporizhzhia`, `kharkiv`, `cherkasy`, `dnipro-cek` (with YASNO), `kirovohrad` (with the site grid), `chernivtsi` (with the site) |
+| `imageProcessor` | `volyn`                                                                                                                           |
+| both             | `khmelnytskyi`, `chernihiv`, `zakarpattia`                                                                                        |
 
 Without it, `getSchedules` throws `OutageError('config')`; where a structured source remains (`kirovohrad`, `chernivtsi`, `dnipro-cek`) that source answers and the post source is listed failed in `sources`. `getEmergency` is `state: 'unknown'` wherever the region's announcements are posts, unless YASNO (Kyiv, Dnipro) or Mykolaiv's feed answers.
 

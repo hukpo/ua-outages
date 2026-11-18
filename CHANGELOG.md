@@ -30,12 +30,12 @@ Posts and pictures are read by AI processors you plug in, instead of patterns an
 
 - `getEmergency` reads posts with the text processor. Without one it is `unknown` wherever announcements are posts (it used to read them with patterns). Fixed by this: Kropyvnytskyi's "В 14:05 відміна дії графіку ГАВ" (0.4.3 read it as ГАВ in force) and Zaporizhzhia's explainer 3629 ("… запроваджуються …", read by 0.4.8 as a new ГАВ).
 - `EmergencyStatus.area` is as the operator wrote it ("м. ДНІПРО"; was normalised to "м. Дніпро").
-- Without `textProcessor`: `zaporizhzhia`, `kharkiv`, `cherkasy`, `lviv` throw `config`; `kirovohrad`, `chernivtsi`, `dnipro-cek` answer from the structured source only, the post source failed in `sources`. Without `imageProcessor`: `volyn` throws `config`; `khmelnytskyi`, `chernihiv`, `zakarpattia` need both.
+- Without `textProcessor`: `zaporizhzhia`, `kharkiv`, `cherkasy` throw `config`; `kirovohrad`, `chernivtsi`, `dnipro-cek` answer from the structured source only, the post source failed in `sources`. Without `imageProcessor`: `volyn` throws `config`; `khmelnytskyi`, `chernihiv`, `zakarpattia` need both.
 - Chernihiv: a correction in words is applied when it gives both ends of an outage, otherwise the queues it names are `unknown` until the next poster (0.4.4 made an open-ended start `maybe` up to the poster's next outage).
 - Cherkasy: every post the site's search finds since yesterday is fetched (up to 12) and read; the processor tells schedules from notices (was: picked by title).
-- Lviv: a slot published only as a picture is read with the image processor (was `parse`).
+- Lviv: the schedule text, which LOE's system writes from a fixed template, is read exactly with no processor (`lvivTemplate`); a text that strays from the template in any line goes to the text processor, or is `parse` without one. A slot with only a picture (the format before 30.10.2025) is `parse`, as before.
 - An album may split the queues over its pictures; they are put together.
-- Site articles without a time of their own (Zaporizhzhia, Khmelnytskyi, Lviv) are read against today's noon, so each is analysed at most once a day.
+- Site articles without a time of their own (Zaporizhzhia, Khmelnytskyi, and Lviv's off-template texts) are read against today's noon, so each is analysed at most once a day.
 
 ### Removed
 

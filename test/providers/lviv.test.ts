@@ -138,8 +138,8 @@ const archived = (id: number) =>
     .children.find((c: { id: number }) => c.id === id)
 
 describe('Lvivoblenergo', () => {
-  it('turns the analysed prose into exact intervals', async () => {
-    const { client: c, text } = client()
+  it("reads LOE's template exactly, with no processor at all", async () => {
+    const { client: c } = client(undefined, { textProcessor: null })
     const s = await c.getSchedules('lviv')
     expect(s.groups).toEqual([...STANDARD_GROUPS])
     expect(s.schedules['1.1']).toEqual([
@@ -154,10 +154,32 @@ describe('Lvivoblenergo', () => {
     ])
     // "Група 6.2. Електроенергія є."
     expect(s.schedules['6.2']).toEqual([{ date: '2026-10-17', status: 'scheduled', intervals: [] }])
-    // only the filled slot is sent, as plain text read against today's noon
+    // and a processor, when there is one, isn't asked
+    const { client: withAi, text } = client()
+    await withAi.getSchedules('lviv')
+    expect(text!.calls).toHaveLength(0)
+  })
+
+  it('gives a text that strays from the template to the text processor, or fails without one', async () => {
+    const html = archived(1095).rawHtml.replace(
+      'Група 1.1. Електроенергії немає з 17:00 до 19:30.',
+      'Група 1.1. Можливі відключення з 17:00 до 19:30.',
+    )
+    expect(html).toContain('Можливі')
+    const now = new Date('2026-06-30T20:00:00+03:00')
+    const { client: c, text } = client(menuWithToday({ rawHtml: html }), { now })
+    const s = await c.getSchedules('lviv')
+    // the plain text, read against today's noon
     expect(text!.calls).toHaveLength(1)
     expect(text!.calls[0]!.text).not.toMatch(/<p>/)
-    expect(text!.calls[0]!.publishedAt).toBe('2026-10-17T12:00:00+03:00')
+    expect(text!.calls[0]!.publishedAt).toBe('2026-06-30T12:00:00+03:00')
+    expect(s.schedules['1.1']![0]!.date).toBe('2026-07-01')
+    await expect(
+      client(menuWithToday({ rawHtml: html }), { now, textProcessor: null }).client.getSchedules('lviv'),
+    ).rejects.toMatchObject({
+      code: 'parse',
+      message: expect.stringContaining("doesn't follow its template"),
+    })
   })
 
   it('takes freshness from "Інформація станом на"', async () => {
@@ -203,50 +225,18 @@ describe('Lvivoblenergo', () => {
     ).rejects.toMatchObject({ code: 'parse' })
   })
 
-  it('reads a slot published only as a picture with the image processor', async () => {
-    const image = fakeImage(() => ({
-      date: '2026-10-17',
-      schedule: STANDARD_GROUPS.map((queue) => ({
-        queue,
-        intervals: queue === '3.1' ? [{ from: '08:00', to: '12:00', kind: 'off' as const }] : [],
-      })),
-    }))
-    const { client: c, calls } = client(menuWithToday({ imageUrl: '/media/x_GPV.png' }), {
-      imageProcessor: image,
-    })
-    const s = await c.getSchedules('lviv')
-    expect(calls.some((x) => x.url === 'https://api.loe.lviv.ua/media/x_GPV.png')).toBe(true)
-    expect(image.calls).toHaveLength(1)
-    expect(s.schedules['3.1']![0]!.intervals).toEqual([
-      { from: '2026-10-17T08:00:00+03:00', to: '2026-10-17T12:00:00+03:00', kind: 'off' },
-    ])
-    expect(s.schedules['1.1']).toEqual([{ date: '2026-10-17', status: 'scheduled', intervals: [] }])
-    // a picture without its date can't be placed
-    const undated = fakeImage(() => ({
-      schedule: STANDARD_GROUPS.map((queue) => ({ queue, intervals: [] })),
-    }))
+  it('a slot published only as a picture (the format before 30.10.2025) is parse, with its address', async () => {
     await expect(
-      client(menuWithToday({ imageUrl: '/media/x_GPV.png' }), {
-        imageProcessor: undated,
-      }).client.getSchedules('lviv'),
-    ).rejects.toMatchObject({ code: 'parse' })
+      client(menuWithToday({ imageUrl: '/media/x_GPV.png' }), { textProcessor: null }).client.getSchedules(
+        'lviv',
+      ),
+    ).rejects.toMatchObject({ code: 'parse', details: { url: 'https://api.loe.lviv.ua/media/x_GPV.png' } })
   })
 
-  it('needs a text processor for the schedule, and an image processor for a picture-only slot', async () => {
-    await expect(
-      client(undefined, { textProcessor: null }).client.getSchedules('lviv'),
-    ).rejects.toMatchObject({
-      code: 'config',
-    })
-    await expect(
-      client(menuWithToday({ imageUrl: '/media/x_GPV.png' })).client.getSchedules('lviv'),
-    ).rejects.toMatchObject({ code: 'config' })
-    // the address search needs neither
-    const m = await client(undefined, { textProcessor: null }).client.findGroup('lviv', {
-      city: 'Львів',
-      street: 'вул. Городоцька',
-      house: '171',
-    })
+  it('needs no processor for the schedule or the address search', async () => {
+    const c = client(undefined, { textProcessor: null }).client
+    await expect(c.getSchedules('lviv')).resolves.toMatchObject({ region: 'lviv' })
+    const m = await c.findGroup('lviv', { city: 'Львів', street: 'вул. Городоцька', house: '171' })
     expect(m.group).toBe('5.1')
   })
 
@@ -347,9 +337,10 @@ describe('Lvivoblenergo', () => {
     const s = await client(undefined, { now: later }).client.getSchedules('lviv')
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-10-17'])
     expect(assessFreshness(s, { now: later })).toMatchObject({ state: 'stale', today: 'missing' })
-    // a month later the model's date is too far from the read to be believed: an error, not today
-    await expect(
-      client(undefined, { now: new Date('2026-11-17T09:00:00+02:00') }).client.getSchedules('lviv'),
-    ).rejects.toMatchObject({ code: 'parse' })
+    // a month later it is still the 17th's
+    const month = await client(undefined, { now: new Date('2026-11-17T09:00:00+02:00') }).client.getSchedules(
+      'lviv',
+    )
+    expect(month.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-10-17'])
   })
 })

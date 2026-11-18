@@ -107,10 +107,11 @@ export function claudeCliText(model = 'haiku'): TextProcessor {
   }
 }
 
-export function claudeCliImage(model = 'haiku', maxLongEdge?: number): ImageProcessor {
+export function claudeCliImage(model = 'haiku', maxLongEdge?: number, minShortEdge?: number): ImageProcessor {
   return {
     id: `claude-cli:${model}:${PROMPT_VERSION}`,
     maxLongEdge,
+    minShortEdge,
     readImage: (input, o) => claude(model, IMAGE_SYSTEM, IMAGE_SCHEMA, imagePrompt(input), o.signal, input),
     isSchedule: (input, o) =>
       claude(model, IMAGE_CHECK_SYSTEM, IMAGE_CHECK_SCHEMA, input.caption ?? 'No caption.', o.signal, input),

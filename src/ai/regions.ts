@@ -103,7 +103,6 @@ export const SCHEDULE_REQUIRES: Partial<Record<RegionId, ('textProcessor' | 'ima
   cherkasy: ['textProcessor'],
   khmelnytskyi: ['textProcessor', 'imageProcessor'],
   'dnipro-cek': ['textProcessor'],
-  lviv: ['textProcessor'],
   kirovohrad: ['textProcessor'],
   chernivtsi: ['textProcessor'],
   chernihiv: ['textProcessor', 'imageProcessor'],
