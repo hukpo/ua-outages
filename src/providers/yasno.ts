@@ -16,7 +16,7 @@ import type {
 } from '../types.js'
 import { asSource, steadyStamps } from './as-source.js'
 import { cekTelegramSource } from './cek-telegram.js'
-import { dtekProvider, dtekSiteSource } from './dtek.js'
+import { dtekSiteParts } from './dtek.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceSpec } from './sources.js'
 
@@ -38,14 +38,13 @@ const BASE = 'https://app.yasno.ua/api/blackout-service/public/shutdowns'
  */
 const OPERATOR_CHANNELS: Record<number, (() => SourceSpec) | undefined> = {
   303: cekTelegramSource,
-  902: () => dtekSiteSource('kyiv', 'ДТЕК Київські електромережі', 'kem'),
-  301: () => dtekSiteSource('dnipro', 'ДТЕК Дніпровські електромережі', 'dnem'),
 }
 
 /**
- * The DTEK site of a YASNO grid, for `getHouseOutage`: YASNO's lookup gives the group only, the
- * site also whether the house is off now and why. Its own address chain (its city and street
- * names differ from YASNO's), so the address is looked up again there.
+ * The DTEK site of a YASNO grid: the second schedule channel (see above), and `getHouseOutage`'s
+ * source: YASNO's lookup gives the group only, the site also whether the house is off now and
+ * why. Its own address chain (its city and street names differ from YASNO's), so the address is
+ * looked up again there. One site instance for both, so they share its session.
  */
 const DTEK_SITES: Record<number, { operator: string; code: string } | undefined> = {
   902: { operator: 'ДТЕК Київські електромережі', code: 'kem' },
@@ -94,25 +93,14 @@ export function yasnoProvider(o: YasnoOptions): Provider {
   }
   // `updatedOn` moves with any queue and any day: a day that didn't change keeps the time it came with
   const steady = steadyStamps()
+  const dtek = DTEK_SITES[o.dsoId]
+  const site = dtek ? dtekSiteParts(region, dtek.operator, dtek.code) : undefined
   // made once, so that a channel which remembers what it read keeps doing so between calls
-  const channel = OPERATOR_CHANNELS[o.dsoId]?.()
+  const channel = site?.source ?? OPERATOR_CHANNELS[o.dsoId]?.()
 
-  const site = DTEK_SITES[o.dsoId]
   const provider: Provider = {
     info: { ...o.info, capabilities: { schedule: true, addressSearch: true } },
-    ...(site
-      ? {
-          houseOutages: dtekProvider({
-            info: {
-              id: region,
-              name: site.operator,
-              operator: site.operator,
-              website: `https://www.dtek-${site.code}.com.ua/ua/shutdowns`,
-            },
-            code: site.code,
-          }),
-        }
-      : {}),
+    ...(site ? { houseOutages: site.provider } : {}),
     // cities: the whole list (~1100 for Dnipro region) comes in one request; streets: server search
     remoteSearch: { streets: true },
     sampleAddress: o.sampleAddress,
