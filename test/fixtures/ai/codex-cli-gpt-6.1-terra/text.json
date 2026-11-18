@@ -624,7 +624,7 @@
     ]
    }
   ],
-  "photosAreSchedules": false,
+  "photosAreSchedules": true,
   "statedAt": "16:12"
  },
  "SvitloKropyvnytskyiMisto-1795": {
@@ -1384,7 +1384,7 @@
     ]
    }
   ],
-  "photosAreSchedules": true,
+  "photosAreSchedules": false,
   "statedAt": null
  },
  "SvitloKropyvnytskyiMisto-1832": {
@@ -1734,7 +1734,7 @@
     ]
    }
   ],
-  "photosAreSchedules": true,
+  "photosAreSchedules": false,
   "statedAt": "00:57"
  },
  "Ukrenergo-5596": {
@@ -2331,7 +2331,7 @@
     ]
    }
   ],
-  "photosAreSchedules": true,
+  "photosAreSchedules": false,
   "statedAt": null
  },
  "Zaporizhzhyaoblenergo_news-3610": {
@@ -2905,7 +2905,14 @@
     "at": null,
     "until": "22:00",
     "allQueues": false,
-    "queues": [],
+    "queues": [
+     "1.1",
+     "1.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
     "queuesRestored": [],
     "queueCount": null,
     "additive": false,
@@ -3161,7 +3168,7 @@
     "regions": [
      "dnipro-cek"
     ],
-    "area": "м. ПАВЛОГРАД",
+    "area": "м. Павлоград",
     "date": "2026-11-17",
     "at": null,
     "until": null,
@@ -3337,7 +3344,7 @@
     ],
     "area": null,
     "date": null,
-    "at": null,
+    "at": "13:00",
     "until": null,
     "allQueues": false,
     "queues": [],
@@ -3526,7 +3533,10 @@
     "at": null,
     "until": "01:00",
     "allQueues": false,
-    "queues": [],
+    "queues": [
+     "5.1",
+     "5.2"
+    ],
     "queuesRestored": [],
     "queueCount": null,
     "additive": false,
@@ -3562,10 +3572,13 @@
     "at": null,
     "until": "15:00",
     "allQueues": false,
-    "queues": [],
+    "queues": [
+     "6.1",
+     "6.2"
+    ],
     "queuesRestored": [],
     "queueCount": null,
-    "additive": false,
+    "additive": true,
     "again": false,
     "gpvApplies": null,
     "addedInEdit": false,
@@ -4810,13 +4823,13 @@
   "events": [
    {
     "kind": "gav",
-    "action": "start",
+    "action": "change",
     "regions": [
      "mykolaiv"
     ],
     "area": null,
     "date": null,
-    "at": null,
+    "at": "12:45",
     "until": null,
     "allQueues": false,
     "queues": [
@@ -4843,7 +4856,7 @@
    }
   ],
   "photosAreSchedules": false,
-  "statedAt": "12:45"
+  "statedAt": null
  },
  "oe_cv_ua-4003": {
   "events": [

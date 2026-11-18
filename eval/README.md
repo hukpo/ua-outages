@@ -1,26 +1,30 @@
 # AI processor eval set
 
-## Results (18.11.2026, prompts p7–p8)
+## Results (18.11.2026, prompts p7–p13)
 
-`npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800] [--min-edge 1600] [--effort high]`.
-The CLI backends run the models through `claude -p` / `codex exec` (no API key; slower, and no
-token counts for Codex). Text on `--sample 150`, the same 150 cases for every model; pictures on
-all 76.
+`npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800] [--min-short-edge 400] [--effort high]`.
+The CLI backends run the models through `claude -p` / `codex exec` (no API key; slower). Text on
+`--sample 150`, the same 150 cases for every model; pictures on all 76.
 
-| model             | text    | pictures, 800 px            | 600 px | 1100 px |
-| ----------------- | ------- | --------------------------- | ------ | ------- |
-| GPT-6.1 Terra     | 143/150 | 71/76                       |        |         |
-| GPT-6.2 Astra     | 135/150 | 75–76/76                    | 73/76  |         |
-| Claude Sonnet 5.5 | 138/150 | 68/76                       |        | 66/76   |
-| Claude Haiku 5.5  | 136/150 | 65/76                       |        | 62/76   |
-| Claude Opus 5.5   |         | Zakarpattia grids only: 2/8 |        |         |
-| GPT-6.2 Sol       |         | 73/76                       |        |         |
+| model             | text                     | pictures, 800 px            | 600 px | 1100 px |
+| ----------------- | ------------------------ | --------------------------- | ------ | ------- |
+| GPT-6.1 Terra     | 150/150 ×2 (p13), 143 p7 | 71/76; 75/76 at p10 below   |        |         |
+| GPT-6.2 Astra     | 135/150                  | 75–76/76                    | 73/76  |         |
+| Claude Sonnet 5.5 | 138/150                  | 68/76                       |        | 66/76   |
+| Claude Haiku 5.5  | 136/150                  | 65/76                       |        | 62/76   |
+| Claude Opus 5.5   |                          | Zakarpattia grids only: 2/8 |        |         |
+| GPT-6.2 Sol       |                          | 73/76                       |        |         |
 
-**p8 with 1600 px and small pictures ×2** (`--long-edge 1600 --min-edge 1600`, the `openaiImageProcessor` defaults): GPT-6.1 Terra 75/76; on a second run of the hard cases, Zakarpattia 8/9 and Volyn 2/2 again. Its only miss left is Zakarpattia 9718 (two cells off). p8 adds two rules to `IMAGE_SYSTEM`: a filled cell in a grid without a legend is an outage even when most cells are filled (Sol and Terra had read 9718 inverted), and a day split over two half-day tables is read across the break (Terra lost Volyn 1.1's 10:00–12:00). Terra at 800 px with `--effort high` also got Volyn right and Zakarpattia 8/9, at the price of more output tokens.
+**Pictures, p10, `--long-edge 1000 --min-short-edge 400`** (the `openaiImageProcessor` defaults): GPT-6.1 Terra 75/76, the miss Zakarpattia 9718 (two cells off). At 800 px it lost Volyn's 1.1 10:00–12:00; 1000 and 1200 px read it. 1600 px with every small picture ×2 also gave 75/76 at three times the image tokens. OpenAI counts ~1 token per 800 px: Chernihiv's 471×800 poster ~470, Zakarpattia's grid ~230 (800×210) or ~860 (×2), Volyn's table ~620 (800 px) or ~2360 (1600 px).
+
+**Text, p13**: GPT-6.1 Terra 150/150 in two runs in a row. p9–p13 came from its misses on these 150: ЦЕК's "до 22:00 відключаються черги" (a change), "діють ЕКСТРЕНІ … ГПВ не діють" (an emergency start), "повертаємось до графіків" (the emergency ends), "по області (крім …)" (no area), "станом на" as the time of the action, gpvApplies, a change's start time. `photosAreSchedules` is now scored only for the channels whose photos the SDK reads (Chernihiv, Zakarpattia, Sumy). An emergency change naming queues counts as a start (the state machine does the same with both).
+
+**Regex readers of 0.4.8** on the same 150, scored on what the SDK makes of a post (emergency announcements; hours per queue per date where the schedule is taken from text): 144/150, against 150/150 for Terra p13 on the same measure. Its misses: ЦЕК's "+ черга 1.1 з 06:00", Ukrenergo's "у більшості регіонів скасовано" read as a cancel in four oblasts, two ministry briefings naming Poltava, Cherkasy's two schedules in one post (half the queues unknown), Chernihiv's "ГПВ діють" after a ГАВ cancel.
+
+**Tokens** (GPT-6.1 Terra, exact output from `codex exec --json`, input counted with o200k): a post ~1972 (instructions) + 494 (schema) + ~477 (the post, compact JSON) in, ~180 out; a picture ~700 + image in, ~290 out. Answers as "HH:MM-HH:MM" strings instead of objects cut picture output from ~406 to ~290 tokens.
 
 - Claude models misread Zakarpattia's 48-cell colour grids at Telegram's 800×210 (Haiku 1/8, Sonnet 3/8, Opus 2/8); the GPT models read them (Astra 8/8, Terra 7/8).
 - On the full 784 posts, Haiku went from 554 (prompt p4, scored strictly) to 627 after the scoring compared only what the SDK uses; prompts p5–p7 fixed the patterns behind most remaining misses.
-- GPT-6.1 Terra's tokens via `codex exec --json` (Codex's own ~20k-token wrapper taken off with `CODEX_BASELINE_TOKENS`; output includes reasoning): per post ~1.7k in / ~250 out (≈ $0.003 at $1 / $5 per 1M), per picture at 1600 px ~1.8k in / ~400 out (≈ $0.004).
 - Haiku's tokens per post, via the CLI: ~1.9k in / ~1.4k out (mostly thinking); per picture ~1.6k in / ~1.7k out.
 
 The answers behind the last runs are in `test/fixtures/ai/` and replayed offline by `test/ai/replay.test.ts`.
