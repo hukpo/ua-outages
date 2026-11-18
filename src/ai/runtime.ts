@@ -230,9 +230,10 @@ export class AiRuntime {
       async (sig, ev) => {
         const r = await p.analyzePost(input, { signal: sig })
         ev.usage = r.usage
-        return validatePostAnalysis(r.value, input)
+        return r.value
       },
-    ) as Promise<PostAnalysis>
+      (raw) => validatePostAnalysis(raw, input),
+    )
   }
 
   /**
@@ -243,8 +244,8 @@ export class AiRuntime {
     const p = this.requireImage(region)
     const edge = p.maxLongEdge ?? DEFAULT_MAX_LONG_EDGE
     const min = p.minShortEdge ?? 0
-    // the picture itself, not where it was found: a repost or an unchanged edit is read once. The
-    // caption can date it; an album lets a picture give some of the queues
+    // the picture and everything the processor is shown with it, not the post's address: a
+    // repost the same day is read once, one a day later is read against its own date
     const key = sha(
       'image',
       p.id,
@@ -253,7 +254,8 @@ export class AiRuntime {
       src.bytes,
       src.caption ?? '',
       src.region.id,
-      (src.of ?? 1) > 1 ? 'album' : '',
+      src.publishedAt,
+      `${src.index ?? 0}/${src.of ?? 1}`,
     )
     return this.run(
       key,
@@ -263,9 +265,10 @@ export class AiRuntime {
         const input = this.imageInput(src, edge, ev, min)
         const r = await p.readImage(input, { signal: sig })
         ev.usage = r.usage
-        return validateImageReading(r.value, input)
+        return r.value
       },
-    ) as Promise<ImageReading>
+      (raw) => validateImageReading(raw, this.checkInput(src)),
+    )
   }
 
   /**
@@ -276,7 +279,7 @@ export class AiRuntime {
     const p = this.requireImage(region)
     const check = p.isSchedule?.bind(p)
     if (!check) return true
-    const key = sha('image-check', p.id, src.bytes, src.caption ?? '')
+    const key = sha('image-check', p.id, src.bytes, src.caption ?? '', src.region.id)
     return this.run(
       key,
       signal,
@@ -285,9 +288,26 @@ export class AiRuntime {
         const input = this.imageInput(src, CHECK_LONG_EDGE, ev)
         const r: ProcessorResult = await check(input, { signal: sig })
         ev.usage = r.usage
-        return validateImageCheck(r.value, input)
+        return r.value
       },
-    ) as Promise<boolean>
+      (raw) => validateImageCheck(raw, this.checkInput(src)),
+    )
+  }
+
+  /** What validation reads of a picture's input (not its pixels): checked again from the cache */
+  private checkInput(src: ImageSource): ImageInput {
+    return {
+      url: src.url,
+      index: src.index ?? 0,
+      of: src.of ?? 1,
+      bytes: new Uint8Array(),
+      mediaType: 'image/png',
+      width: 0,
+      height: 0,
+      caption: src.caption,
+      publishedAt: src.publishedAt,
+      region: src.region,
+    }
   }
 
   private imageInput(
@@ -325,16 +345,25 @@ export class AiRuntime {
     }
   }
 
-  private async run(
+  /**
+   * One processor call behind the cache. What is kept is the processor's raw answer, checked
+   * (`check`) on every use: a later, stricter validator reaches answers already cached. A misread
+   * is remembered for a while; an outage of the AI API is not; a call whose callers all left
+   * writes nothing (an abandoned call must not overwrite a newer answer).
+   */
+  private async run<T>(
     key: string,
     signal: AbortSignal | undefined,
     base: Omit<ProcessedEvent, 'cached' | 'ok'>,
     work: (signal: AbortSignal, ev: Partial<ProcessedEvent>) => Promise<unknown>,
-  ): Promise<unknown> {
+    check: (raw: unknown) => T,
+  ): Promise<T> {
+    signal?.throwIfAborted()
     const hit = (await this.cache.get(key)) as Entry | undefined
+    signal?.throwIfAborted()
     if (hit) {
       this.emit?.({ ...base, cached: true, ok: hit.ok, ...(hit.ok ? {} : { error: hit.message }) })
-      if (hit.ok) return hit.value
+      if (hit.ok) return check(hit.value)
       if (hit.until > Date.now())
         throw new OutageError('parse', hit.message, { region: base.region, url: base.url })
     }
@@ -344,18 +373,19 @@ export class AiRuntime {
         const ev: Partial<ProcessedEvent> = {}
         try {
           await this.slot(sig)
-          let entry: Entry
+          let raw: unknown
           try {
-            entry = { ok: true, value: await work(sig, ev) }
+            raw = await work(sig, ev)
           } finally {
             this.release()
           }
-          await this.cache.set(key, entry)
+          check(raw)
+          const entry: Entry = { ok: true, value: raw }
+          if (!sig.aborted) await this.cache.set(key, entry)
           this.emit?.({ ...base, ...ev, cached: false, ok: true })
           return entry
         } catch (e) {
-          // a misread is remembered for a while; an outage of the AI API is not
-          if (e instanceof OutageError && e.code === 'parse') {
+          if (e instanceof OutageError && e.code === 'parse' && !sig.aborted) {
             const entry: Entry = {
               ok: false,
               code: 'parse',
@@ -383,7 +413,7 @@ export class AiRuntime {
     }
     const entry = await task.join(signal)
     if (!entry.ok) throw new OutageError('parse', entry.message, { region: base.region, url: base.url })
-    return entry.value
+    return check(entry.value)
   }
 
   private slot(signal: AbortSignal): Promise<void> {

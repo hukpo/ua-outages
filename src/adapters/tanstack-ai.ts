@@ -12,7 +12,7 @@ import {
   textPrompt,
 } from '../ai/prompts.js'
 import type { CallOptions, ImageInput, ImageProcessor, ProcessorResult, TextProcessor } from '../ai/types.js'
-import { base64, vendorError } from './common.js'
+import { base64, optionsTag, vendorError } from './common.js'
 
 /**
  * Text and image processors on TanStack AI (`@tanstack/ai`, an optional peer dependency): any
@@ -58,7 +58,7 @@ export interface TanstackImageProcessorOptions extends TanstackProcessorOptions 
 const VENDOR = 'TanStack AI'
 
 const idOf = (o: TanstackProcessorOptions, kind: string) =>
-  `tanstack-ai:${o.adapter.provider ?? o.adapter.name}:${o.adapter.model}${o.variant ? `:${o.variant}` : ''}:${kind}:${PROMPT_VERSION}`
+  `tanstack-ai:${o.adapter.provider ?? o.adapter.name}:${o.adapter.model}${o.variant ? `:${o.variant}` : ''}${optionsTag({ modelOptions: o.modelOptions })}:${kind}:${PROMPT_VERSION}`
 
 type Part =
   | { type: 'text'; content: string }

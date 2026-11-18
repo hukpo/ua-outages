@@ -294,3 +294,47 @@ describe('AiRuntime: what two readers must agree on', () => {
     ).toThrow(expect.objectContaining({ code: 'config' }))
   })
 })
+
+describe('AiRuntime: the cache keeps raw answers and checks them on every use', () => {
+  it('an answer cached before a stricter check is refused when used again', async () => {
+    const cache = new MemoryProcessorCache()
+    const text = fakeText(() => apply, 'p')
+    const ai = new AiRuntime({ textProcessor: text, processorCache: cache })
+    await ai.analyzePost('poltava', input('x'))
+    // what a store from an older SDK holds: the raw answer, now with a time that doesn't exist
+    for (const [k, v] of [
+      ...(cache as unknown as { map: Map<string, { value: { value: { events: unknown[] } } }> }).map,
+    ])
+      cache.set(k, {
+        ok: true,
+        value: { ...v.value.value, events: [{ ...(v.value.value.events[0] as object), at: '25:00' }] },
+      })
+    await expect(ai.analyzePost('poltava', input('x'))).rejects.toMatchObject({ code: 'parse' })
+  })
+
+  it('a call its only caller left writes nothing, failure or not', async () => {
+    let finish!: (v: unknown) => void
+    const text = fakeText(() => new Promise<PostEvent[]>((r) => (finish = r as never)), 'p')
+    const cache = new MemoryProcessorCache()
+    const ai = new AiRuntime({ textProcessor: text, processorCache: cache })
+    const ctrl = new AbortController()
+    const call = ai.analyzePost('poltava', input('x'), ctrl.signal)
+    await new Promise((r) => setTimeout(r, 5))
+    ctrl.abort(new Error('gone'))
+    await expect(call).rejects.toThrow('gone')
+    finish([ev({ kind: 'gav', action: 'start', regions: ['poltava'], at: '25:00' })])
+    await new Promise((r) => setTimeout(r, 5))
+    expect((cache as unknown as { map: Map<string, unknown> }).map.size).toBe(0)
+  })
+
+  it('a picture reposted another day is read again, against that day', async () => {
+    const region = postRegion('volyn')
+    const full = STANDARD_GROUPS.map((queue) => ({ queue, intervals: [] }))
+    const image = fakeImage(() => ({ date: '2026-10-17', schedule: full }))
+    const ai = new AiRuntime({ imageProcessor: image })
+    const src = { url: 'u', bytes: fixtureBytes('volyn/gpv-2026-10-17-1847.png'), caption: null, region }
+    await ai.readImage('volyn', { ...src, publishedAt: '2026-10-17T18:47:00+03:00' })
+    await ai.readImage('volyn', { ...src, publishedAt: '2026-10-17T19:30:00+03:00', url: 'v' })
+    expect(image.calls).toHaveLength(2)
+  })
+})

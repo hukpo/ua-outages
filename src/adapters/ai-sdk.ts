@@ -12,7 +12,7 @@ import {
   textPrompt,
 } from '../ai/prompts.js'
 import type { CallOptions, ImageInput, ImageProcessor, ProcessorResult, TextProcessor } from '../ai/types.js'
-import { vendorError } from './common.js'
+import { optionsTag, vendorError } from './common.js'
 
 /**
  * Text and image processors on the Vercel AI SDK (`ai`, an optional peer dependency): any model
@@ -70,7 +70,7 @@ function modelName(model: LanguageModel): string {
 }
 
 const idOf = (o: AiSdkProcessorOptions, kind: string) =>
-  `ai-sdk:${modelName(o.model)}${o.variant ? `:${o.variant}` : ''}:${kind}:${PROMPT_VERSION}`
+  `ai-sdk:${modelName(o.model)}${o.variant ? `:${o.variant}` : ''}${optionsTag({ providerOptions: o.providerOptions, maxOutputTokens: o.maxOutputTokens })}:${kind}:${PROMPT_VERSION}`
 
 async function ask(
   o: AiSdkProcessorOptions,

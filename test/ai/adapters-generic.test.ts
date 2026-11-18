@@ -167,3 +167,13 @@ describe('ua-outages/tanstack-ai', () => {
     })
   })
 })
+
+describe('processor ids carry the settings that change answers', () => {
+  it('two AI SDK processors differing only in providerOptions have different ids', () => {
+    const { m } = model('{}')
+    const a = aiSdkTextProcessor({ model: m })
+    const b = aiSdkTextProcessor({ model: m, providerOptions: { openai: { reasoningEffort: 'high' } } })
+    expect(a.id).not.toBe(b.id)
+    expect(aiSdkTextProcessor({ model: m }).id).toBe(a.id)
+  })
+})

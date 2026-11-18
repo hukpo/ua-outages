@@ -12,7 +12,7 @@ import {
   textPrompt,
 } from '../ai/prompts.js'
 import type { CallOptions, ImageInput, ImageProcessor, ProcessorResult, TextProcessor } from '../ai/types.js'
-import { base64, parseJson, vendorError } from './common.js'
+import { base64, optionsTag, parseJson, vendorError } from './common.js'
 
 /**
  * Text and image processors on the OpenAI Responses API (`openai`, an optional peer
@@ -117,7 +117,7 @@ async function ask(
 
 export function openaiTextProcessor(o: OpenAIProcessorOptions): TextProcessor {
   return {
-    id: `openai:${o.model}:${o.reasoningEffort ?? 'default'}:${PROMPT_VERSION}`,
+    id: `openai:${o.model}:${o.reasoningEffort ?? 'default'}${optionsTag({ maxOutputTokens: o.maxOutputTokens })}:${PROMPT_VERSION}`,
     analyzePost: (input, call) =>
       ask(
         o,
@@ -140,7 +140,7 @@ const imageItem = (input: ImageInput, detail: 'low' | 'high' | 'auto') =>
 
 export function openaiImageProcessor(o: OpenAIImageProcessorOptions): ImageProcessor {
   return {
-    id: `openai:${o.model}:${o.reasoningEffort ?? 'default'}:${o.detail ?? 'high'}:${PROMPT_VERSION}`,
+    id: `openai:${o.model}:${o.reasoningEffort ?? 'default'}:${o.detail ?? 'high'}${optionsTag({ maxOutputTokens: o.maxOutputTokens })}:${PROMPT_VERSION}`,
     maxLongEdge: o.maxLongEdge ?? 1000,
     minShortEdge: o.minShortEdge ?? 400,
     readImage: (input, call) =>

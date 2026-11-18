@@ -12,7 +12,7 @@ import {
   textPrompt,
 } from '../ai/prompts.js'
 import type { CallOptions, ImageInput, ImageProcessor, ProcessorResult, TextProcessor } from '../ai/types.js'
-import { base64, parseJson, vendorError } from './common.js'
+import { base64, optionsTag, parseJson, vendorError } from './common.js'
 
 /**
  * Text and image processors on the Claude API (`@anthropic-ai/sdk`, an optional peer
@@ -100,7 +100,7 @@ async function ask(
 
 export function anthropicTextProcessor(o: AnthropicProcessorOptions): TextProcessor {
   return {
-    id: `anthropic:${o.model ?? DEFAULT_MODEL}:${o.effort ?? 'default'}:${PROMPT_VERSION}`,
+    id: `anthropic:${o.model ?? DEFAULT_MODEL}:${o.effort ?? 'default'}${optionsTag({ maxTokens: o.maxTokens })}:${PROMPT_VERSION}`,
     analyzePost: (input, call) => ask(o, TEXT_SYSTEM, TEXT_SCHEMA, textPrompt(input), input.url, call),
   }
 }
@@ -113,7 +113,7 @@ const imageBlock = (input: ImageInput) =>
 
 export function anthropicImageProcessor(o: AnthropicImageProcessorOptions): ImageProcessor {
   return {
-    id: `anthropic:${o.model ?? DEFAULT_MODEL}:${o.effort ?? 'default'}:${PROMPT_VERSION}`,
+    id: `anthropic:${o.model ?? DEFAULT_MODEL}:${o.effort ?? 'default'}${optionsTag({ maxTokens: o.maxTokens })}:${PROMPT_VERSION}`,
     maxLongEdge: o.maxLongEdge,
     readImage: (input, call) =>
       ask(
