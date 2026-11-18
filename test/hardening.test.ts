@@ -6,7 +6,7 @@ import { OutageClient } from '../src/client.js'
 import { OutageError } from '../src/errors.js'
 import { Http, type FetchLike } from '../src/http.js'
 import { parseGpvDays } from '../src/providers/gpv.js'
-import { scheduleFromImages } from '../src/providers/image-schedule.js'
+import { archivePictures, readSitePictures } from '../src/providers/image-schedule.js'
 import { ivanoFrankivskProvider } from '../src/providers/ivano-frankivsk.js'
 import { kirovohradProvider } from '../src/providers/kirovohrad.js'
 import type { Provider } from '../src/providers/provider.js'
@@ -452,19 +452,23 @@ describe('cancellation edge cases', () => {
       ai: new AiRuntime({ imageProcessor: image }),
     }
     const at = new Date()
-    const pending = scheduleFromImages(
+    const pending = readSitePictures(
       ctx,
       'volyn',
-      [
-        {
-          date: '2026-11-15',
-          images: [
-            { path: '/a.png', at },
-            { path: '/b.png', at },
-          ],
-        },
-      ],
-      (p) => `https://example.ua${p}`,
+      archivePictures(
+        ctx,
+        'volyn',
+        [
+          {
+            date: '2026-11-15',
+            images: [
+              { path: '/a.png', at },
+              { path: '/b.png', at },
+            ],
+          },
+        ],
+        (p: string) => `https://example.ua${p}`,
+      ),
     )
     await tick()
     ctrl.abort()
@@ -477,11 +481,15 @@ describe('cancellation edge cases', () => {
     const { fetch, calls } = hangingFetch()
     const ctx = { http: new Http({ fetch }), now: () => new Date() }
     await expect(
-      scheduleFromImages(
+      readSitePictures(
         ctx,
         'volyn',
-        [{ date: '2026-11-15', images: [{ path: '/a.png', at: new Date() }] }],
-        (p) => p,
+        archivePictures(
+          ctx,
+          'volyn',
+          [{ date: '2026-11-15', images: [{ path: '/a.png', at: new Date() }] }],
+          (p: string) => p,
+        ),
       ),
     ).rejects.toMatchObject({ code: 'config' })
     expect(calls).toHaveLength(0)

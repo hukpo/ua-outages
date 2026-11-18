@@ -1,5 +1,3 @@
-import { toSlots } from '../ai/map.js'
-import { analyzeAll, siteInput } from '../ai/posts.js'
 import { htmlToText } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, unpublished } from '../schedule.js'
@@ -7,7 +5,6 @@ import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
 import type { MinuteSlot } from '../schedule.js'
 import { emergencyQueues } from '../emergency/queues.js'
-import { gpvEvents, statedTime } from './posts.js'
 import {
   STANDARD_GROUPS,
   hydraList,
@@ -121,8 +118,8 @@ export function accountsToBuildings(rows: readonly Account[]): PowerOnBuilding[]
  *
  * LOE's system writes the text from a template (`lvivTemplate`: five kinds of line over 526
  * schedules of its archive), read exactly here with no processor. A text that strays from it in
- * any line goes to the client's text processor when there is one, and is a `parse` error when
- * there isn't: never a guess. A slot with only a picture (before 30.10.2025) is `parse` too.
+ * any line leaves its day not known, flagged in `sources[].unread`: never a guess. A slot with
+ * only a picture (before 30.10.2025) is `parse`.
  * Exported for tests.
  */
 export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise<RegionSchedule> {
@@ -143,7 +140,7 @@ export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise
     if (!prev || time(updatedAt) >= time(prev.updatedAt)) days.set(date, { updatedAt, groups })
   }
 
-  /** Slots whose text isn't the template: for the text processor */
+  /** Slots whose text isn't the template */
   const prose: { item: MenuItem; text: string }[] = []
   for (const item of slots) {
     const text = htmlToText(item.rawHtml?.trim() || item.description?.trim() || '')
@@ -167,61 +164,21 @@ export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise
     keep(t.date, t.stated, groups)
   }
 
-  if (prose.length) {
-    if (!ctx.ai?.text)
-      throw new OutageError(
-        'parse',
-        `Lviv ${prose.map((p) => p.item.name).join(', ')}: the schedule text doesn't follow its template ` +
-          `("${prose[0]!.text.slice(0, 80)}…"); a textProcessor can read it`,
-        { region },
-      )
-    // read against today's noon: stable through the day, so each text is analysed once a day
-    const reference = toKyivIso(kyivInstant(kyivDate(now), 12 * 60))
-    const analyzed = await analyzeAll(
-      ctx,
-      region,
-      prose.map((p) =>
-        siteInput({ site: SCHEDULE_URL, title: null, text: p.text, publishedAt: reference }, region),
-      ),
+  // a text that strays from the template is not read (no guessing, no processor): its day is not
+  // known, and says why. The day is the one its first line names, else the slot's
+  const unread = new Map<string, string>()
+  for (const { item, text } of prose) {
+    const head = HEAD.exec(text.split('\n')[0]!.trim())
+    const date = head
+      ? `${head[3]}-${head[2]}-${head[1]}`
+      : item.name === 'Tomorrow'
+        ? addDays(kyivDate(now), 1)
+        : kyivDate(now)
+    unread.set(
+      date,
+      `Lviv ${item.name}: the schedule text doesn't follow its template ("${text.slice(0, 80)}…")`,
     )
-    for (const [i, { item }] of prose.entries()) {
-      const { analysis, error } = analyzed[i]!
-      if (!analysis) throw error
-      const events = gpvEvents(analysis, region)
-      if (!events.length)
-        throw new OutageError(
-          'parse',
-          `Lviv ${item.name}: the schedule text says no schedule (format changed?)`,
-          {
-            region,
-          },
-        )
-      for (const ev of events) {
-        // the prose of a slot is the day's whole list: a correction, or hours from a time on, has
-        // no day under it here to change
-        if (ev.action === 'change' || ev.at || ev.until)
-          throw new OutageError(
-            'parse',
-            `Lviv ${item.name}: the text changes part of a day, which can't be applied`,
-            {
-              region,
-            },
-          )
-        if (!ev.dateNamed)
-          throw new OutageError('parse', `Lviv ${item.name}: the text names no day`, { region })
-        const day = ev.date ?? kyivDate(now)
-        const updatedAt = statedTime(analysis, region, day, now)
-        const groups: Record<GroupId, DaySchedule> = {}
-        if (ev.action === 'cancel')
-          for (const g of STANDARD_GROUPS) groups[g] = { date: day, status: 'no-outages', intervals: [] }
-        else
-          for (const q of ev.schedule)
-            groups[q.queue] = q.intervals
-              ? makeDay(day, toSlots(q.intervals))
-              : { date: day, status: 'unknown', intervals: [] }
-        if (Object.keys(groups).length) keep(day, updatedAt, groups)
-      }
-    }
+    if (!days.has(date)) days.set(date, { updatedAt: null, groups: {} })
   }
 
   const dates = [...days.keys()].sort()
@@ -241,7 +198,23 @@ export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise
       .sort((a, b) => time(a) - time(b))
       .at(-1) ?? null
 
-  return { region, groups, schedules, updatedAt, fetchedAt: toKyivIso(now) }
+  return {
+    region,
+    groups,
+    schedules,
+    updatedAt,
+    fetchedAt: toKyivIso(now),
+    sources: [
+      {
+        id: 'api',
+        url: SCHEDULE_URL,
+        ok: true,
+        dates: dates.filter((d) => !unread.has(d)),
+        updatedAt,
+        ...(unread.size ? { unread: [...unread].map(([date, message]) => ({ date, message })) } : {}),
+      },
+    ],
+  }
 }
 
 const DATE = String.raw`(\d{2})\.(\d{2})\.(\d{4})`

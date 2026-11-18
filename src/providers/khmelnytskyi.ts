@@ -8,7 +8,7 @@ import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
 import type { City, EmergencyQueues, GroupId, GroupMatch, ProviderInfo } from '../types.js'
 import { mapLimit } from '../util.js'
-import { scheduleFromImages, type DatedImages } from './image-schedule.js'
+import { archivePictures, readSitePictures, type DatedImages } from './image-schedule.js'
 import {
   daysToSource,
   readChannelPosts,
@@ -272,13 +272,20 @@ async function readSite(ctx: ProviderContext): Promise<SourceRead> {
     }),
   ])
   const read = await announced(ctx, inputsOf(announcements(page), INFO.website, now), from)
-  for (const d of latestImages(archive, from)) {
-    if (read.days[d.date]) continue
-    // one date at a time: `updatedAt` is then the upload time of the image read for that date
-    const s = await scheduleFromImages(ctx, region, [d], (path) => `${SITE}${path}`)
-    const schedules: SourceRead['days'][string]['schedules'] = {}
-    for (const g of s.groups) schedules[g] = s.schedules[g]![0]!
-    read.days[d.date] = { schedules, publishedAt: s.updatedAt }
+  // the archive's images for the dates the page has no text for
+  const dates = latestImages(archive, from).filter((d) => !read.days[d.date])
+  if (dates.length) {
+    const opts = { groups: STANDARD_GROUPS }
+    const images = daysToSource(
+      await readSitePictures(
+        ctx,
+        region,
+        archivePictures(ctx, region, dates, (path) => `${SITE}${path}`),
+        opts,
+      ),
+      opts,
+    )
+    Object.assign(read.days, images.days)
   }
   return read
 }

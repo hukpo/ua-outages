@@ -516,14 +516,16 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     expect((await client.healthCheck({ regions: ['chernihiv'] })).regions[0]!.status).toBe('ok')
   })
 
-  it('refuses a site poster whose date is not current, or a file that is no poster', async () => {
+  it('never puts a site poster whose date is not current on a day; a file that is no poster fails', async () => {
     const tgDown = { match: 't.me/s/', body: 'Bad gateway', status: 502 }
     const old = await read('2026-11-06T12:00:00+02:00', [
       { match: 'schedule_groups.jpg', body: fixtureBytes('chernihiv/posters/2026-10-06-tg.jpg') },
       tgDown,
-    ]).catch((e) => e)
-    // the reading of 06.10 is too far from the file to be validated at all, or not current
-    expect(old).toMatchObject({ code: 'parse' })
+    ])
+    // the reading of 06.10 is too far from the file to be validated at all, or not current:
+    // today is not known, and the site says why (it is read again in 10 min)
+    expect(day(old, '1.1', '2026-11-06')).toBe('unknown')
+    expect(source(old, 'site').unread).toEqual([{ date: '2026-11-06', message: expect.any(String) }])
     const other = await read('2026-11-06T12:00:00+02:00', [
       { match: 'schedule_groups.jpg', body: fixtureBytes('image/sample-444.jpg') },
       tgDown,

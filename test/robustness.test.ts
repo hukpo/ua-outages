@@ -13,7 +13,8 @@ import { decodeJpeg } from '../src/image/jpeg.js'
 import { decodePng, MAX_IMAGE_PIXELS, type RgbaImage } from '../src/image/png.js'
 import { MAX_PAGES, openPdf } from '../src/pdf/text.js'
 import { gpvCellsToSlots, parseGpvDays } from '../src/providers/gpv.js'
-import { readDatedImages } from '../src/providers/image-schedule.js'
+import { archivePictures, readSitePictures } from '../src/providers/image-schedule.js'
+import { STANDARD_GROUPS } from '../src/schedule.js'
 import { mykolaivProvider, parseActive } from '../src/providers/mykolaiv.js'
 import { parseGpvFragment, poltavaProvider } from '../src/providers/poltava.js'
 import { powerOnAddressSearch, type PowerOnBuilding } from '../src/providers/poweron.js'
@@ -306,47 +307,53 @@ describe('shared image reader: the newest picture of a date cannot be read', () 
       now: () => at,
       ai: new AiRuntime({ imageProcessor: image }),
     }
-    return { calls, image, days: readDatedImages(ctx, 'volyn', dates, (p) => `https://example.ua${p}`) }
+    const pictures = archivePictures(ctx, 'volyn', dates, (p) => `https://example.ua${p}`)
+    return { calls, image, days: readSitePictures(ctx, 'volyn', pictures, { groups: STANDARD_GROUPS }) }
   }
   const isNew = (input: ImageInput) => input.url.endsWith('/new.png')
 
+  const off = (start: number, end: number) => [{ start: start * 60, end: end * 60, kind: 'off' }]
+
   it('reads the newest when it can (the control)', async () => {
     const { days, calls } = read(good)
-    const day = (await days)['2026-11-15']!
-    expect(day.publishedAt).toBe('2026-11-15T10:00:00+02:00')
-    expect(day.schedules['1.1']!.intervals).toHaveLength(1)
+    const day = (await days).get('2026-11-15')!
+    expect(day.at).toBe(Date.parse('2026-11-15T10:00:00+02:00'))
+    expect(day.groups['1.1']).toEqual(off(8, 10))
+    expect(day.unread).toBeUndefined()
     expect(calls).toHaveLength(1)
   })
 
-  it('is a parse error when the newest does not decode, never the older picture', async () => {
+  it('the newest does not decode: the older picture stands, flagged (read again in 10 min)', async () => {
     const { days, calls, image } = read(good.subarray(0, 200))
-    const err = await days.catch((e) => e)
-    expect(err).toBeInstanceOf(OutageError)
-    expect(err).toMatchObject({ code: 'parse', details: { url: 'https://example.ua/new.png' } })
-    expect(calls.map((c) => c.url)).toEqual(['https://example.ua/new.png'])
-    expect(image.calls).toHaveLength(0)
+    const day = (await days).get('2026-11-15')!
+    expect(day.unread).toMatchObject({ code: 'parse', details: { url: 'https://example.ua/new.png' } })
+    expect(day.at).toBe(Date.parse('2026-11-15T09:00:00+02:00'))
+    expect(calls.map((c) => c.url)).toEqual(['https://example.ua/new.png', 'https://example.ua/old.png'])
+    expect(image.calls).toHaveLength(1)
   })
 
-  it('is a parse error when the reading of the newest fails validation', async () => {
+  it('the reading of the newest fails validation: the older stands, flagged', async () => {
     // an hour that doesn't exist, and a schedule without every queue
     for (const bad of [
       [{ queue: '1.1', intervals: intervalsOf('23:00-25:00') }, ...schedule.slice(1)],
       schedule.slice(1),
     ]) {
-      const { days, calls } = read(good, (input) =>
-        isNew(input) ? { date: '2026-11-15', schedule: bad } : { schedule },
+      const { days } = read(good, (input) =>
+        isNew(input) ? { date: '2026-11-15', schedule: bad } : { date: '2026-11-15', schedule },
       )
-      await expect(days).rejects.toMatchObject({
-        code: 'parse',
-        details: { url: 'https://example.ua/new.png' },
-      })
-      expect(calls).toHaveLength(1)
+      const day = (await days).get('2026-11-15')!
+      expect(day.unread).toMatchObject({ code: 'parse', details: { url: 'https://example.ua/new.png' } })
+      expect(day.groups['1.1']).toEqual(off(8, 10))
     }
   })
 
-  it('is a parse error when the newest names another date', async () => {
-    const { days } = read(good, (input) => (isNew(input) ? { date: '2026-11-16', schedule } : { schedule }))
-    await expect(days).rejects.toThrow(/listed for 2026-11-15 says 2026-11-16/)
+  it('the newest names another date: flagged, never shown as this one', async () => {
+    const { days } = read(good, (input) =>
+      isNew(input) ? { date: '2026-11-16', schedule } : { date: '2026-11-15', schedule },
+    )
+    const day = (await days).get('2026-11-15')!
+    expect(day.unread?.message).toMatch(/listed for 2026-11-15 says 2026-11-16/)
+    expect((await days).get('2026-11-16')).toBeUndefined()
   })
 
   it('still skips a picture that is not a schedule (a text announcement) for the older one', async () => {
@@ -355,7 +362,9 @@ describe('shared image reader: the newest picture of a date cannot be read', () 
       fixtureBytes('khmelnytskyi/announcement-2026-10-17-1658.png'),
       (input) => (isNew(input) ? undefined : { date: '2026-11-15', schedule }),
     )
-    expect((await days)['2026-11-15']!.publishedAt).toBe('2026-11-15T09:00:00+02:00')
+    const day = (await days).get('2026-11-15')!
+    expect(day.at).toBe(Date.parse('2026-11-15T09:00:00+02:00'))
+    expect(day.unread).toBeUndefined()
     expect(calls).toHaveLength(2)
     expect(image.calls.map((c) => c.url)).toEqual([
       'https://example.ua/new.png',
@@ -363,10 +372,10 @@ describe('shared image reader: the newest picture of a date cannot be read', () 
     ])
   })
 
-  it('is a parse error when no picture of the date is a schedule', async () => {
-    await expect(read(good, () => undefined).days).rejects.toThrow(
-      /none of the 2 picture\(s\) for 2026-11-15/,
-    )
+  it('no picture of the date is a schedule: the date is not known, flagged', async () => {
+    const day = (await read(good, () => undefined).days).get('2026-11-15')!
+    expect(day.unread?.message).toMatch(/none of the 2 picture\(s\) for 2026-11-15/)
+    expect(Object.keys(day.groups)).toHaveLength(0)
   })
 })
 

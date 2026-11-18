@@ -1,4 +1,3 @@
-import { postRegion } from '../ai/regions.js'
 import { SECTIGO_DV_R36 } from '../certs.js'
 import { readChannelWindow } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
@@ -6,10 +5,10 @@ import { STANDARD_GROUPS } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo } from '../types.js'
 import { chernihivAddresses } from './chernihiv-addresses.js'
-import { hourlySchedule, readingToDay } from './image-schedule.js'
+import { readSitePictures } from './image-schedule.js'
 import { readPicturePosts, type PostedPicture } from './picture-posts.js'
 import { daysToSource } from './posts.js'
-import { aiOf, type Provider, type ProviderContext } from './provider.js'
+import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 
 /**
@@ -79,34 +78,34 @@ async function readSite(ctx: ProviderContext, telegram: () => Promise<ChannelRea
   const updatedAt = Number.isNaN(modified) ? null : toKyivIso(new Date(modified))
   const now = ctx.now()
   const today = kyivDate(now)
-  const reading = await aiOf(ctx).readImage(
+  const uploaded = updatedAt ? kyivDate(new Date(updatedAt)) : today
+  const opts = { groups: STANDARD_GROUPS }
+  // read like every picture (`readSitePictures`): one the header of which can't be trusted is
+  // flagged unread, never put on a day
+  const read = await readSitePictures(
+    ctx,
     region,
+    [{ url: IMAGE, at: updatedAt, date: null, bytes: async () => bytes }],
     {
-      url: IMAGE,
-      bytes,
-      caption: null,
-      publishedAt: updatedAt ?? toKyivIso(now),
-      region: postRegion(region),
+      ...opts,
+      check: (date) =>
+        // a misread date would put the schedule on the wrong day; posters are for yesterday … tomorrow
+        date < addDays(today, -2) || date > addDays(today, 2)
+          ? `no current date in the header (read ${date})`
+          : // the file is uploaded on the morning of its day, at the earliest the evening before
+            date > addDays(uploaded, 1)
+            ? `the header reads ${date}, the file is of ${updatedAt ?? today}`
+            : null,
     },
-    ctx.signal,
   )
-  const date = reading.date
-  // a misread date would put the schedule on the wrong day; posters are for yesterday … tomorrow
-  if (!hourlySchedule(reading) || !date || date < addDays(today, -2) || date > addDays(today, 2))
-    throw parseError(
-      hourlySchedule(reading)
-        ? `no current date in the header (read ${date ?? 'nothing'})`
-        : 'the file is not a schedule poster',
-      IMAGE,
-    )
-  const schedules = readingToDay(reading, date)
+  if (!read.size) throw parseError('the file is not a schedule poster', IMAGE)
+  const source = daysToSource(read, opts)
   const groups = [...STANDARD_GROUPS]
   // until the morning upload the file is still yesterday's poster: nothing for today here
-  if (date < today) return { days: {}, groups }
-  // the file is uploaded on the morning of its day, at the earliest the evening before
-  const uploaded = updatedAt ? kyivDate(new Date(updatedAt)) : today
-  if (date > addDays(uploaded, 1))
-    throw parseError(`the header reads ${date}, the file is of ${updatedAt ?? today}`, IMAGE)
+  for (const date of Object.keys(source.days)) if (date < today) delete source.days[date]
+  const [date, day] = Object.entries(source.days)[0] ?? []
+  if (!date || !day) return { days: {}, groups }
+  const schedules = day.schedules
   // the channel being down is its own failure; the file then has only its upload time
   const known = await telegram().catch(() => {
     ctx.signal?.throwIfAborted()
@@ -114,8 +113,10 @@ async function readSite(ctx: ProviderContext, telegram: () => Promise<ChannelRea
   })
   // the same poster the channel posted (the newest such): published then, not at the upload,
   // so a change the channel made in between isn't overridden by the older picture
-  const poster = known?.posters[date]?.filter((p) => sameTimes(p.schedules, schedules)).at(-1)
-  return { days: { [date]: { schedules, publishedAt: poster ? poster.publishedAt : updatedAt } }, groups }
+  const poster = day.unread
+    ? undefined
+    : known?.posters[date]?.filter((p) => sameTimes(p.schedules, schedules)).at(-1)
+  return { days: { [date]: { ...day, publishedAt: poster ? poster.publishedAt : day.publishedAt } }, groups }
 }
 
 /** Two readings of a day list the same outages for every group */

@@ -160,7 +160,7 @@ describe('Lvivoblenergo', () => {
     expect(text!.calls).toHaveLength(0)
   })
 
-  it('gives a text that strays from the template to the text processor, or fails without one', async () => {
+  it('a text that strays from the template is not read: its day is not known, and says why (no processor)', async () => {
     const html = archived(1095).rawHtml.replace(
       'Група 1.1. Електроенергії немає з 17:00 до 19:30.',
       'Група 1.1. Можливі відключення з 17:00 до 19:30.',
@@ -169,17 +169,12 @@ describe('Lvivoblenergo', () => {
     const now = new Date('2026-06-30T20:00:00+03:00')
     const { client: c, text } = client(menuWithToday({ rawHtml: html }), { now })
     const s = await c.getSchedules('lviv')
-    // the plain text, read against today's noon
-    expect(text!.calls).toHaveLength(1)
-    expect(text!.calls[0]!.text).not.toMatch(/<p>/)
-    expect(text!.calls[0]!.publishedAt).toBe('2026-06-30T12:00:00+03:00')
-    expect(s.schedules['1.1']![0]!.date).toBe('2026-07-01')
-    await expect(
-      client(menuWithToday({ rawHtml: html }), { now, textProcessor: null }).client.getSchedules('lviv'),
-    ).rejects.toMatchObject({
-      code: 'parse',
-      message: expect.stringContaining("doesn't follow its template"),
-    })
+    expect(text?.calls ?? []).toHaveLength(0)
+    const day = s.schedules['1.1']!.find((d) => d.date === '2026-07-01')!
+    expect(day.status).toBe('unknown')
+    expect(s.sources![0]!.unread).toEqual([
+      { date: '2026-07-01', message: expect.stringContaining("doesn't follow its template") },
+    ])
   })
 
   it('takes freshness from "Інформація станом на"', async () => {
@@ -214,12 +209,11 @@ describe('Lvivoblenergo', () => {
     expect(s.updatedAt).toBe('2024-11-20T18:32:00+02:00')
   })
 
-  it('fails loudly when a schedule text has no schedule in it, or the response changed shape', async () => {
-    await expect(
-      client(menuWithToday({ rawHtml: '<p>Графік на 17.10.2026: див. зображення</p>' })).client.getSchedules(
-        'lviv',
-      ),
-    ).rejects.toMatchObject({ code: 'parse' })
+  it('flags a schedule text that is not the template; fails loudly when the response changed shape', async () => {
+    const s = await client(
+      menuWithToday({ rawHtml: '<p>Графік на 17.10.2026: див. зображення</p>' }),
+    ).client.getSchedules('lviv')
+    expect(s.sources![0]!.unread).toHaveLength(1)
     await expect(
       client(JSON.stringify({ 'hydra:member': [{ id: 9 }] })).client.getSchedules('lviv'),
     ).rejects.toMatchObject({ code: 'parse' })
@@ -353,27 +347,5 @@ describe('lvivTemplate: only the template', () => {
     expect(lvivTemplate(`${notice} Оновлення: з 15:00 ГПВ знову діють.`)).toBeNull()
     expect(lvivTemplate(notice.replace('18.11.2026', '31.02.2026'))).toBeNull()
     expect(lvivTemplate(`${notice}\nІнформація станом на 18:56 99.99.2026`)).toBeNull()
-  })
-})
-
-describe('Lviv prose off the template', () => {
-  it('a text that changes part of a day, or names no day, is parse: there is no day under it here', async () => {
-    const prose = '<p>Оновлено з 19:00: Група 1.1. Без світла з 19:00 до 23:00.</p>'
-    const answer = (e: Partial<PostEvent>) =>
-      fakeText(() => [
-        ev({
-          kind: 'gpv',
-          action: 'start',
-          regions: ['lviv'],
-          date: '2026-10-17',
-          schedule: [{ queue: '1.1', intervals: [{ from: '19:00', to: '23:00', kind: 'off' }] }],
-          ...e,
-        }),
-      ])
-    for (const e of [{ at: '19:00' }, { action: 'change' as const }, { date: null, dateNamed: false }])
-      await expect(
-        client(menuWithToday({ rawHtml: prose }), { textProcessor: answer(e) }).client.getSchedules('lviv'),
-        JSON.stringify(e),
-      ).rejects.toMatchObject({ code: 'parse' })
   })
 })

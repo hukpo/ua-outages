@@ -1,10 +1,9 @@
-import { postRegion } from '../ai/regions.js'
 import { OutageError } from '../errors.js'
 import { emergencyQueues, mergeEmergency } from '../emergency/queues.js'
 import { readChannelWindow } from '../emergency/telegram.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, EmergencyQueues, GroupId, ProviderInfo } from '../types.js'
-import { hourlySchedule, readingToDay } from './image-schedule.js'
+import { readSitePictures } from './image-schedule.js'
 import { readPicturePosts, type PicturePostsRead } from './picture-posts.js'
 import { daysToSource } from './posts.js'
 import {
@@ -143,7 +142,17 @@ export function zakarpattiaProvider(): Provider {
                     }`,
                     { region, url },
                   )
-                days[date] = { schedules: await readApiPicture(ctx, url, date), publishedAt: null }
+                const read = daysToSource(
+                  await readSitePictures(
+                    ctx,
+                    region,
+                    [{ url, at: null, date, bytes: () => ctx.http.bytes(url, { region }) }],
+                    { groups: STANDARD_GROUPS },
+                  ),
+                  { groups: STANDARD_GROUPS },
+                )
+                // a version the API alone has has no time: the channel's dated reading wins the day
+                if (read.days[date]) days[date] = { ...read.days[date], publishedAt: null }
               }
               return { days }
             },
@@ -176,28 +185,6 @@ export function zakarpattiaProvider(): Provider {
 }
 
 const CHANNEL = 'zakarpatenergyofficial'
-
-/** The API's picture for `date` → every group's day; a picture of another day is a `parse` error */
-async function readApiPicture(
-  ctx: ProviderContext,
-  url: string,
-  date: string,
-): Promise<Record<GroupId, DaySchedule>> {
-  const region = INFO.id
-  const bytes = await ctx.http.bytes(url, { region })
-  const reading = await aiOf(ctx).readImage(
-    region,
-    { url, bytes, caption: null, publishedAt: toKyivIso(kyivInstant(date, 0)), region: postRegion(region) },
-    ctx.signal,
-  )
-  if (!hourlySchedule(reading) || (reading.date && reading.date !== date))
-    throw new OutageError(
-      'parse',
-      `Zakarpattia: the API's picture for ${date} ${hourlySchedule(reading) ? `reads ${reading.date}` : 'is not an hourly schedule'}`,
-      { region, url },
-    )
-  return readingToDay(reading, date)
-}
 
 /**
  * Rows "houses of this street in group X" → one entry per house with all its groups (a house

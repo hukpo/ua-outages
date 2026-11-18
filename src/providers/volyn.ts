@@ -6,7 +6,8 @@ import { houseKey, normalizeSettlement, normalizeStreet, normalizeText } from '.
 
 export { houseKey }
 import type { AddressQuery, City, GroupId, GroupMatch, House, ProviderInfo, Street } from '../types.js'
-import { readDatedImages, type DatedImages } from './image-schedule.js'
+import { archivePictures, readSitePictures, type DatedImages } from './image-schedule.js'
+import { daysToSource } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources } from './sources.js'
 
@@ -93,9 +94,14 @@ export function volynProvider(): Provider {
               // a picture for a past date says nothing about today
               const today = kyivDate(ctx.now())
               const dates = latestGraphs(archive, today).filter((d) => d.date <= addDays(today, 2))
-              return {
-                days: await readDatedImages(ctx, region, dates, (path) => `${IMAGE_API}${path}`),
-              }
+              const opts = { groups: STANDARD_GROUPS }
+              const days = await readSitePictures(
+                ctx,
+                region,
+                archivePictures(ctx, region, dates, (path) => `${IMAGE_API}${path}`),
+                opts,
+              )
+              return daysToSource(days, opts)
             },
           },
         ],
