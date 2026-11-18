@@ -234,9 +234,15 @@ describe('validateImageReading', () => {
     expect(r.schedule.map((q) => q.queue)).toEqual(STANDARD_GROUPS.slice(0, 6))
   })
 
-  it('reduces a picture that is not a schedule to just that', () => {
-    expect(
+  it("a picture that is not a schedule is just that; with a schedule's kind or rows it is a misread", () => {
+    expect(() =>
       validateImageReading({ isSchedule: false, kind: 'gpv', date: 'nonsense', schedule: full }, input),
+    ).toThrow(expect.objectContaining({ code: 'parse' }))
+    expect(() => validateImageReading({ isSchedule: false, kind: null, schedule: full }, input)).toThrow(
+      expect.objectContaining({ code: 'parse' }),
+    )
+    expect(
+      validateImageReading({ isSchedule: false, kind: null, date: 'nonsense', schedule: [] }, input),
     ).toEqual({
       isSchedule: false,
       kind: null,

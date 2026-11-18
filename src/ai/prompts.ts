@@ -5,7 +5,7 @@ import type { ImageInput, PostInput } from './types.js'
  * anyone writing a processor for another vendor can too. Bump `PROMPT_VERSION` with any change
  * here: it is part of the processor id, so cached answers made with the old prompt are not used.
  */
-export const PROMPT_VERSION = 'p17'
+export const PROMPT_VERSION = 'p18'
 
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] })
 const CLOCK = { type: 'string', description: 'HH:MM, 24-hour Kyiv time' }
@@ -162,7 +162,7 @@ export const IMAGE_SYSTEM = `You read pictures of Ukrainian power grid operators
 - schedule: one line for EVERY queue of the region, with the names given: the queue, then each span without power: "1.1 08:30-13:00 20:00-24:00". A possible outage (lighter colour, own legend entry) starts with "?": "2.2 ?16:00-18:00". No outages: "3.1 -". Merge adjacent cells of a kind; half-hour boundaries count; the day ends at "24:00".
 - A coloured grid without a legend: filled cell = no power, white = power, even when most are filled. A legend overrides.
 - A day split into two tables (00–12, 12–24): read both; a span to 12:00 in the first and on from 12:00 in the second is one.
-- Read every digit; if part is unreadable, give your best reading of the rest; never skip a queue.`
+- Read every digit. Never guess: a queue whose row you can't read for certain (blurred, covered, cut off, a colour you can't tell) is given as its name alone, "1.1", with no hours and no "-"; never skip a queue.`
 
 /** The user turn for a post: its input as JSON */
 export function textPrompt(input: PostInput): string {
@@ -178,7 +178,7 @@ export function imagePrompt(input: ImageInput): string {
     album: input.of > 1 ? `picture ${input.index + 1} of ${input.of}` : null,
     caption: input.caption,
   }
-  return `Picture from ${input.url}\n${JSON.stringify(meta)}`
+  return `Picture\n${JSON.stringify(meta)}`
 }
 
 export const IMAGE_CHECK_SYSTEM =

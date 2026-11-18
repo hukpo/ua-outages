@@ -309,7 +309,35 @@ describe('AiRuntime: the cache keeps raw answers and checks them on every use', 
         ok: true,
         value: { ...v.value.value, events: [{ ...(v.value.value.events[0] as object), at: '25:00' }] },
       })
-    await expect(ai.analyzePost('poltava', input('x'))).rejects.toMatchObject({ code: 'parse' })
+    const events: ProcessedEvent[] = []
+    const watched = new AiRuntime({
+      textProcessor: text,
+      processorCache: cache,
+      onProcessed: (e) => events.push(e),
+    })
+    await expect(watched.analyzePost('poltava', input('x'))).rejects.toMatchObject({ code: 'parse' })
+    // reported as the failure it is, and remembered as a misread: asked again after a while
+    expect(events).toMatchObject([{ cached: true, ok: false }])
+    const entry = [
+      ...(cache as unknown as { map: Map<string, { value: { ok: boolean; until: number } }> }).map.values(),
+    ][0]!
+    expect(entry.value).toMatchObject({ ok: false })
+    expect(entry.value.until).toBeGreaterThan(Date.now())
+    expect(text.calls).toHaveLength(1)
+  })
+
+  it('a cache store that fails is no cache: the answer still comes back', async () => {
+    const text = fakeText(() => apply, 'p')
+    const broken = {
+      get: async () => {
+        throw new Error('redis down')
+      },
+      set: async () => {
+        throw new Error('redis down')
+      },
+    }
+    const ai = new AiRuntime({ textProcessor: text, processorCache: broken })
+    expect((await ai.analyzePost('poltava', input('x'))).events).toHaveLength(1)
   })
 
   it('a call its only caller left writes nothing, failure or not', async () => {

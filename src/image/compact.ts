@@ -48,11 +48,15 @@ export function compactImage(bytes: Uint8Array, opts: CompactOptions): CompactIm
     img = jpeg ? decodeJpeg(bytes) : decodePng(bytes)
   } catch {
     // a picture the decoders don't read: as it is, when its size can be told
-    const size = jpeg ? jpegSize(bytes) : null
+    // (a progressive JPEG, a 4-bit or interlaced PNG)
+    const size = jpeg ? jpegSize(bytes) : pngSize(bytes)
     if (!size) throw new Error('the picture could not be decoded')
-    return asIs(bytes, 'image/jpeg', size)
+    return asIs(bytes, jpeg ? 'image/jpeg' : 'image/png', size)
   }
   const original = { width: img.width, height: img.height, bytes: bytes.length }
+  // drawn on white first: averaging a transparent black pixel with a white one must stay white,
+  // not turn into a grey a grid would read as an outage
+  img = onWhite(img)
   const trimmed = opts.trim === false ? img : trimMargins(img)
   // a thin picture (a wide grid) isn't scaled down to the long edge only to be blown up again:
   // it keeps its own pixels up to 2400 px, and is blown up from them when small
@@ -88,6 +92,43 @@ function asIs(
     original: { width: size.width, height: size.height, bytes: bytes.length },
     compacted: false,
   }
+}
+
+/** The picture as drawn on white, opaque; the same object when it is opaque already */
+function onWhite(img: RgbaImage): RgbaImage {
+  const d = img.data
+  let opaque = true
+  for (let p = 3; p < d.length; p += 4)
+    if (d[p] !== 255) {
+      opaque = false
+      break
+    }
+  if (opaque) return img
+  const out = new Uint8Array(d.length)
+  for (let p = 0; p < d.length; p += 4) {
+    const a = d[p + 3]!
+    for (let c = 0; c < 3; c++) out[p + c] = Math.round((d[p + c]! * a + 255 * (255 - a)) / 255)
+    out[p + 3] = 255
+  }
+  return { width: img.width, height: img.height, data: out }
+}
+
+/**
+ * Width and height from a PNG's IHDR, without decoding it: only for a whole file (it ends with
+ * IEND) in a form the decoder doesn't read (bit depth other than 8, interlaced). A broken one is
+ * not sent
+ */
+export function pngSize(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 45 || String.fromCharCode(...bytes.subarray(12, 16)) !== 'IHDR') return null
+  if (String.fromCharCode(...bytes.subarray(bytes.length - 8, bytes.length - 4)) !== 'IEND') return null
+  const depth = bytes[24]!
+  const interlaced = bytes[28] === 1
+  if (depth === 8 && !interlaced) return null
+  const u32 = (i: number) =>
+    ((bytes[i]! << 24) | (bytes[i + 1]! << 16) | (bytes[i + 2]! << 8) | bytes[i + 3]!) >>> 0
+  const width = u32(16)
+  const height = u32(20)
+  return width && height && width * height <= MAX_IMAGE_PIXELS ? { width, height } : null
 }
 
 /** Width and height from a JPEG's frame header, without decoding it */

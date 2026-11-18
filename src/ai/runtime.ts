@@ -256,6 +256,7 @@ export class AiRuntime {
       src.bytes,
       src.caption ?? '',
       src.region.id,
+      src.region.queues.join(),
       src.publishedAt,
       `${src.index ?? 0}/${src.of ?? 1}`,
     )
@@ -281,7 +282,14 @@ export class AiRuntime {
     const p = this.requireImage(region)
     const check = p.isSchedule?.bind(p)
     if (!check) return true
-    const key = sha('image-check', p.id, src.bytes, src.caption ?? '', src.region.id)
+    const key = sha(
+      'image-check',
+      p.id,
+      src.bytes,
+      src.caption ?? '',
+      src.region.id,
+      `${src.index ?? 0}/${src.of ?? 1}`,
+    )
     return this.run(
       key,
       signal,
@@ -353,6 +361,15 @@ export class AiRuntime {
    * is remembered for a while; an outage of the AI API is not; a call whose callers all left
    * writes nothing (an abandoned call must not overwrite a newer answer).
    */
+  /** A cache write that fails loses the entry, not the answer it was paid for */
+  private async setQuietly(key: string, entry: Entry, ttlMs?: number): Promise<void> {
+    try {
+      await this.cache.set(key, entry, ttlMs)
+    } catch {
+      // the next poll asks again
+    }
+  }
+
   private async run<T>(
     key: string,
     signal: AbortSignal | undefined,
@@ -361,13 +378,34 @@ export class AiRuntime {
     check: (raw: unknown) => T,
   ): Promise<T> {
     signal?.throwIfAborted()
-    const hit = (await this.cache.get(key)) as Entry | undefined
+    // a cache that fails (a store down) is no cache, not a failed read
+    let hit: Entry | undefined
+    try {
+      hit = (await this.cache.get(key)) as Entry | undefined
+    } catch {
+      hit = undefined
+    }
     signal?.throwIfAborted()
-    if (hit) {
-      this.emit?.({ ...base, cached: true, ok: hit.ok, ...(hit.ok ? {} : { error: hit.message }) })
-      if (hit.ok) return check(hit.value)
-      if (hit.until > Date.now())
-        throw new OutageError('parse', hit.message, { region: base.region, url: base.url })
+    if (hit?.ok) {
+      try {
+        const value = check(hit.value)
+        this.emit?.({ ...base, cached: true, ok: true })
+        return value
+      } catch (e) {
+        // accepted once, refused by the validator now: remembered as a misread, asked again later
+        if (!(e instanceof OutageError) || e.code !== 'parse') throw e
+        await this.setQuietly(
+          key,
+          { ok: false, code: 'parse', message: e.message, until: Date.now() + FAILED_TTL_MS },
+          FAILED_TTL_MS,
+        )
+        this.emit?.({ ...base, cached: true, ok: false, error: e.message })
+        throw e
+      }
+    }
+    if (hit && hit.until > Date.now()) {
+      this.emit?.({ ...base, cached: true, ok: false, error: hit.message })
+      throw new OutageError('parse', hit.message, { region: base.region, url: base.url })
     }
     let task = this.inflight.get(key)
     if (!task || task.aborted) {
@@ -383,7 +421,7 @@ export class AiRuntime {
           }
           check(raw)
           const entry: Entry = { ok: true, value: raw }
-          if (!sig.aborted) await this.cache.set(key, entry)
+          if (!sig.aborted) await this.setQuietly(key, entry)
           this.emit?.({ ...base, ...ev, cached: false, ok: true })
           return entry
         } catch (e) {
@@ -394,7 +432,7 @@ export class AiRuntime {
               message: e.message,
               until: Date.now() + FAILED_TTL_MS,
             }
-            await this.cache.set(key, entry, FAILED_TTL_MS)
+            await this.setQuietly(key, entry, FAILED_TTL_MS)
           }
           if (!sig.aborted)
             this.emit?.({

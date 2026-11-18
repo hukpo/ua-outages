@@ -290,8 +290,13 @@ export function validatePostAnalysis(raw: unknown, input: PostInput): PostAnalys
 export function validateImageReading(raw: unknown, input: ImageInput): ImageReading {
   return guard(input.url, input.region.id, () => {
     const o = obj(raw, 'answer')
-    if (!bool(o.isSchedule, 'isSchedule'))
+    if (!bool(o.isSchedule, 'isSchedule')) {
+      // "not a schedule" with a schedule's kind or rows: which one is meant can't be told (taken as
+      // "not one", a replacement poster would leave the old one standing)
+      if ((o.kind ?? null) !== null || (Array.isArray(o.schedule) && o.schedule.length))
+        fail('not a schedule, with a schedule kind or rows')
       return { isSchedule: false, kind: null, date: null, statedAt: null, schedule: [] }
+    }
     const kind = o.kind ?? null
     if (kind !== null && kind !== 'gpv' && kind !== 'gav' && kind !== 'sgav') fail(`kind "${String(kind)}"`)
     const postDay = kyivDate(new Date(input.publishedAt))

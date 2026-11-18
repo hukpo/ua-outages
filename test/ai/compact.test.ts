@@ -131,6 +131,34 @@ describe('compactImage: review fixes', () => {
     })
   })
 
+  it('transparency is drawn on white before scaling: transparent black next to white stays white', () => {
+    const data = new Uint8Array(4 * 2 * 4)
+    for (let x = 0; x < 4; x++)
+      for (let y = 0; y < 2; y++) data.set(x % 2 ? [0, 0, 0, 0] : [255, 255, 255, 255], (y * 4 + x) * 4)
+    const out = compactImage(encodePng({ width: 4, height: 2, data }), { maxLongEdge: 2, trim: false })
+    const img = decodePng(out.bytes)
+    expect(img.width).toBe(2)
+    for (let p = 0; p < img.data.length; p += 4)
+      expect(Math.min(...img.data.subarray(p, p + 3))).toBeGreaterThan(250)
+  })
+
+  it('a PNG the decoder does not read (4-bit palette) goes as it is, its size from the header', () => {
+    const png = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0x03, 0x20,
+      0, 0, 0x01, 0x2c, 4, 3, 0, 0, 0, 0, 0, 0, 0,
+      // IEND
+      0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+    ])
+    expect(compactImage(png, { maxLongEdge: 1000 })).toMatchObject({
+      mediaType: 'image/png',
+      width: 800,
+      height: 300,
+      compacted: false,
+    })
+    // cut off before its end: not sent
+    expect(() => compactImage(png.subarray(0, 33), { maxLongEdge: 1000 })).toThrow(/decoded/)
+  })
+
   it('trims by what is drawn: an opaque block on transparent black is kept whole', () => {
     const img = { width: 400, height: 400, data: new Uint8Array(400 * 400 * 4) }
     for (let y = 30; y < 370; y++)
