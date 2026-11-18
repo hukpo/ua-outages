@@ -259,16 +259,19 @@ describe('@cek_info lists', () => {
     expect(hours(rest.groups['5.1'])).toBe('06:00-09:30 13:00-20:00 23:30-24:00')
   })
 
-  it('refuses a recent post it cannot read, and skips an old one', async () => {
+  it('flags the day of a recent post it cannot read (read again on the next poll), and skips an old one', async () => {
     const text =
       'Повідомляємо, що … 17 ЛИСТОПАДА з 00:00 до 24:00 застосовуватимуться відключення наступних черг:'
     // the answer fails validation: a time that doesn't exist
     const misread = fakeText(() => [
       gpv({ date: '2026-11-17', schedule: [{ queue: '1.1', intervals: intervalsOf('04:00-25:00') }] }),
     ])
-    await expect(
-      days(page([{ id: 1, at: '2026-11-16T22:18:35+00:00', text }]), '2026-11-17T00:28:00+02:00', misread),
-    ).rejects.toMatchObject({ code: 'parse' })
+    const recent = await days(
+      page([{ id: 1, at: '2026-11-16T22:18:35+00:00', text }]),
+      '2026-11-17T00:28:00+02:00',
+      misread,
+    )
+    expect(recent.get('2026-11-17')!.unread).toMatch(/doesn't exist/)
     // posted before yesterday: skipped
     expect(
       (
@@ -423,7 +426,7 @@ describe('dnipro-cek: YASNO and @cek_info merged', () => {
     expect(source(s, 'api')).toMatchObject({ ok: true })
   })
 
-  it('reports an unreadable recent list as a failed channel instead of an older schedule', async () => {
+  it('flags an unreadable recent list on the channel; the others stand', async () => {
     const now = '2026-11-17T00:28:00+02:00'
     // the newest list, misread: a queue twice
     const twice = [
@@ -433,8 +436,10 @@ describe('dnipro-cek: YASNO and @cek_info merged', () => {
       'dnipro-cek',
     )
     expect(source(s, CHANNEL)).toMatchObject({
-      ok: false,
-      error: { code: 'parse', message: expect.stringContaining('https://t.me/cek_info/4417') },
+      ok: true,
+      unread: expect.arrayContaining([
+        { date: '2026-11-17', message: expect.stringContaining('https://t.me/cek_info/4417') },
+      ]),
     })
     expect(s.schedules['1.1']![0]!.status).toBe('emergency')
   })

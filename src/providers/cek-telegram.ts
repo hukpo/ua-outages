@@ -53,6 +53,8 @@ export interface CekDay {
   groups: Record<GroupId, MinuteSlot[] | null>
   /** The day's hourly schedule was called off: newer than another source's list, it wins */
   cancelled?: boolean
+  /** A newer post about the day couldn't be read yet (why): the day is as read before it */
+  unread?: string
 }
 
 /**
@@ -74,16 +76,19 @@ export async function cekDays(
   const recent = kyivInstant(addDays(kyivDate(now), -1), 0).getTime()
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const all = await analyzeAll(ctx, region, channelInputs(sorted, region))
-  const bad = all.find((a) => a.error && Date.parse(a.input.publishedAt) >= recent)
-  if (bad) throw bad.error
   // town lists aren't the region's
   const analyzed = all.map((a) =>
     a.analysis ? { ...a, analysis: { ...a.analysis, events: a.analysis.events.filter((e) => !e.area) } } : a,
   )
   const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer', layerFrom: 'stated' } as const
-  // "графік оновлено, дивіться на сайті": the newest version of the day is elsewhere, and the
-  // list before it is no longer the schedule
-  for (const [d, error] of unreadOf(analyzed, region, now, opts)) if (d >= kyivDate(now)) throw error
+  // a post that couldn't be read (yet), or "графік оновлено, дивіться на сайті": the day stays
+  // as read before it, flagged; it is read again on the next poll
+  // only recent posts (since yesterday) matter: an older one is about days gone
+  const postedAt = (url: unknown) =>
+    Date.parse(analyzed.find((a) => a.input.url === url)?.input.publishedAt ?? '')
+  const unread = [...unreadOf(analyzed, region, now, opts)].filter(
+    ([d, e]) => d >= kyivDate(new Date(recent)) && postedAt(e.details?.url) >= recent,
+  )
   const days = daysOf(textPublications(analyzed, region, now, opts), opts)
   const out = new Map<string, CekDay>()
   for (const [date, day] of days) {
@@ -97,6 +102,17 @@ export async function cekDays(
       groups,
       ...(day.cancelled ? { cancelled: true } : {}),
     })
+  }
+  for (const [d, error] of unread) {
+    const day = out.get(d)
+    if (day) day.unread = error.message
+    else
+      out.set(d, {
+        at: NaN,
+        url: String(error.details?.url ?? ''),
+        groups: Object.fromEntries(CEK_GROUPS.map((g) => [g, null])),
+        unread: error.message,
+      })
   }
   // back to the hourly schedule after an emergency: the list stands again as of that post
   for (const { input, analysis } of analyzed) {
@@ -125,10 +141,11 @@ export function cekDaysToSource(days: ReadonlyMap<string, CekDay>, now: Date): S
     }
     out[date] = {
       schedules,
-      publishedAt: toKyivIso(new Date(day.at)),
+      publishedAt: Number.isFinite(day.at) ? toKyivIso(new Date(day.at)) : null,
       ...(day.cancelled ? { cancelled: true } : {}),
+      ...(day.unread ? { unread: day.unread } : {}),
     }
-    if (!newest || day.at > newest.at) newest = day
+    if (Number.isFinite(day.at) && (!newest || day.at > newest.at)) newest = day
   }
   return { days: out, groups: [...CEK_GROUPS], ...(newest ? { url: newest.url } : {}) }
 }

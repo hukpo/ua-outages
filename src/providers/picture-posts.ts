@@ -178,7 +178,9 @@ export async function readPicturePosts(
 
   const days = daysOf(pubs, opts)
   markUnread(days, analyzed, errors, opts)
-  const newest = [...days.values()].filter((d) => !d.unread).sort((x, y) => y.at - x.at)[0]
+  const newest = [...days.values()]
+    .filter((d) => !d.unread || Object.keys(d.groups).length)
+    .sort((x, y) => y.at - x.at)[0]
   return { days, analyzed, pictures, url: newest ? posts[newest.post]?.url : undefined }
 }
 

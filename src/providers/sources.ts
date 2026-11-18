@@ -34,9 +34,8 @@ export interface SourceRead {
       publishedAt: string | null
       cancelled?: boolean
       /**
-       * The channel's newest post about the day couldn't be read (why): its days are `unknown`,
-       * and that is what it has published for the date, as of `publishedAt`, so an older version
-       * on another channel doesn't pass for the current one
+       * A newer post of the channel about the day couldn't be read (why): the day is as the posts
+       * read make it, and may be behind (it is read again on a later poll)
        */
       unread?: string
       /** Only part of the day was published, with no whole day under it: `unknown` too, as of then */
@@ -200,10 +199,7 @@ export async function mergeSources(
 }
 
 const hasPublished = (day: SourceRead['days'][string]) =>
-  !!day.cancelled ||
-  !!day.unread ||
-  !!day.partial ||
-  Object.values(day.schedules).some((d) => d.status !== 'unknown')
+  !!day.cancelled || !!day.partial || Object.values(day.schedules).some((d) => d.status !== 'unknown')
 
 /** Instant of a `publishedAt`; none (or unreadable) sorts before every real one */
 function time(iso: string | null): number {

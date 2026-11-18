@@ -98,6 +98,19 @@ describe('validatePostAnalysis', () => {
     expect(check([e('24:00')]).events[0]!.at).toBe('22:00')
   })
 
+  it('reserve queues named one by one are not all queues; a count that the names contradict is refused', () => {
+    const kh = post({ regions: [postRegion('kharkiv')] })
+    const reserve = Array.from({ length: 10 }, (_, i) => `${i + 1}(Р)`)
+    const a = check([ev({ kind: 'gav', action: 'cancel', regions: ['kharkiv'], queues: reserve })], kh)
+    expect(a.events[0]!.allQueues).toBe(false)
+    expect(() =>
+      check(
+        [ev({ kind: 'gav', action: 'start', regions: ['kharkiv'], queues: ['1', '2'], queueCount: 3 })],
+        kh,
+      ),
+    ).toThrow(expect.objectContaining({ code: 'parse' }))
+  })
+
   it('a cancel naming every queue of a fixed set one by one is a cancel of all of them', () => {
     const zp = post({ regions: [postRegion('zaporizhzhia')] })
     const all = Array.from({ length: 10 }, (_, i) => String(i + 1))

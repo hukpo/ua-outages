@@ -376,7 +376,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
     await expect(undated.client.getSchedules('zakarpattia')).rejects.toThrow()
   })
 
-  it("doesn't show the API picture as the day when the channel's newest picture for it can't be read", async () => {
+  it("the channel's newest picture can't be read: the version before it stands, flagged", async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
       today: '/media/gpv-today.png',
@@ -386,22 +386,22 @@ describe('Zakarpattiaoblenergo schedule', () => {
         { match: '/media/gpv-today.png', body: poster('10848_2026-10-17T0951.jpg') },
       ],
     })
-    // before: the API's older version stood as today. Now the channel's unread day, newer, wins it
+    // the older version stands, flagged: the 14:19 post is read again on the next poll
     const s = await c.getSchedules('zakarpattia')
-    expectUnpublished(s, 12)
+    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10848_2026-10-17T0951.jpg']!.rows)
     expect(s.sources![0]!.unread).toEqual([
       { date: '2026-10-17', message: expect.stringMatching(/announces a schedule picture/) },
     ])
   })
 
-  it("a newest picture that can't be read leaves its day not known, not falling back to an older one", async () => {
+  it("a newest picture that can't be read: the version before it, flagged", async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
       // the 14:19 post now carries something else
       routes: [{ match: 'file/GGnm0DhyTx', body: fixtureBytes('chernihiv/posters/tg-5631.jpg') }],
     })
     const s = await c.getSchedules('zakarpattia')
-    expectUnpublished(s, 12)
+    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10848_2026-10-17T0951.jpg']!.rows)
     expect(s.sources![0]).toMatchObject({
       id: TELEGRAM,
       ok: true,
@@ -409,7 +409,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
     })
   })
 
-  it('an unreadable re-issue is not excused by a later re-issue of the same day: that one gives only the hours ahead', async () => {
+  it('an unreadable re-issue, then a later re-issue of the same day: the day as read, flagged', async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
       // the 10:51 post now carries something else; the 14:19 one reads, from 14:19 on
@@ -417,7 +417,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
     })
     const s = await c.getSchedules('zakarpattia')
     expect(s.sources![0]).toMatchObject({ id: TELEGRAM, ok: true, unread: [{ date: '2026-10-17' }] })
-    expectUnpublished(s, 12)
+    expect(s.schedules['1.1']![0]!.status).not.toBe('unknown')
   })
 
   it('sends the captions to the text processor and the pictures, with them, to the image processor', async () => {
@@ -455,7 +455,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
     )
   })
 
-  it("a newest caption that can't be read leaves its day not known", async () => {
+  it("a newest caption that can't be read: the version before it, flagged", async () => {
     const text = fakeText((input) =>
       input.url.endsWith('/10850')
         ? [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date: '2026-13-01' })]
@@ -465,7 +465,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
           },
     )
     const s = await channel({ now: '2026-10-17T14:30:00+03:00', text }).client.getSchedules('zakarpattia')
-    expectUnpublished(s, 12)
+    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10848_2026-10-17T0951.jpg']!.rows)
     // the days it may be about, its own and the next
     expect(s.sources![0]!.unread!.map((u) => u.date)).toEqual(['2026-10-17', '2026-10-18'])
   })

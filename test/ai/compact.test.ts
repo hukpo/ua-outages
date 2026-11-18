@@ -1,3 +1,4 @@
+import { crc32, deflateSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import {
   compactImage,
@@ -140,6 +141,38 @@ describe('compactImage: review fixes', () => {
     expect(img.width).toBe(2)
     for (let p = 0; p < img.data.length; p += 4)
       expect(Math.min(...img.data.subarray(p, p + 3))).toBeGreaterThan(250)
+  })
+
+  it('a transparent PNG nothing scales or trims still goes drawn on white, never as it is', () => {
+    // an RGBA PNG (the SDK's own encoder flattens): transparent black and opaque black, by turns
+    const chunk = (type: string, body: Uint8Array) => {
+      const head = Buffer.alloc(8)
+      head.writeUInt32BE(body.length)
+      head.write(type, 4, 'latin1')
+      const crc = Buffer.alloc(4)
+      crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), body])))
+      return Buffer.concat([head, body, crc])
+    }
+    const ihdr = Buffer.alloc(13)
+    ihdr.writeUInt32BE(4, 0)
+    ihdr.writeUInt32BE(2, 4)
+    ihdr.set([8, 6, 0, 0, 0], 8)
+    const rows = Buffer.alloc(2 * (1 + 16))
+    for (let y = 0; y < 2; y++)
+      for (let x = 0; x < 4; x++) rows.set(x % 2 ? [0, 0, 0, 255] : [0, 0, 0, 0], y * 17 + 1 + x * 4)
+    const src = new Uint8Array(
+      Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        chunk('IHDR', ihdr),
+        chunk('IDAT', deflateSync(rows)),
+        chunk('IEND', Buffer.alloc(0)),
+      ]),
+    )
+    expect(decodePng(src).data[3]).toBe(0)
+    const out = compactImage(src, { maxLongEdge: 1000, trim: false })
+    expect(out.bytes).not.toBe(src)
+    const img = decodePng(out.bytes)
+    expect([...img.data.subarray(0, 4)]).toEqual([255, 255, 255, 255])
   })
 
   it('a PNG the decoder does not read (4-bit palette) goes as it is, its size from the header', () => {

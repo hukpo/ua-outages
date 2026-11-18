@@ -87,8 +87,6 @@ interface Track {
   lifted: Set<string>
   /** Said to last at least until then ("до кінця доби"), ms; 0 when not said */
   until: number
-  /** Ended by a cancel announced ahead of its time ("о 12:00 скасовуються"): then, ms; else 0 */
-  endsAt: number
 }
 
 const KINDS: readonly EmergencyKind[] = ['gav', 'sgav', 'emergency']
@@ -186,7 +184,6 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       inferred: false,
       lifted: new Set(),
       until: a.until ? Date.parse(a.until) : 0,
-      endsAt: 0,
     }
     tracks.set(keyOf(kind, a.area), t)
     return t
@@ -218,6 +215,15 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     return false
   }
 
+  /** Queues back on while which ones were off isn't known: fewer, while that leaves some */
+  const restoreCount = (t: Track, n: number) => {
+    t.count = t.count !== null && t.count - n > 0 ? t.count - n : null
+  }
+  /** Whole cancels announced for later, as processed */
+  const aheadCancels: { kinds: EmergencyKind[]; area: string | null; at: number; posted: number }[] = []
+  /** The operator announces СГАВ (in this window): an unread post may be one */
+  const usesSgav = events.some((e) => e.announcement.kind === 'sgav')
+
   const ttl = opts.ttlHours * 3600_000
   const now = opts.now.getTime()
   /**
@@ -244,13 +250,33 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     // "О 19:00 - заміна черг" posted at 18:52: not yet; the state stays as it is until then
     if (Date.parse(a.at) > now) continue
     // a new post after a long silence starts a new episode, it doesn't continue yesterday's
-    expire(timeOf(e))
-    if (a.action === 'unclear') {
+    // by when it was posted: one taking effect later must not run the clock ahead of the posts
+    // after it ("СГАВ з 14:00" posted at 08:00 doesn't end at 11:00 what a 10:00 post still lifts)
+    expire(Date.parse(e.posted))
+    // a word posted after a cancel announced for later, and taking effect before it ("о 12:00
+    // скасовуються" at 08:00, "ГАВ діють" at 10:00): a reminder, or the cancel called off. Which
+    // one isn't said: once the cancel's time has come, not known
+    const pending = a.action === 'apply' || a.action === 'update'
+    const overtaken =
+      pending &&
+      aheadCancels.find(
+        (c) =>
+          c.kinds.includes(a.kind) &&
+          (!c.area || areaKey(c.area) === areaKey(a.area)) &&
+          Date.parse(a.at) < c.at &&
+          Date.parse(e.posted) > c.posted,
+      )
+    if (a.action === 'unclear' || overtaken) {
       // a post that can't be read may end what runs as well as start something: the state is
       // not known until a word that can be read, and it doesn't keep an episode alive either.
-      // In doubt: what runs, and ГАВ in any case (what an unread post most often starts)
+      // In doubt: what runs, ГАВ in any case (what an unread post most often starts), and СГАВ
+      // where the operator announces it
       lastUnclear = e
-      doubt.add('main')
+      if (overtaken) for (const g of groupsOf(a.kind)) doubt.add(g)
+      else {
+        doubt.add('main')
+        if (usesSgav) doubt.add('sgav')
+      }
       for (const t of tracks.values()) if (t.active) for (const g of groupsOf(t.kind)) doubt.add(g)
       continue
     }
@@ -269,12 +295,13 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       // with no area followed separately, the one whole-region episode is what it ends
       if (a.area && !targets.length && ![...tracks.values()].some((t) => t.active && t.area))
         targets = on.filter((t) => !t.area)
-      const ahead = a.timed && Date.parse(a.at) > Date.parse(e.posted)
+      // a whole cancel announced for later: what is posted after it but takes effect before it
+      // is checked against it (above)
+      if (a.timed && !a.partial && Date.parse(a.at) > Date.parse(e.posted))
+        aheadCancels.push({ kinds, area: a.area, at: Date.parse(a.at), posted: Date.parse(e.posted) })
       for (const t of targets) {
-        if (!a.partial || lift(t, a)) {
-          end(t, e)
-          if (ahead) t.endsAt = Date.parse(a.at)
-        } else touch(t, e)
+        if (!a.partial || lift(t, a)) end(t, e)
+        else touch(t, e)
       }
       if (!targets.length && a.edited) {
         // "UPD: … скасовано" written into the apply post: it was in force from the post time
@@ -285,11 +312,6 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       continue
     }
 
-    // a word that took effect before a cancel announced for later ("о 12:00 скасовуються" at
-    // 08:00, "ГАВ діють" at 09:00): the state before that cancel, not after it
-    const ended = tracks.get(keyOf(a.kind, a.area))
-    if (ended && !ended.active && ended.endsAt > Date.parse(a.at)) continue
-
     if (a.action === 'update') {
       const t = running(a.kind, a.area)
       if (!t) {
@@ -298,8 +320,14 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
         continue
       }
       if (a.add) {
+        // "додатково 3": ids added to ids; "ще 2 черги" without ids: more, which ones not known
         if (a.queues) t.queues = t.queues ? new Set([...t.queues, ...a.queues]) : null
-        t.count = t.queues ? t.queues.size : t.count !== null && a.count !== null ? t.count + a.count : null
+        else if (a.count !== null) t.queues = null
+        t.count = t.queues
+          ? t.queues.size
+          : t.count !== null && (a.count ?? a.queues?.length ?? null) !== null
+            ? t.count + (a.count ?? a.queues!.length)
+            : null
       } else if (a.queues) {
         // "заміна черг: тепер 3 та 4": the new set. Queues it neither names off nor back on, while
         // it names some back on ("9,10,1,2 знеструмлюємо; 3-6 заживлені" while 3-8 were off):
@@ -315,6 +343,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
         t.count = a.count
       }
       if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
+      else if (a.restored?.length && !a.queues && a.count === null) restoreCount(t, a.restored.length)
       if (t.queues) t.count = t.queues.size
       touch(t, e)
       if (t.queues && !t.queues.size) end(t, e)
@@ -329,6 +358,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     }
     // "для 6-10 черг (1-5 ввімкнені)": those are back on
     if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
+    else if (a.restored?.length && !a.queues && a.count === null) restoreCount(t, a.restored.length)
     if (a.queues && a.again && t.queues?.size && a.queues.every((q) => t.queues!.has(q))) {
       // "знову введені ГАВ (для 6-10 черг)" while 6-10 are off: all was lifted in between, unannounced
       t.queues = new Set(a.queues)

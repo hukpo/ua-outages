@@ -173,13 +173,13 @@ export interface PostDay {
   /** A whole day was published (see `layerPublications`): otherwise an unnamed group is not known */
   based: boolean
   /**
-   * The newest post about the day couldn't be read: every group is not known, and the day is
-   * published as such (at that post's time), so an older version on another channel doesn't win it
+   * A newer post about the day couldn't be read (yet: it is asked again on a later poll). The
+   * day stays as the posts read make it, and says so; with nothing read for it, it is not known
    */
   unread?: OutageError
 }
 
-/** The day of a post that couldn't be read: not known, as of that post */
+/** A day only a post that couldn't be read is about: not known */
 export const unreadDay = (at: number, post: number, error: OutageError): PostDay => ({
   groups: {},
   at,
@@ -406,8 +406,7 @@ export async function readSchedulePosts(
 ): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[] }> {
   const now = ctx.now()
   const analyzed = groundTimeless(await analyzeAll(ctx, region, inputs), region, opts)
-  // a day whose newest version can't be read is not shown from an older one: it is not known,
-  // as of that post (see `PostDay.unread`); the other days stand
+  // a day whose newest post can't be read (yet) stays as the posts read make it, flagged
   const days = postsToDays(analyzed, region, now, opts)
   markUnread(days, analyzed, unreadOf(analyzed, region, now, opts), opts)
   return { days, analyzed }
@@ -479,8 +478,8 @@ export function unreadOf(
 }
 
 /**
- * The days of `errors` (date → why) become unread days in `days`, as of the post that failed
- * (found by the error's url). True when any was marked
+ * Flags the days of `errors` (date → why) in `days` as having a newer post that couldn't be read;
+ * a day nothing read is about is added, not known. True when any was flagged
  */
 export function markUnread(
   days: Map<string, PostDay>,
@@ -491,7 +490,8 @@ export function markUnread(
   for (const [d, error] of errors) {
     const post = analyzed.findIndex((a) => a.input.url === error.details?.url)
     const at = opts.timeless || post < 0 ? NaN : Date.parse(analyzed[post]!.input.publishedAt)
-    days.set(d, unreadDay(at, Math.max(post, 0), error))
+    const day = days.get(d)
+    days.set(d, day ? { ...day, unread: error } : unreadDay(at, Math.max(post, 0), error))
   }
   if (errors.size) {
     const sorted = [...days.entries()].sort(([a], [b]) => a.localeCompare(b))
@@ -541,9 +541,7 @@ export function daysToSource(
       ...(day.unread ? { unread: day.unread.message } : {}),
       // only part of the day, with no whole day under it: not known, but newer news than an older
       // whole day elsewhere ("оновлено з 19:00" on the channel after the site's 18:00 version)
-      ...(!day.based && !day.cancelled && !day.unread && Object.keys(day.groups).length
-        ? { partial: true }
-        : {}),
+      ...(!day.based && !day.cancelled && Object.keys(day.groups).length ? { partial: true } : {}),
       publishedAt: opts.publishedAt
         ? opts.publishedAt(day, date)
         : Number.isFinite(day.at)

@@ -56,6 +56,7 @@ export function compactImage(bytes: Uint8Array, opts: CompactOptions): CompactIm
   const original = { width: img.width, height: img.height, bytes: bytes.length }
   // drawn on white first: averaging a transparent black pixel with a white one must stay white,
   // not turn into a grey a grid would read as an outage
+  const decoded = img
   img = onWhite(img)
   const trimmed = opts.trim === false ? img : trimMargins(img)
   // a thin picture (a wide grid) isn't scaled down to the long edge only to be blown up again:
@@ -64,10 +65,11 @@ export function compactImage(bytes: Uint8Array, opts: CompactOptions): CompactIm
   const scaled = thin
     ? upscale(downscale(trimmed, THIN_LONG_EDGE), opts.minShortEdge!, THIN_LONG_EDGE)
     : downscale(trimmed, opts.maxLongEdge)
-  if (scaled === img && jpeg) return { ...asIs(bytes, 'image/jpeg', original), compacted: false }
+  // the source as it is only when nothing changed it: opaque, not cut, not scaled (a transparent
+  // one goes drawn on white, never for the vendor to flatten its own way, black perhaps)
+  if (scaled === decoded && jpeg) return { ...asIs(bytes, 'image/jpeg', original), compacted: false }
   const out = encodePng(scaled)
-  // the source was already smaller than the re-encoded copy, and nothing was cut or scaled
-  if (scaled === img && out.length >= bytes.length)
+  if (scaled === decoded && out.length >= bytes.length)
     return asIs(bytes, jpeg ? 'image/jpeg' : 'image/png', original)
   return {
     bytes: out,

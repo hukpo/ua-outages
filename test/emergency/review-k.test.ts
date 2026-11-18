@@ -151,9 +151,13 @@ describe('times', () => {
     ['о 12:00 ГАВ скасовуються', '2026-11-18T08:00:00+02:00', [gav({ action: 'cancel', at: '12:00' })]],
     ['ГАВ діють', '2026-11-18T09:00:00+02:00', [gav({ action: 'start' })]],
   ]
-  it('a cancel announced for 12:00 stands after 12:00, though "ГАВ діють" was posted after it', async () => {
+  it('"ГАВ діють" posted after a cancel announced for 12:00: on before 12:00, not known after (a reminder, or the cancel called off)', async () => {
     expect((await fold('zaporizhzhia', items, '2026-11-18T10:00:00+02:00')).state).toBe('active')
-    expect((await fold('zaporizhzhia', items, '2026-11-18T13:00:00+02:00')).state).toBe('inactive')
+    expect((await fold('zaporizhzhia', items, '2026-11-18T13:00:00+02:00')).state).toBe('unknown')
+    // without the word after it, the cancel stands
+    expect((await fold('zaporizhzhia', items.slice(0, 2), '2026-11-18T13:00:00+02:00')).state).toBe(
+      'inactive',
+    )
   })
 
   it('"до 14:00" of an apply at 23:00 is the next day', async () => {
@@ -189,5 +193,107 @@ describe('a shared channel: the second reading is asked whatever region the firs
     expect(odesa.events.map((e) => e.regions)).toEqual([['odesa']])
     const kyiv = await ai.analyzeEmergencyPost('kyiv', input)
     expect(kyiv.events.map((e) => e.regions)).toEqual([['odesa']])
+  })
+})
+
+describe('round 3', () => {
+  it('"ще 2 черги" without ids after 1-3: five, which ones not known', async () => {
+    const s = await fold(
+      'zaporizhzhia',
+      [
+        ['ГАВ 1-3', '2026-11-18T08:00:00+02:00', [gav({ action: 'start', queues: ['1', '2', '3'] })]],
+        [
+          'ще 2 черги',
+          '2026-11-18T09:00:00+02:00',
+          [gav({ action: 'change', additive: true, queueCount: 2 })],
+        ],
+      ],
+      '2026-11-18T09:30:00+02:00',
+    )
+    expect(s).toMatchObject({ state: 'active', queues: null, queueCount: 5 })
+  })
+
+  it('a cancel announced for 12:00 covers another kind or area posted before it took effect', async () => {
+    const cancel: [string, string, PostEvent[]] = [
+      'о 12:00 скасовуються аварійні',
+      '2026-11-18T08:00:00+02:00',
+      [gav({ kind: 'emergency', action: 'cancel', at: '12:00' })],
+    ]
+    const s = await fold(
+      'zaporizhzhia',
+      [
+        ['07:00 ГАВ', '2026-11-18T07:00:00+02:00', [gav({ action: 'start' })]],
+        cancel,
+        [
+          'у м. Запоріжжя діють ГАВ',
+          '2026-11-18T09:00:00+02:00',
+          [gav({ action: 'start', area: 'м. Запоріжжя' })],
+        ],
+      ],
+      '2026-11-18T13:00:00+02:00',
+    )
+    expect(s.state).toBe('unknown')
+  })
+
+  it('an unread post puts СГАВ in doubt where the operator announces it', async () => {
+    const s = await fold(
+      'zaporizhzhia',
+      [
+        ['СГАВ вчора скасовано', '2026-11-18T06:00:00+02:00', [gav({ kind: 'sgav', action: 'cancel' })]],
+        ['незрозуміло', '2026-11-18T08:00:00+02:00', [gav({ kind: 'sgav', action: 'start' })], []],
+        ['ГАВ 1-2', '2026-11-18T09:00:00+02:00', [gav({ action: 'start', queues: ['1', '2'] })]],
+      ],
+      '2026-11-18T09:30:00+02:00',
+    )
+    expect(s.state).toBe('unknown')
+  })
+
+  it('"1-5 ввімкнені" while only the count was known: fewer', async () => {
+    const s = await fold(
+      'kyiv',
+      [
+        [
+          'в обсязі 10 черг',
+          '2026-11-18T08:00:00+02:00',
+          [ev({ kind: 'gav', action: 'start', regions: ['kyiv'], queueCount: 10 })],
+        ],
+        [
+          '1-5 ввімкнені',
+          '2026-11-18T09:00:00+02:00',
+          [
+            ev({
+              kind: 'gav',
+              action: 'change',
+              regions: ['kyiv'],
+              queuesRestored: ['1', '2', '3', '4', '5'],
+            }),
+          ],
+        ],
+      ],
+      '2026-11-18T09:30:00+02:00',
+    )
+    expect(s).toMatchObject({ state: 'active', queueCount: 5 })
+  })
+
+  it('a post taking effect later does not run the clock ahead of the posts after it', async () => {
+    const s = await fold(
+      'zaporizhzhia',
+      [
+        [
+          'ГАВ 1-10',
+          '2026-11-17T23:00:00+02:00',
+          [gav({ action: 'start', queues: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] })],
+        ],
+        ['СГАВ з 14:00', '2026-11-18T08:00:00+02:00', [gav({ kind: 'sgav', action: 'start', at: '14:00' })]],
+        [
+          'скасовано 6-10',
+          '2026-11-18T10:00:00+02:00',
+          [gav({ action: 'cancel', queues: ['6', '7', '8', '9', '10'] })],
+        ],
+        ['СГАВ скасовано', '2026-11-18T16:00:00+02:00', [gav({ kind: 'sgav', action: 'cancel' })]],
+      ],
+      '2026-11-18T17:00:00+02:00',
+    )
+    expect(s).toMatchObject({ state: 'active', kind: 'gav', queues: ['1', '2', '3', '4', '5'] })
   })
 })

@@ -537,7 +537,7 @@ describe('Cherkasyoblenergo', () => {
     })
   })
 
-  it('a misread newest schedule post leaves its days not known, rather than serve the older one', async () => {
+  it('a misread newest schedule post: the day as read before it, flagged (read again on the next poll)', async () => {
     // "24:30" for the post of 5.11 20:25 (tomorrow's schedule)
     const text = fakeText(
       answer({ 'hrafik-pohodynnykh-vidklyuchen-hpv-na-6-lystopada': [day('2026-11-06', '1.1 22:00-24:30')] }),
@@ -545,17 +545,15 @@ describe('Cherkasyoblenergo', () => {
     const s = await client(POSTS, NOW, text).client.getSchedules('cherkasy')
     expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
     expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-06')
-    expectUnpublished(s, 12)
   })
 
-  it('a misread post leaves its day not known; the day a later post gives stands', async () => {
+  it('a misread post flags the days it may be about; the day a later post gives stands', async () => {
     const text = fakeText(
       answer({ 'hrafik-pohodynnykh-vidklyuchen-hpv-na-5-lystopada': [day('2026-11-05', '1.1 22:00-24:30')] }),
     )
     const s = await client(POSTS, NOW, text).client.getSchedules('cherkasy')
-    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-05', '2026-11-06'] })
-    const fifth = s.schedules['1.1']!.find((d) => d.date === '2026-11-05')!
-    expect(fifth.status).toBe('unknown')
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toEqual(['2026-11-05'])
     expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-06')!.status).not.toBe('unknown')
   })
 

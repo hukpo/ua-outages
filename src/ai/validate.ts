@@ -228,13 +228,23 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
   const allRaw = emergency ? bool(o.allQueues ?? false, `${w}.allQueues`) : false
   // "all queues" and a part of them at once: which one is meant can't be told
   if (emergency && allRaw && fixed && (queues.length || queueCount !== null)) {
-    const plain = new Set(queues.map((q) => q.replace('(Р)', '')))
+    // reserve queues ("1(Р)") are not the queues of the set
+    const plain = new Set(queues.filter((q) => !q.endsWith('(Р)')))
     if ((queues.length && plain.size < fixed) || (queueCount !== null && queueCount < fixed))
       fail(`${w}: all queues and only some of them`)
   }
   // every queue there is, named one by one: all of them
   const allQueues =
-    allRaw || (emergency && !!fixed && new Set(queues.map((q) => q.replace('(Р)', ''))).size >= fixed)
+    allRaw || (emergency && !!fixed && new Set(queues.filter((q) => !q.endsWith('(Р)'))).size >= fixed)
+  // "3 черги: 1 та 2": how many are off can't be told
+  if (
+    emergency &&
+    queues.length &&
+    queueCount !== null &&
+    queueCount !== queues.length &&
+    queueCount !== queues.filter((q) => !q.endsWith('(Р)')).length
+  )
+    fail(`${w}: ${queueCount} queues, ${queues.length} named`)
   const additive = bool(o.additive ?? false, `${w}.additive`)
   const again = bool(o.again ?? false, `${w}.again`)
   const gpvApplies = nullableBool(o.gpvApplies, `${w}.gpvApplies`)

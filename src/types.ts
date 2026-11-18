@@ -169,8 +169,9 @@ export interface SourceStatus {
    */
   disagrees?: boolean
   /**
-   * Days whose newest post on this channel couldn't be read (the AI answer failed, its picture
-   * didn't read): they are `unknown`, never shown from an older post, and this says why
+   * Days with a newer post on this channel that couldn't be read (the AI answer failed, its
+   * picture didn't read): they are as the posts read before it make them, and may be behind until
+   * it reads (asked again on a later poll). Show them with a warning; this says why
    */
   unread?: { date: string; message: string }[]
 }

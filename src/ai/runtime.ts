@@ -43,7 +43,7 @@ export const DEFAULT_MAX_LONG_EDGE = 800
 /** …and before the cheap "is it a schedule?" check */
 export const CHECK_LONG_EDGE = 256
 /** An answer that failed validation is not asked again for this long (each poll would pay) */
-const FAILED_TTL_MS = 30 * 60_000
+const FAILED_TTL_MS = 10 * 60_000
 
 type Entry = { ok: true; value: unknown } | { ok: false; code: 'parse'; message: string; until: number }
 

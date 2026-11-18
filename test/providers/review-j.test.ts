@@ -40,7 +40,7 @@ function ctxOf(
   }
 }
 
-describe('an unread post: only a later whole day stands in for it', () => {
+describe('an unread post is flagged until a later whole day stands in for it', () => {
   // Kharkiv's updates list the hours ahead: 17.11 20:00 the whole 18th, 18.11 09:00 unread, 14:00
   // "з 14:00 до 18:00"
   const posts = [
@@ -120,8 +120,8 @@ describe('layering: a day is whole or not known', () => {
   })
 })
 
-describe('merging channels: an unread day is newer news than an older version elsewhere', () => {
-  it('the site’s older poster does not stand for a day the channel couldn’t read later', async () => {
+describe('merging channels: a day with an unread post', () => {
+  it('the last version read stands (read again on the next poll); the channel says what it couldn’t read', async () => {
     const at = (h: number) => `2026-11-18T${String(h).padStart(2, '0')}:00:00+02:00`
     const s = await mergeSources(
       { http: new Http({ fetch: mockFetch([]).fetch }), now: () => new Date(at(15)) },
@@ -150,8 +150,8 @@ describe('merging channels: an unread day is newer news than an older version el
         },
       ],
     )
-    expect(s.schedules['1.1']![0]!.status).toBe('unknown')
-    expect(s.sources![1]).toMatchObject({ ok: true, dates: ['2026-11-18'], unread: [{ date: '2026-11-18' }] })
+    expect(s.schedules['1.1']![0]!.status).toBe('scheduled')
+    expect(s.sources![1]).toMatchObject({ ok: true, dates: [], unread: [{ date: '2026-11-18' }] })
   })
 })
 
