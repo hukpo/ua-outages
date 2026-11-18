@@ -3,6 +3,7 @@ import type { TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
 import { aiOf, type ProviderContext } from '../providers/provider.js'
 import type { RegionId } from '../types.js'
+import { addDays, kyivDate } from '../time.js'
 import { channelRegions, postRegion } from './regions.js'
 import type { PostAnalysis, PostInput, PostRegion } from './types.js'
 
@@ -92,26 +93,38 @@ export async function analyzeAll(
 }
 
 /**
- * Schedule readers: a post that couldn't be read may be the newest schedule, so the source fails
- * (`parse`) unless a later post was read fine and published a schedule. Older failures are
- * skipped: they would be replaced anyway.
+ * Schedule readers: a post that couldn't be read may be the newest version of the day it is
+ * about. The days it could be about (its own day and the next; on a page without times, any it
+ * still shows) that no later
+ * read post gives hours for can't be shown: they are returned, with the error, for the reader
+ * to leave out (not known), never shown from the older version. A newer post for tomorrow says
+ * nothing about an unread correction for today.
  */
-export function failIfNewestUnread(
+export function unreadDays(
   list: readonly Analyzed[],
-  hasSchedule: (a: PostAnalysis) => boolean,
+  /** The days a read post gives hours for (a list, a cancellation); empty when none */
+  datesOf: (a: Analyzed) => string[],
+  now: Date,
   /** The list is newest first and its times mean nothing (a site page) */
   byOrder = false,
-): void {
-  if (byOrder) {
-    const firstGood = list.findIndex((a) => a.analysis && hasSchedule(a.analysis))
-    const firstBad = list.findIndex((a) => a.error)
-    if (firstBad !== -1 && (firstGood === -1 || firstBad < firstGood)) throw list[firstBad]!.error
-    return
-  }
-  const newestGood = Math.max(
-    0,
-    ...list.filter((a) => a.analysis && hasSchedule(a.analysis)).map((a) => Date.parse(a.input.publishedAt)),
-  )
-  const bad = list.find((a) => a.error && Date.parse(a.input.publishedAt) >= newestGood)
-  if (bad) throw bad.error
+): Map<string, OutageError> {
+  const today = kyivDate(now)
+  const rank = (a: Analyzed, i: number) => (byOrder ? -i : Date.parse(a.input.publishedAt))
+  const good = list.flatMap((a, i) => (a.analysis ? [{ rank: rank(a, i), dates: new Set(datesOf(a)) }] : []))
+  const out = new Map<string, OutageError>()
+  const yesterday = addDays(today, -1)
+  list.forEach((a, i) => {
+    if (!a.error) return
+    // a page's block has no time: it may be about any day the page still shows
+    const could = byOrder
+      ? [yesterday, today, addDays(today, 1)]
+      : ((day) => [day, addDays(day, 1)])(
+          kyivDate(new Date(Date.parse(a.input.publishedAt) || now.getTime())),
+        )
+    const r = rank(a, i)
+    for (const d of could)
+      if (d >= yesterday && !out.has(d) && !good.some((g) => g.rank > r && g.dates.has(d)))
+        out.set(d, a.error)
+  })
+  return out
 }

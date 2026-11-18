@@ -415,15 +415,16 @@ describe('Chernihivoblenergo: site and Telegram together', () => {
     expect(source(s, TG).error!.message).toMatch(/the picture reads 2026-11-16, its post says 2026-11-17/)
   })
 
-  it("fails the channel when its newest post can't be read, not when an older one can't", async () => {
+  it("fails the channel when its newest post about a day can't be read, also when tomorrow's poster came after", async () => {
     const misread = (id: number) =>
       posts((input) => (postId(input) === id ? [gpv({ date: '2026-11-17', at: '25:00' })] : undefined))
     const s = await read('2026-11-16T23:30:00+02:00', [SITE_16, ...EVENING], { text: misread(5723) })
     expect(source(s, TG)).toMatchObject({ ok: false, error: { code: 'parse' } })
     expect(dates(s)).toEqual(['2026-11-16'])
-    // 5721 is older than the poster of 5723, which the channel then read fine
+    // 5721 is a correction for the 16th (2.1, 2.2 from 10:10): tomorrow's poster 5723 says nothing
+    // about today, and nothing after 5721 gave the 16th whole, so the 16th can't be shown
     const older = await read('2026-11-16T23:30:00+02:00', [SITE_16, ...EVENING], { text: misread(5721) })
-    expect(source(older, TG)).toMatchObject({ ok: true, dates: ['2026-11-16', '2026-11-17'] })
+    expect(source(older, TG)).toMatchObject({ ok: false, error: { code: 'parse' } })
   })
 
   it('"ОНОВЛЕНИЙ": the re-issued poster replaces the rest of its day only', async () => {

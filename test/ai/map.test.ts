@@ -147,3 +147,30 @@ describe('hourlySchedule: a ГАВ table is not the day’s hours', () => {
     expect([r('gpv'), r(null), r('gav'), r('sgav')].map(hourlySchedule)).toEqual([true, true, false, false])
   })
 })
+
+describe('unreadDays: an unread post taints the days it could be about', () => {
+  it("tomorrow's list after it doesn't vouch for today", async () => {
+    const { unreadDays } = await import('../../src/ai/posts.js')
+    const { OutageError } = await import('../../src/errors.js')
+    const at = (publishedAt: string, ok: boolean, dates: string[]) => ({
+      a: {
+        input: { publishedAt } as never,
+        analysis: ok ? ({ events: [], photosAreSchedules: false, statedAt: null } as never) : null,
+        error: ok ? null : new OutageError('parse', 'misread'),
+      },
+      dates,
+    })
+    const list = [
+      at('2026-11-18T08:00:00+02:00', true, ['2026-11-18']),
+      at('2026-11-18T10:00:00+02:00', false, []),
+      at('2026-11-18T20:00:00+02:00', true, ['2026-11-19']),
+    ]
+    const datesOf = (a: unknown) => list.find((l) => l.a === a)!.dates
+    const out = unreadDays(
+      list.map((l) => l.a),
+      datesOf as never,
+      new Date('2026-11-18T21:00:00+02:00'),
+    )
+    expect([...out.keys()]).toEqual(['2026-11-18'])
+  })
+})

@@ -1,4 +1,4 @@
-import { analyzeAll, channelInputs, failIfNewestUnread, type Analyzed } from '../ai/posts.js'
+import { analyzeAll, channelInputs, unreadDays, type Analyzed } from '../ai/posts.js'
 import { postRegion } from '../ai/regions.js'
 import type { ImageReading, PostAnalysis, PostRegion } from '../ai/types.js'
 import type { TelegramPost } from '../emergency/telegram.js'
@@ -12,6 +12,7 @@ import { hourlySchedule, readingToDay } from './image-schedule.js'
 import {
   daysOf,
   gpvEvents,
+  scheduleDates,
   textPublications,
   type DatedPublication,
   type PostDay,
@@ -57,13 +58,15 @@ export interface PicturePostsRead {
 const fail = (region: RegionId, url: string, message: string, cause?: unknown) =>
   new OutageError('parse', message, { region, url, ...(cause ? { cause } : {}) })
 
-/** The caption's day for its photos: its one `gpv` event with no hours in words */
+/**
+ * The caption's day for its photos: its one `gpv` event with no hours in words, when the caption
+ * names the day ("на 17.11", "сьогодні"); "Оновлений графік у фото" names none, and the picture
+ * must then show its own date
+ */
 function captionDate(a: PostAnalysis | null, region: RegionId, postDay: string): string | null {
-  const days = new Set(
-    (a ? gpvEvents(a, region) : [])
-      .filter((e) => e.action !== 'cancel' && !e.schedule.length)
-      .map((e) => e.date ?? postDay),
-  )
+  const events = (a ? gpvEvents(a, region) : []).filter((e) => e.action !== 'cancel' && !e.schedule.length)
+  if (events.some((e) => !e.dateNamed)) return null
+  const days = new Set(events.map((e) => e.date ?? postDay))
   return days.size === 1 ? [...days][0]! : null
 }
 
@@ -86,7 +89,7 @@ export async function readPicturePosts(
   const analyzed: Analyzed[] = posts.map(
     (p) => byUrl.get(p.url) ?? { input: channelInputs([p], region)[0]!, analysis: null, error: null },
   )
-  failIfNewestUnread(analyzed, (a) => announces(a, region) || gpvEvents(a, region).length > 0)
+  const unreadCaptions = unreadDays(analyzed, (a) => scheduleDates(a, region, now, { pictures: true }), now)
 
   // CDN links expire: the pictures are fetched right after the page, and only those that matter
   const wanted = posts
@@ -108,6 +111,18 @@ export async function readPicturePosts(
   const pictures: PicturePostsRead['pictures'] = {}
   /** Posts whose pictures couldn't be read, by index, with the days they may be for */
   const unread: { i: number; days: string[]; error: unknown }[] = []
+  // a post that says its schedule is in a picture, with none to fetch: as good as unread
+  posts.forEach((post, i) => {
+    const a = analyzed[i]!.analysis
+    if (post.photos.length || !a || !announces(a, region)) return
+    const postDay = kyivDate(new Date(post.at))
+    const said = captionDate(a, region, postDay)
+    unread.push({
+      i,
+      days: said ? [said] : [postDay, addDays(postDay, 1)],
+      error: fail(region, post.url, 'the post announces a schedule picture and has none'),
+    })
+  })
   for (const w of loaded) {
     try {
       for (const r of await readPost(ctx, region, info, w, opts)) {
@@ -132,6 +147,8 @@ export async function readPicturePosts(
   if (blocking) throw blocking.error
 
   const days = daysOf(pubs, opts)
+  // a day whose newest caption can't be read is not shown from an older post
+  for (const [d, error] of unreadCaptions) if (days.has(d) || !days.size) throw error
   const newest = [...days.values()].sort((x, y) => y.at - x.at)[0]
   return { days, analyzed, pictures, url: newest ? posts[newest.post]?.url : undefined }
 }

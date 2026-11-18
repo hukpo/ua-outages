@@ -1,5 +1,5 @@
 import { toSlots } from '../ai/map.js'
-import { analyzeAll, channelInputs, failIfNewestUnread } from '../ai/posts.js'
+import { analyzeAll, channelInputs, unreadDays } from '../ai/posts.js'
 import type { PostEvent } from '../ai/types.js'
 import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
@@ -16,7 +16,7 @@ import type {
   ProviderInfo,
   Street,
 } from '../types.js'
-import { gpvEvents } from './posts.js'
+import { gpvEvents, scheduleDates } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
@@ -307,7 +307,11 @@ export async function parseChannelPosts(
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const analyzed = await analyzeAll(ctx, INFO.id, channelInputs(sorted, INFO.id))
   // a post that can't be read may be the newest version of a day: its clock and text are unknown
-  failIfNewestUnread(analyzed, (a) => gpvEvents(a, INFO.id).length > 0)
+  const unread = unreadDays(
+    analyzed,
+    (a) => scheduleDates(a, INFO.id, ctx.now(), { pictures: true }),
+    ctx.now(),
+  )
   for (const { input, analysis } of analyzed) {
     if (!analysis) continue
     const posted = kyivDate(new Date(input.publishedAt))
@@ -315,13 +319,21 @@ export async function parseChannelPosts(
       const date = ev.date ?? posted
       if (date !== posted && date !== addDays(posted, 1)) continue
       clock.set(date, input.publishedAt)
-      // only the newest post about a date counts: a picture after a text post outdates the text
+      // only the newest post about a date counts: a picture after a text post outdates the text,
+      // and a correction of some groups leaves no whole day in text (the page has it)
       const days =
-        ev.action === 'cancel' ? noOutages(date) : ev.schedule.length ? textDay(ev.schedule, date) : null
+        ev.action === 'cancel'
+          ? noOutages(date)
+          : ev.action === 'start' && ev.schedule.length
+            ? textDay(ev.schedule, date)
+            : null
       if (days) text.set(date, days)
       else text.delete(date)
     }
   }
+  // a day whose newest post can't be read: neither its time nor its text is known, and an older
+  // post's must not pass for them
+  for (const [d, error] of unread) if (clock.has(d) || text.has(d) || !clock.size) throw error
   return { clock, text }
 }
 
