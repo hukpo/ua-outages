@@ -6,7 +6,7 @@ import { STANDARD_GROUPS } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo } from '../types.js'
 import { chernihivAddresses } from './chernihiv-addresses.js'
-import { readingToDay } from './image-schedule.js'
+import { hourlySchedule, readingToDay } from './image-schedule.js'
 import { readPicturePosts, type PostedPicture } from './picture-posts.js'
 import { daysToSource } from './posts.js'
 import { aiOf, type Provider, type ProviderContext } from './provider.js'
@@ -92,9 +92,9 @@ async function readSite(ctx: ProviderContext, telegram: () => Promise<ChannelRea
   )
   const date = reading.date
   // a misread date would put the schedule on the wrong day; posters are for yesterday … tomorrow
-  if (!reading.isSchedule || !date || date < addDays(today, -2) || date > addDays(today, 2))
+  if (!hourlySchedule(reading) || !date || date < addDays(today, -2) || date > addDays(today, 2))
     throw parseError(
-      reading.isSchedule
+      hourlySchedule(reading)
         ? `no current date in the header (read ${date ?? 'nothing'})`
         : 'the file is not a schedule poster',
       IMAGE,

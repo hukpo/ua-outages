@@ -4,7 +4,7 @@ import { emergencyQueues, mergeEmergency } from '../emergency/queues.js'
 import { readChannelWindow } from '../emergency/telegram.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, EmergencyQueues, GroupId, ProviderInfo } from '../types.js'
-import { readingToDay } from './image-schedule.js'
+import { hourlySchedule, readingToDay } from './image-schedule.js'
 import { readPicturePosts, type PicturePostsRead } from './picture-posts.js'
 import { daysToSource } from './posts.js'
 import {
@@ -181,10 +181,10 @@ async function readApiPicture(
     { url, bytes, caption: null, publishedAt: toKyivIso(kyivInstant(date, 0)), region: postRegion(region) },
     ctx.signal,
   )
-  if (!reading.isSchedule || (reading.date && reading.date !== date))
+  if (!hourlySchedule(reading) || (reading.date && reading.date !== date))
     throw new OutageError(
       'parse',
-      `Zakarpattia: the API's picture for ${date} ${reading.isSchedule ? `reads ${reading.date}` : 'is not a schedule'}`,
+      `Zakarpattia: the API's picture for ${date} ${hourlySchedule(reading) ? `reads ${reading.date}` : 'is not an hourly schedule'}`,
       { region, url },
     )
   return readingToDay(reading, date)

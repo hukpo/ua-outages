@@ -8,7 +8,7 @@ import type { DaySchedule, GroupId, RegionId } from '../types.js'
 import type { MinuteSlot } from '../schedule.js'
 import { mapLimit } from '../util.js'
 import { toSlots } from '../ai/map.js'
-import { readingToDay } from './image-schedule.js'
+import { hourlySchedule, readingToDay } from './image-schedule.js'
 import {
   daysOf,
   gpvEvents,
@@ -168,7 +168,7 @@ async function readPost(
     // a bare photo: is it a schedule at all? (crews, damage, infographics are most of them)
     if (!caption && !(await ai.isSchedule(region, src, ctx.signal))) continue
     const reading: ImageReading = await ai.readImage(region, src, ctx.signal)
-    if (!reading.isSchedule) continue
+    if (!hourlySchedule(reading)) continue
     const date = reading.date ?? said
     if (!date) throw fail(region, post.url, `a schedule picture with no date, on it or in its post`)
     if (reading.date && said && reading.date !== said)

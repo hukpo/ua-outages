@@ -133,3 +133,17 @@ describe('eventInstant: a day of its own, and a day named for certain', () => {
     )
   })
 })
+
+describe('hourlySchedule: a ГАВ table is not the day’s hours', () => {
+  it('takes gpv and an unnamed kind, not gav or sgav', async () => {
+    const { hourlySchedule } = await import('../../src/providers/image-schedule.js')
+    const r = (kind: 'gpv' | 'gav' | 'sgav' | null) => ({
+      isSchedule: true,
+      kind,
+      date: null,
+      statedAt: null,
+      schedule: [],
+    })
+    expect([r('gpv'), r(null), r('gav'), r('sgav')].map(hourlySchedule)).toEqual([true, true, false, false])
+  })
+})

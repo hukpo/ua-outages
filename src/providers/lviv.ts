@@ -3,7 +3,7 @@ import { analyzeAll, siteInput } from '../ai/posts.js'
 import { htmlToText } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, unpublished } from '../schedule.js'
-import { kyivDate, kyivInstant, toKyivIso } from '../time.js'
+import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
 import type { MinuteSlot } from '../schedule.js'
 import { emergencyQueues } from '../emergency/queues.js'
@@ -236,8 +236,11 @@ const STAMP = new RegExp(`^Інформація станом на ${CLOCK} ${DAT
 const SPAN = String.raw`з \d{1,2}:\d{2} до \d{1,2}:\d{2}`
 const OFF = new RegExp(`^Група ([1-6])\\.([12])\\. Електроенергії немає (${SPAN}(?:, ${SPAN})*)\\.$`)
 const ON = /^Група ([1-6])\.([12])\. Електроенергія є\.$/
+/** The whole notice, nothing after it but the stamp: "… з 15:00 ГПВ знову діють" is not this */
 const CANCEL = new RegExp(
-  `^Отримано вказівку НЕК «Укренерго» про відміну застосування ГПВ на ${DATE} до окремого розпорядження НЕК «Укренерго»\\.`,
+  `^Отримано вказівку НЕК «Укренерго» про відміну застосування ГПВ на ${DATE} до окремого розпорядження НЕК «Укренерго»\\.` +
+    `(?: У випадку нового розпорядження НЕК «Укренерго» про застосування погодинних відключень, графік буде опубліковано додатково\\.)?` +
+    `(?: Інформація станом на ${CLOCK} ${DATE})?$`,
 )
 
 export interface LvivTemplate {
@@ -262,15 +265,17 @@ export interface LvivTemplate {
  * missing, a time that doesn't exist: null (the text isn't the template). Exported for tests.
  */
 export function lvivTemplate(text: string): LvivTemplate | null {
-  const cancel = CANCEL.exec(text.trim())
+  const cancel = CANCEL.exec(text.replace(/\s+/g, ' ').trim())
   if (cancel) {
+    const date = dayOf(cancel[3]!, cancel[2]!, cancel[1]!)
+    if (!date) return null
     // "… Інформація станом на 18:32 20.11.2024" at its end
-    const at = new RegExp(`Інформація станом на ${CLOCK} ${DATE}\\s*$`).exec(text.trim())
-    const stated =
-      at && clockOk(+at[1]!, +at[2]!, false)
-        ? kyivIso(`${at[5]}-${at[4]}-${at[3]}T${at[1]!.padStart(2, '0')}:${at[2]}`)
-        : null
-    return { date: isoDate(cancel), stated, groups: {}, cancelled: true }
+    let stated: string | null = null
+    if (cancel[4] !== undefined) {
+      stated = stampOf(cancel[4], cancel[5]!, dayOf(cancel[8]!, cancel[7]!, cancel[6]!), date)
+      if (!stated) return null
+    }
+    return { date, stated, groups: {}, cancelled: true }
   }
   const lines = text
     .split('\n')
@@ -279,10 +284,9 @@ export function lvivTemplate(text: string): LvivTemplate | null {
   const head = HEAD.exec(lines[0] ?? '')
   const stamp = STAMP.exec(lines[1] ?? '')
   if (!head || !stamp) return null
-  const date = isoDate(head)
-  const stated = clockOk(+stamp[1]!, +stamp[2]!, false)
-    ? `${stamp[5]}-${stamp[4]}-${stamp[3]}T${stamp[1]!.padStart(2, '0')}:${stamp[2]}`
-    : null
+  const date = dayOf(head[3]!, head[2]!, head[1]!)
+  if (!date) return null
+  const stated = stampOf(stamp[1]!, stamp[2]!, dayOf(stamp[5]!, stamp[4]!, stamp[3]!), date)
   if (!stated) return null
   const groups: Record<GroupId, MinuteSlot[]> = {}
   for (const line of lines.slice(2)) {
@@ -304,10 +308,23 @@ export function lvivTemplate(text: string): LvivTemplate | null {
     groups[g] = slots
   }
   if (STANDARD_GROUPS.some((g) => !(g in groups))) return null
-  return { date, stated: kyivIso(stated), groups, cancelled: false }
+  return { date, stated, groups, cancelled: false }
 }
 
-const isoDate = (m: RegExpExecArray) => `${m.at(-1)}-${m.at(-2)}-${m.at(-3)}`
+/** "2026", "02", "31" → null: a day that doesn't exist */
+function dayOf(y: string, m: string, d: string): string | null {
+  const t = new Date(Date.UTC(+y, +m - 1, +d))
+  return t.getUTCFullYear() === +y && t.getUTCMonth() === +m - 1 && t.getUTCDate() === +d
+    ? `${y}-${m}-${d}`
+    : null
+}
+
+/** "Інформація станом на HH:MM DD.MM.YYYY" → ISO; null unless real and within a day of the schedule's date */
+function stampOf(h: string, min: string, day: string | null, date: string): string | null {
+  if (!day || !clockOk(+h, +min, false)) return null
+  if (day < addDays(date, -1) || day > addDays(date, 1)) return null
+  return kyivIso(`${day}T${h.padStart(2, '0')}:${min}`)
+}
 const clockOk = (h: number, m: number, end: boolean) => m < 60 && (h < 24 || (end && h === 24 && m === 0))
 /** "2026-10-17T18:56" in Kyiv → ISO with the offset */
 const kyivIso = (local: string) =>

@@ -19,6 +19,12 @@ export interface DatedDay {
   publishedAt: string | null
 }
 
+/**
+ * The picture is an hourly (ГПВ) schedule: a ГАВ or СГАВ table, even with 1.1…6.2 rows, is not
+ * the day's hours. An unnamed kind counts as hourly: these readers only get schedule pictures
+ */
+export const hourlySchedule = (r: ImageReading) => r.isSchedule && (r.kind === 'gpv' || r.kind === null)
+
 /** A checked reading → every queue's day on `date` */
 export function readingToDay(reading: ImageReading, date: string): Record<GroupId, DaySchedule> {
   const schedules: Record<GroupId, DaySchedule> = {}
@@ -56,7 +62,7 @@ export async function readDatedImages(
         { url: url(img.path), bytes, caption: null, publishedAt: at, region: info },
         ctx.signal,
       )
-      if (!reading.isSchedule) continue
+      if (!hourlySchedule(reading)) continue
       if (reading.date && reading.date !== date)
         throw new OutageError('parse', `${img.path}: the picture listed for ${date} says ${reading.date}`, {
           region,

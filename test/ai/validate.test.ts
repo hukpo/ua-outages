@@ -225,15 +225,117 @@ describe('validatePostAnalysis: a ГПВ list "станом на" starts with it
             action: 'start',
             regions: ['kirovohrad'],
             at: '21:03',
-            schedule: ['1.1 10:00-12:00'.split(' ')[0]].map((q) => ({
-              queue: q,
-              intervals: ['10:00-12:00'],
-            })),
+            schedule: [{ queue: '1.1', intervals: ['10:00-12:00'] }],
           },
         ],
       },
       input,
     )
     expect(a.events[0]!.at).toBeNull()
+  })
+})
+
+describe('validate: what an answer must not leave open', () => {
+  const post = (regions = [postRegion('zaporizhzhia')]): PostInput => ({
+    url: 'https://t.me/Zaporizhzhyaoblenergo_news/1',
+    source: { kind: 'telegram', channel: 'Zaporizhzhyaoblenergo_news' },
+    publishedAt: '2026-11-18T10:00:00+02:00',
+    edited: false,
+    title: null,
+    text: '…',
+    replyTo: null,
+    photoCount: 0,
+    regions,
+  })
+  const answer = (events: unknown[]) => ({ events, photosAreSchedules: false, statedAt: null })
+  const gpv = (queue: string) => ({
+    kind: 'gpv',
+    action: 'start',
+    regions: ['zaporizhzhia'],
+    schedule: [{ queue, intervals: ['14:00-18:00'] }],
+  })
+
+  it('a queue name naming two is refused, not read as the first', () => {
+    for (const q of ['4.1, 4.2', '4.1 та 4.2', '1.1-1.2', 'черги 2.1 і 2.2'])
+      expect(() => validatePostAnalysis(answer([gpv(q)]), post()), q).toThrow(/not one queue/)
+    for (const q of ['4.1', '4-1', 'черга 4.1', '4 черга 1 підчерга'])
+      expect(validatePostAnalysis(answer([gpv(q)]), post()).events[0]!.schedule[0]!.queue).toBe('4.1')
+  })
+
+  it('an emergency event must say how much: a bare {gav, cancel} would end everything', () => {
+    expect(() =>
+      validatePostAnalysis(answer([{ kind: 'gav', action: 'cancel', regions: ['zaporizhzhia'] }]), post()),
+    ).toThrow(/missing/)
+  })
+
+  it('a region "" is no region', () => {
+    const e = { kind: 'gav', action: 'start', regions: [''], allQueues: true, queues: [], queueCount: null }
+    expect(() => validatePostAnalysis(answer([e]), post())).toThrow(/isn't one of/)
+  })
+
+  it('more queues than an operator with a fixed set has, or a queue both off and on, is refused', () => {
+    const sumy = [postRegion('sumy')]
+    const e = (o: object) => ({
+      kind: 'gav',
+      action: 'start',
+      regions: ['sumy'],
+      allQueues: false,
+      queues: [],
+      queueCount: null,
+      ...o,
+    })
+    expect(() => validatePostAnalysis(answer([e({ queueCount: 50 })]), post(sumy))).toThrow(/more than/)
+    expect(() =>
+      validatePostAnalysis(answer([e({ queues: ['3'], queuesRestored: ['3'] })]), post(sumy)),
+    ).toThrow(/both/)
+  })
+
+  it('a change that is "again" or additive stays a change', () => {
+    const e = {
+      kind: 'gav',
+      action: 'change',
+      regions: ['zaporizhzhia'],
+      allQueues: false,
+      queues: ['1'],
+      queueCount: null,
+      again: true,
+    }
+    expect(validatePostAnalysis(answer([e]), post()).events[0]!.action).toBe('change')
+    expect(validatePostAnalysis(answer([{ ...e, again: false }]), post()).events[0]!.action).toBe('start')
+  })
+
+  it('an interval object without its kind, or off and maybe over the same minutes, is refused', () => {
+    const at = (intervals: unknown[]) => ({ ...gpv('1.1'), schedule: [{ queue: '1.1', intervals }] })
+    expect(() => validatePostAnalysis(answer([at([{ from: '08:00', to: '10:00' }])]), post())).toThrow(/kind/)
+    expect(() => validatePostAnalysis(answer([at(['08:00-12:00', '?10:00-14:00'])]), post())).toThrow(
+      /overlaps/,
+    )
+  })
+})
+
+describe('validateImageReading: a line says hours or "-", not nothing', () => {
+  const input: ImageInput = {
+    url: 'https://t.me/chernigivoblenergo/1',
+    index: 0,
+    of: 1,
+    bytes: new Uint8Array(),
+    mediaType: 'image/png',
+    width: 1,
+    height: 1,
+    caption: null,
+    publishedAt: '2026-11-16T21:00:00+02:00',
+    region: postRegion('chernihiv'),
+  }
+  const reading = (first: string) => ({
+    isSchedule: true,
+    kind: 'gpv',
+    date: '2026-11-17',
+    statedAt: null,
+    schedule: STANDARD_GROUPS.map((q, i) => (i ? `${q} -` : first)),
+  })
+  it('refuses a bare queue, hours with "-", and a head naming two queues', () => {
+    expect(() => validateImageReading(reading('1.1'), input)).toThrow(/neither/)
+    expect(() => validateImageReading(reading('1.1 08:00-12:00 -'), input)).toThrow(/hours and/)
+    expect(() => validateImageReading(reading('1.1/1.2 08:00-12:00'), input)).toThrow()
   })
 })

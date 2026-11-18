@@ -74,11 +74,16 @@ const strings = (v: unknown, what: string): string[] =>
 const KINDS: readonly EventKind[] = ['gpv', 'gav', 'sgav', 'emergency', 'other']
 const ACTIONS: readonly EventAction[] = ['start', 'cancel', 'change']
 
+/** One queue's name and nothing else: "1.1", "1-1", "1/1", "3", "1 черга 1 підчерга" */
+const ONE_QUEUE = /^(?:\d{1,2}(?:\s*[.,_/-]\s*\d{1,2})?|\d{1,2}\s*(?:черга)?\D{0,12}?\d{1,2}\s*під\S*)$/iu
+
 /** A ГПВ queue name → the region's own spelling ("1-1", "черга 1.1" → "1.1"; Chernivtsi "3") */
 function scheduleQueue(raw: string, regions: readonly PostRegion[]): string {
   const all = new Set(regions.flatMap((r) => r.queues))
   const trimmed = raw.trim().replace(/^(?:черга|підчерга|група|queue)\s*/iu, '')
   if (all.has(trimmed)) return trimmed
+  // "4.1, 4.2" or "1.1 та 1.2" names two: taking the first would leave the other "no outages"
+  if (!ONE_QUEUE.test(trimmed)) return fail(`queue "${raw}" is not one queue`)
   const g = normalizeGroup(trimmed)
   if (g && all.has(g)) return g
   return fail(`queue "${raw}" doesn't exist in ${regions.map((r) => r.id).join(', ')}`)
@@ -107,7 +112,7 @@ const SPAN = /^(\?)?\s*(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})$/
  * outage), as the schema asks, or {from, to, kind}, as prompts before p9 did
  */
 function intervals(v: unknown, what: string): ClockInterval[] {
-  return arr(v, what).map((x, i) => {
+  const list = arr(v, what).map((x, i): ClockInterval => {
     let o: Record<string, unknown>
     if (typeof x === 'string') {
       const m = SPAN.exec(x.trim())
@@ -117,10 +122,21 @@ function intervals(v: unknown, what: string): ClockInterval[] {
     const from = clockMinutes(o.from)
     const to = clockMinutes(o.to, true)
     if (from >= to) fail(`${what}[${i}]: ${o.from}–${o.to} doesn't go forward`)
-    const kind = o.kind ?? 'off'
+    const kind = o.kind
     if (kind !== 'off' && kind !== 'maybe') return fail(`${what}[${i}]: kind "${String(kind)}"`)
     return { from: clock(from), to: clock(to), kind }
   })
+  // an outage and a possible one over the same minutes: which one is meant can't be told
+  for (const a of list)
+    for (const b of list)
+      if (
+        a.kind === 'off' &&
+        b.kind === 'maybe' &&
+        clockMinutes(a.from) < clockMinutes(b.to, true) &&
+        clockMinutes(b.from) < clockMinutes(a.to, true)
+      )
+        fail(`${what}: ${a.from}-${a.to} off overlaps ${b.from}-${b.to} maybe`)
+  return list
 }
 
 function event(v: unknown, i: number, input: PostInput, postDay: string): PostEvent | null {
@@ -139,8 +155,8 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
   if (!regions.length && ids.length === 1) regions = [...ids]
   // a shared channel's post about none of its regions (a national post naming other oblasts)
   if (!regions.length) return null
-  const unknown = regions.find((r) => !ids.includes(r))
-  if (unknown) fail(`${w}.regions: "${unknown}" isn't one of ${ids.join(', ')}`)
+  const unknown = regions.findIndex((r) => !ids.includes(r))
+  if (unknown >= 0) fail(`${w}.regions: "${regions[unknown]}" isn't one of ${ids.join(', ')}`)
   regions = [...new Set(regions)]
   const scope = input.regions.filter((r) => regions.includes(r.id))
 
@@ -158,6 +174,10 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
         : fail(`${w}.queueCount ${JSON.stringify(o.queueCount)}`)
 
   const emergency = kind !== 'gpv'
+  // how much is affected must be said, not left out: a cancel with none of these would end all
+  if (emergency)
+    for (const f of ['allQueues', 'queues', 'queueCount'] as const)
+      if (!(f in o)) fail(`${w}.${f} missing for ${kind}`)
   const queues = emergency ? emergencyQueueList(strings(o.queues, `${w}.queues`), scope, `${w}.queues`) : []
   const queuesRestored = emergency
     ? emergencyQueueList(strings(o.queuesRestored, `${w}.queuesRestored`), scope, `${w}.queuesRestored`)
@@ -187,7 +207,15 @@ function event(v: unknown, i: number, input: PostInput, postDay: string): PostEv
 
   // "9,10,1,2 знеструмлюємо; 3-6 будуть заживлені" read as a change or as a start with those
   // queues: the state machine adds the queues and drops the restored ones either way
-  const effective: EventAction = emergency && action === 'change' && queues.length ? 'start' : action
+  const additiveRaw = o.additive === true
+  const againRaw = o.again === true
+  const effective: EventAction =
+    emergency && action === 'change' && queues.length && !additiveRaw && !againRaw ? 'start' : action
+  const both = queues.find((q) => queuesRestored.includes(q))
+  if (both) fail(`${w}: queue ${both} both off and restored`)
+  const fixed = scope.find((r) => r.emergencyQueues.length)?.emergencyQueues.length
+  if (emergency && fixed && queueCount !== null && queueCount > fixed)
+    fail(`${w}.queueCount ${queueCount} is more than the ${fixed} queues there are`)
   const allQueues = emergency ? bool(o.allQueues ?? false, `${w}.allQueues`) : false
   const additive = bool(o.additive ?? false, `${w}.additive`)
   const again = bool(o.again ?? false, `${w}.again`)
@@ -260,6 +288,9 @@ export function validateImageReading(raw: unknown, input: ImageInput): ImageRead
           .trim()
           .replace(/\?\s+/g, '?')
           .split(/[\s,]+/)
+        // "1.1 -" is no outages; a bare "1.1", or "-" among spans, says nothing certain
+        if (!spans.length) fail(`schedule[${j}]: "${x}" gives neither hours nor "-"`)
+        if (spans.includes('-') && spans.length > 1) fail(`schedule[${j}]: "${x}" has hours and "-"`)
         e = { queue: head.replace(/:$/, ''), intervals: spans.filter((s) => s !== '-') }
       } else e = obj(x, `schedule[${j}]`)
       const queue = scheduleQueue(str(e.queue, `schedule[${j}].queue`), [input.region])

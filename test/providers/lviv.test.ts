@@ -3,7 +3,7 @@ import type { ImageProcessor, PostInput, TextProcessor } from '../../src/ai/type
 import { OutageClient } from '../../src/client.js'
 import { assessFreshness } from '../../src/freshness.js'
 import type { FetchLike } from '../../src/http.js'
-import { lvivProvider } from '../../src/providers/lviv.js'
+import { lvivProvider, lvivTemplate } from '../../src/providers/lviv.js'
 import { STANDARD_GROUPS } from '../../src/schedule.js'
 import {
   ev,
@@ -342,5 +342,16 @@ describe('Lvivoblenergo', () => {
       'lviv',
     )
     expect(month.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-10-17'])
+  })
+})
+
+describe('lvivTemplate: only the template', () => {
+  it('a cancellation with more after it, or a day that does not exist, is not the template', () => {
+    const notice =
+      'Отримано вказівку НЕК «Укренерго» про відміну застосування ГПВ на 18.11.2026 до окремого розпорядження НЕК «Укренерго».'
+    expect(lvivTemplate(notice)).toMatchObject({ cancelled: true, date: '2026-11-18' })
+    expect(lvivTemplate(`${notice} Оновлення: з 15:00 ГПВ знову діють.`)).toBeNull()
+    expect(lvivTemplate(notice.replace('18.11.2026', '31.02.2026'))).toBeNull()
+    expect(lvivTemplate(`${notice}\nІнформація станом на 18:56 99.99.2026`)).toBeNull()
   })
 })
