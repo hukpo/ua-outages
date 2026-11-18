@@ -278,12 +278,12 @@ Many operators publish for people, not programs: a Telegram post "ГПВ на 17
 
 Ready-made processors, each a separate entry point on structured outputs (JSON schemas). The libraries are optional peer dependencies: install the one you use. The SDK holds no key: you pass your own client or model.
 
-| entry point              | for                                                                                     | peer dependency     |
-| ------------------------ | --------------------------------------------------------------------------------------- | ------------------- |
-| `ua-outages/openai`      | OpenAI's Responses API                                                                  | `openai`            |
-| `ua-outages/anthropic`   | Anthropic's Messages API                                                                | `@anthropic-ai/sdk` |
-| `ua-outages/ai-sdk`      | any model of the Vercel AI SDK: OpenAI, Anthropic, Google, Mistral, Ollama, AI Gateway… | `ai` (7+)           |
-| `ua-outages/tanstack-ai` | any text adapter of TanStack AI: OpenAI, Anthropic, Gemini, Ollama…                     | `@tanstack/ai`      |
+| entry point              | for                                                                                     | peer dependency              |
+| ------------------------ | --------------------------------------------------------------------------------------- | ---------------------------- |
+| `ua-outages/openai`      | OpenAI's Responses API                                                                  | `openai`                     |
+| `ua-outages/anthropic`   | Anthropic's Messages API                                                                | `@anthropic-ai/sdk`          |
+| `ua-outages/ai-sdk`      | any model of the Vercel AI SDK: OpenAI, Anthropic, Google, Mistral, Ollama, AI Gateway… | `ai` (7+; it needs Node 22+) |
+| `ua-outages/tanstack-ai` | any text adapter of TanStack AI: OpenAI, Anthropic, Gemini, Ollama…                     | `@tanstack/ai`               |
 
 ```ts
 import OpenAI from 'openai'
