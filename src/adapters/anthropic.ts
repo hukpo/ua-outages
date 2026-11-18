@@ -94,6 +94,7 @@ async function ask(
         (res.usage.cache_creation_input_tokens ?? 0),
       cachedInputTokens: res.usage.cache_read_input_tokens ?? 0,
       outputTokens: res.usage.output_tokens,
+      ...(res.usage.service_tier ? { tier: res.usage.service_tier } : {}),
     },
   }
 }
@@ -129,7 +130,8 @@ export function anthropicImageProcessor(o: AnthropicImageProcessorOptions): Imag
       : {
           isSchedule: (input: ImageInput, call: CallOptions) =>
             ask(
-              { ...o, effort: 'low', maxTokens: 2000 },
+              // a cheap call: few tokens; `effort` only as the caller set it (older models refuse it)
+              { ...o, maxTokens: 2000 },
               IMAGE_CHECK_SYSTEM,
               IMAGE_CHECK_SCHEMA,
               [

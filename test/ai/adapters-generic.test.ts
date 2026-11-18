@@ -177,3 +177,37 @@ describe('processor ids carry the settings that change answers', () => {
     expect(aiSdkTextProcessor({ model: m }).id).toBe(a.id)
   })
 })
+
+describe('vendor errors, wherever the SDK puts the status', () => {
+  it("AI SDK's RetryError and TanStack's wrapped cause keep their HTTP status; a 400 on the input is parse", async () => {
+    const { vendorError } = await import('../../src/adapters/common.js')
+    expect(vendorError('x', { name: 'AI_RetryError', lastError: { statusCode: 429 } })).toMatchObject({
+      code: 'http',
+      details: { status: 429 },
+    })
+    expect(vendorError('x', new Error('overloaded', { cause: { status: 529 } }))).toMatchObject({
+      code: 'http',
+    })
+    expect(vendorError('x', Object.assign(new Error('image too large'), { status: 413 }))).toMatchObject({
+      code: 'parse',
+    })
+    expect(vendorError('x', Object.assign(new Error('bad key'), { status: 401 }))).toMatchObject({
+      code: 'http',
+    })
+  })
+
+  it('TanStack: a caller gone before the call sends nothing', async () => {
+    chatCalls.length = 0
+    const ctrl = new AbortController()
+    ctrl.abort(new Error('gone'))
+    await expect(
+      tanstackTextProcessor({ adapter: { kind: 'text', name: 'openai', model: 'm' } as never }).analyzePost(
+        post,
+        {
+          signal: ctrl.signal,
+        },
+      ),
+    ).rejects.toThrow('gone')
+    expect(chatCalls).toHaveLength(0)
+  })
+})

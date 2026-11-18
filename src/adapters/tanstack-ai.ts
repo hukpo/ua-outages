@@ -72,6 +72,8 @@ async function ask(
   url: string,
   call: CallOptions,
 ): Promise<ProcessorResult> {
+  // a caller gone before the call: nothing is sent (an abort listener added now would never fire)
+  call.signal?.throwIfAborted()
   // chat() takes a controller: one of our own, aborted with the caller's signal
   const abortController = new AbortController()
   const onAbort = () => abortController.abort(call.signal?.reason)
@@ -103,9 +105,11 @@ async function ask(
   } catch (e) {
     // an answer that isn't JSON in the schema (chat() attaches the model's `rawText`, or finds no
     // result): unusable, not an API failure
-    const err = e as { rawText?: unknown; message?: string }
+    if (call.signal?.aborted) throw call.signal.reason
+    const err = e as { rawText?: unknown; message?: string; code?: unknown }
     if (
       e instanceof SyntaxError ||
+      err?.code === 'structured-output-parse-failed' ||
       err?.rawText !== undefined ||
       /structured output finalization produced no result/.test(err?.message ?? '')
     )

@@ -116,3 +116,26 @@ describe('downscale and encodePng', () => {
     expect(jpegSize(bytes)).toEqual({ width: img.width, height: img.height })
   })
 })
+
+describe('compactImage: review fixes', () => {
+  it('a thin picture over the long edge keeps its pixels, up to 2400 px, not scaled down then up', () => {
+    const wide = encodePng(flat(1280, 336, [200, 200, 200]))
+    expect(compactImage(wide, { maxLongEdge: 1000, minShortEdge: 400, trim: false })).toMatchObject({
+      width: 1280,
+      height: 336,
+    })
+    const huge = encodePng(flat(3000, 300, [200, 200, 200]))
+    expect(compactImage(huge, { maxLongEdge: 1000, minShortEdge: 400, trim: false })).toMatchObject({
+      width: 2400,
+      height: 240,
+    })
+  })
+
+  it('trims by what is drawn: an opaque block on transparent black is kept whole', () => {
+    const img = { width: 400, height: 400, data: new Uint8Array(400 * 400 * 4) }
+    for (let y = 30; y < 370; y++)
+      for (let x = 30; x < 370; x++) img.data.set([0, 0, 0, 255], (y * 400 + x) * 4)
+    const t = trimMargins(img)
+    expect(t.width).toBeGreaterThanOrEqual(340)
+  })
+})

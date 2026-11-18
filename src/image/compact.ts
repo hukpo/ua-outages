@@ -37,6 +37,9 @@ export interface CompactImage {
   compacted: boolean
 }
 
+/** The longest a thin picture is sent, px (Zakarpattia's 800×210 goes as 2400×630) */
+const THIN_LONG_EDGE = 2400
+
 export function compactImage(bytes: Uint8Array, opts: CompactOptions): CompactImage {
   const jpeg = isJpeg(bytes)
   if (!jpeg && !isPng(bytes)) throw new Error('not a PNG or JPEG picture')
@@ -51,7 +54,12 @@ export function compactImage(bytes: Uint8Array, opts: CompactOptions): CompactIm
   }
   const original = { width: img.width, height: img.height, bytes: bytes.length }
   const trimmed = opts.trim === false ? img : trimMargins(img)
-  const scaled = upscale(downscale(trimmed, opts.maxLongEdge), opts.minShortEdge ?? 0)
+  // a thin picture (a wide grid) isn't scaled down to the long edge only to be blown up again:
+  // it keeps its own pixels up to 2400 px, and is blown up from them when small
+  const thin = !!opts.minShortEdge && Math.min(trimmed.width, trimmed.height) < opts.minShortEdge
+  const scaled = thin
+    ? upscale(downscale(trimmed, THIN_LONG_EDGE), opts.minShortEdge!, THIN_LONG_EDGE)
+    : downscale(trimmed, opts.maxLongEdge)
   if (scaled === img && jpeg) return { ...asIs(bytes, 'image/jpeg', original), compacted: false }
   const out = encodePng(scaled)
   // the source was already smaller than the re-encoded copy, and nothing was cut or scaled
@@ -105,8 +113,12 @@ export function jpegSize(bytes: Uint8Array): { width: number; height: number } |
 }
 
 const TOLERANCE = 24
+/** A pixel's channel as drawn on white, which is how the encoder flattens transparency */
+const shown = (d: Uint8Array, p: number, ch: number) =>
+  (d[p + ch]! * d[p + 3]! + 255 * (255 - d[p + 3]!)) / 255
 const close = (d: Uint8Array, p: number, c: readonly number[]) =>
-  Math.abs(d[p]! - c[0]!) + Math.abs(d[p + 1]! - c[1]!) + Math.abs(d[p + 2]! - c[2]!) <= TOLERANCE
+  Math.abs(shown(d, p, 0) - c[0]!) + Math.abs(shown(d, p, 1) - c[1]!) + Math.abs(shown(d, p, 2) - c[2]!) <=
+  TOLERANCE
 
 /**
  * Cuts rows and columns of the border's flat colour off each side, keeping a 2% pad. A side is
@@ -116,7 +128,7 @@ const close = (d: Uint8Array, p: number, c: readonly number[]) =>
 export function trimMargins(img: RgbaImage): RgbaImage {
   const { width: w, height: h, data: d } = img
   if (w < 32 || h < 32) return img
-  const c = [d[0]!, d[1]!, d[2]!]
+  const c = [shown(d, 0, 0), shown(d, 0, 1), shown(d, 0, 2)]
   const rowFlat = (y: number) => {
     let off = 0
     for (let x = 0; x < w; x++) if (!close(d, (y * w + x) * 4, c)) off++
