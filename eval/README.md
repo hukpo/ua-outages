@@ -1,6 +1,8 @@
 # AI processor eval set
 
-## Results (18.11.2026, prompts p7–p15)
+## Results (18.11.2026, prompts p7–p17)
+
+**p17, after the review fixes**: GPT-6.1 Terra 150/150 text and 76/76 pictures (1000 px, thin ×3), recorded in `test/fixtures/ai/codex-cli-gpt-6.1-terra*`. Zakarpattia 10934 relabelled: a repost of Ukrenergo 5608 ("лише у Харківській" ends ГАВ for the rest).
 
 `npm run eval -- --backend <claude-cli|codex-cli|anthropic|openai|replay> --model <id> [--sample 150] [--long-edge 600,800] [--min-short-edge 400] [--effort high]`.
 The CLI backends run the models through `claude -p` / `codex exec` (no API key; slower). Text on
