@@ -1,7 +1,6 @@
 import { emergencyQueues } from '../emergency/queues.js'
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
-import { cellsToIntervals, compareGroups, normalizeGroup, unpublished } from '../schedule.js'
+import { cellsToIntervals, compareGroups, normalizeGroup, unpublished, STANDARD_GROUPS } from '../schedule.js'
 import { kyivInstant, toKyivIso } from '../time.js'
 import type {
   City,

@@ -1,0 +1,122 @@
+{
+  "input": {
+    "url": "https://t.me/chernigivoblenergo/5583",
+    "source": {
+      "kind": "telegram",
+      "channel": "chernigivoblenergo"
+    },
+    "publishedAt": "2026-10-23T13:14:59+03:00",
+    "edited": true,
+    "title": null,
+    "text": "📊 За вказівкою НЕК \"Укренерго\", на Чернгівщині відмінено дію Графіка аварійних відключень (ГАВ). Однак тепер маємо зміни у Графіку погодинних відключень (ГПВ).\n\n🕗 З 13:00 відключилися черги 2/1 і 2/2.\n🕗 До 17:00 продовжаться відключення для черг 1/1 і 1/2.\n\n⚠️ Якщо ситуація в енергосистемі змінюватиметься, графік коригуватиметься, тож просимо слідкувати за нашими офіційними ресурсами.\n\n☝️ Нагадуємо, що перевірити інформацію щодо черг відключень ГПВ та свій особистий графік за номером особового рахунку можна:\n🔸на нашому сайті – https://chernihivoblenergo.com.ua/blackouts\n🔸у Viber-боті – https://chernihivoblenergo.com.ua/in_viber\n🔸у Telegram-боті – tg://resolve?domain=ChernigivOEbot.\n\n🙏 Як і раніше, дуже просимо усіх бути максимально ощадливими! Особливо це стосується тих споживачів, які приєднані до ліній з критичною інфраструктурою.",
+    "replyTo": null,
+    "photoCount": 1,
+    "regions": [
+      {
+        "id": "chernihiv",
+        "name": "Чернігівська область",
+        "queues": [
+          "1.1",
+          "1.2",
+          "2.1",
+          "2.2",
+          "3.1",
+          "3.2",
+          "4.1",
+          "4.2",
+          "5.1",
+          "5.2",
+          "6.1",
+          "6.2"
+        ],
+        "emergencyQueues": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "events": [
+      {
+        "kind": "gav",
+        "action": "cancel",
+        "regions": [
+          "chernihiv"
+        ],
+        "area": null,
+        "date": null,
+        "at": null,
+        "until": null,
+        "allQueues": false,
+        "queues": [],
+        "queuesRestored": [],
+        "queueCount": null,
+        "additive": false,
+        "again": false,
+        "gpvApplies": true,
+        "addedInEdit": false,
+        "untilFurtherNotice": false,
+        "schedule": []
+      },
+      {
+        "kind": "gpv",
+        "action": "change",
+        "regions": [
+          "chernihiv"
+        ],
+        "area": null,
+        "date": null,
+        "at": "13:00",
+        "until": null,
+        "allQueues": false,
+        "queues": [],
+        "queuesRestored": [],
+        "queueCount": null,
+        "additive": false,
+        "again": false,
+        "gpvApplies": null,
+        "addedInEdit": false,
+        "untilFurtherNotice": false,
+        "schedule": [
+          {
+            "queue": "1.1",
+            "intervals": null
+          },
+          {
+            "queue": "1.2",
+            "intervals": null
+          },
+          {
+            "queue": "2.1",
+            "intervals": null
+          },
+          {
+            "queue": "2.2",
+            "intervals": null
+          }
+        ]
+      }
+    ],
+    "photosAreSchedules": false,
+    "statedAt": null
+  },
+  "tags": [
+    "regression",
+    "gav",
+    "cancel",
+    "gpv",
+    "edit",
+    "tricky"
+  ],
+  "note": "\"відмінено дію ГАВ (typo Чернгівщині). Однак тепер маємо зміни у ГПВ. З 13:00 відключилися черги 2/1 і 2/2. До 17:00 продовжаться відключення для черг 1/1 і 1/2.\" Queues written \"2/1\" → \"2.1\". Only one end of each interval is given, so intervals null. Unsure about gpvApplies true (implied by \"зміни у ГПВ\") and about at for the gpv change. [p13: a gpv change's \"at\" is the earliest time it gives for queues going off]",
+  "uncertain": true
+}

@@ -1,0 +1,103 @@
+{
+ "input": {
+  "url": "https://t.me/Zaporizhzhyaoblenergo_news/3628",
+  "source": {
+   "kind": "telegram",
+   "channel": "Zaporizhzhyaoblenergo_news"
+  },
+  "publishedAt": "2026-11-17T19:43:23+02:00",
+  "edited": false,
+  "title": null,
+  "text": "За вказівкою НЕК «Укренерго» спеціальні графіки аварійних відключень (СГАВ) та графіки аварійних відключень (ГАВ) по Запорізькій області скасовані у повному обсязі. Продовжують діяти графіки погодинних відключень (ГПВ).",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "zaporizhzhia",
+    "name": "Запорізька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav",
+  "sgav",
+  "cancel",
+  "tricky"
+ ],
+ "note": "Required case: «СГАВ та ГАВ … скасовані у повному обсязі. Продовжують діяти ГПВ» → two cancels, allQueues, gpvApplies true, at null; no gpv event.",
+ "uncertain": false
+}

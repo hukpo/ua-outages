@@ -1,0 +1,146 @@
+{
+ "input": {
+  "url": "https://t.me/dtek_ua/4803",
+  "source": {
+   "kind": "telegram",
+   "channel": "dtek_ua"
+  },
+  "publishedAt": "2026-11-06T21:48:10+02:00",
+  "edited": true,
+  "title": null,
+  "text": "‼️Одещина: графіки відключень на 7 листопада\n\n▪️У разі змін повідомимо в нашому Telegram-каналі.\n\n‼️Підписуйтеся та поділіться каналом із рідними й друзями.",
+  "replyTo": null,
+  "photoCount": 2,
+  "regions": [
+   {
+    "id": "kyiv",
+    "name": "м. Київ",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "kyiv-region",
+    "name": "Київська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "dnipro",
+    "name": "Дніпропетровська область (ДТЕК Дніпровські електромережі)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "odesa",
+    "name": "Одеська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "donetsk",
+    "name": "Донецька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "odesa"
+    ],
+    "area": null,
+    "date": "2026-11-07",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "edit",
+  "album"
+ ],
+ "note": "Одещина schedule for tomorrow in the album; edited but no added line",
+ "uncertain": false
+}

@@ -1,6 +1,6 @@
 import { OutageError } from '../errors.js'
 import type { RequestOptions } from '../http.js'
-import { normalizeGroup } from '../schedule.js'
+import { normalizeGroup, STANDARD_GROUPS } from '../schedule.js'
 import { houseKey } from '../text.js'
 import { kyivInstant, toKyivIso } from '../time.js'
 import type {
@@ -28,7 +28,7 @@ import { sharedList, type Provider, type ProviderContext } from './provider.js'
  */
 
 /** Groups of the national scheme, "1.1" … "6.2". */
-export const STANDARD_GROUPS: readonly GroupId[] = [1, 2, 3, 4, 5, 6].flatMap((q) => [`${q}.1`, `${q}.2`])
+export { STANDARD_GROUPS }
 
 /**
  * Items of an API Platform collection. Depending on the endpoint, the CDN cache and the

@@ -1,0 +1,84 @@
+{
+ "input": {
+  "url": "https://t.me/prykarpattyaoblenergo_official/3081",
+  "source": {
+   "kind": "telegram",
+   "channel": "prykarpattyaoblenergo_official"
+  },
+  "publishedAt": "2025-10-16T19:08:43+03:00",
+  "edited": false,
+  "title": null,
+  "text": "Оновлення інформації від НЕК «Укренерго»:\n\nОкрім 7 черги ГАВ, додатково для споживачів буде введена 8 черга графіків аварійних вимкнень до окремої вказівки про скасування📌",
+  "replyTo": null,
+  "photoCount": 2,
+  "regions": [
+   {
+    "id": "ivano-frankivsk",
+    "name": "Івано-Франківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "ivano-frankivsk"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "8"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "album",
+  "tricky"
+ ],
+ "note": "\"Окрім 7 черги ГАВ, додатково … буде введена 8 черга … до окремої вказівки про скасування\" — not a cancel. Photos: ГАВ settlement tables (no hours) → false, unsure.",
+ "uncertain": true
+}

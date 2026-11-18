@@ -1,6 +1,5 @@
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
-import { normalizeGroup, unpublished } from '../schedule.js'
+import { normalizeGroup, unpublished, STANDARD_GROUPS } from '../schedule.js'
 import type {
   AddressQuery,
   City,

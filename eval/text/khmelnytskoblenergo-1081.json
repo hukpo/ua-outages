@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/khmelnytskoblenergo/1081",
+  "source": {
+   "kind": "telegram",
+   "channel": "khmelnytskoblenergo"
+  },
+  "publishedAt": "2026-01-22T16:03:30+02:00",
+  "edited": false,
+  "title": null,
+  "text": "❗️ Увага! Повторно введено Спеціальний графік аварійних відключень\n\nЗа розпорядженням НЕК «Укренерго» на Хмельниччині сьогодні, 22.01.2026 повторно запроваджено спеціальний графік аварійних відключень (СГАВ).\n\nНагадуємо особливості СГАВ:\n• дія графіка може вплинути на критичну інфраструктуру.\n• запроваджується за вказівкою диспетчера НЕК «Укренерго» у разі критичної ситуації в енергосистемі.\n• час на запровадження обмеження – 3 хвилини.\n• визначено час введення обмеження, спрогнозувати час завершення обмеження та заздалегідь попередити про застосування – не можливо.\n\nПричина запровадження обмежень – виключно наслідки російських атак на енергетичну інфраструктуру та як наслідок критична ситуація в енергосистемі.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "khmelnytskyi",
+    "name": "Хмельницька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "khmelnytskyi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": true,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "sgav"
+ ],
+ "note": "\"повторно запроваджено СГАВ\" → again; the bullet list is an explainer.",
+ "uncertain": false
+}

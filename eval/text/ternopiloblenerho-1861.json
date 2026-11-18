@@ -1,0 +1,79 @@
+{
+ "input": {
+  "url": "https://t.me/ternopiloblenerho/1861",
+  "source": {
+   "kind": "telegram",
+   "channel": "ternopiloblenerho"
+  },
+  "publishedAt": "2026-10-17T18:11:33+03:00",
+  "edited": false,
+  "title": null,
+  "text": "‼️Оновлена інформація щодо ГПВ\n\n⏰Згідно вказівки НЕК \"Укренерго\" 17.10.2026 змінено кількість черг, які підлягають відключенню.\n\n👉Переглянути актуальний графік погодинних відключень та дізнатися до якої підчерги належить ваша адреса можна на офіційному сайті АТ «ТЕРНОПІЛЬОБЛЕНЕРГО» у розділі «Графік погодинних відключень» або за посиланням: https://poweron.toe.com.ua\n\n❗️Повідомляємо, що графік протягом доби може змінюватися. Просимо слідкувати за оновленнями на нашому офіційному сайті.\n\n🇺🇦Дякуємо споживачам за розуміння ситуації та раціональне використання електроенергії!",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "ternopil",
+    "name": "Тернопільська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "ternopil"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv"
+ ],
+ "note": "\"Оновлена інформація щодо ГПВ … 17.10.2026 змінено кількість черг\": gpv change, no hours in text; photo is an \"ОНОВЛЕНО!\" banner. [p2: gpv start = schedule for a day, new or updated; change = correction to some queues]",
+ "uncertain": false
+}

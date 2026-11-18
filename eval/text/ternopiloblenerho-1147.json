@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/ternopiloblenerho/1147",
+  "source": {
+   "kind": "telegram",
+   "channel": "ternopiloblenerho"
+  },
+  "publishedAt": "2025-10-16T19:11:21+03:00",
+  "edited": false,
+  "title": null,
+  "text": "Оновлена інформація❗️\n\nЗа розпорядженням НЕК \"Укренерго\" 16 жовтня з 18.59 додатково введена ще одна черга графіків аварійних відключень (ГАВ).",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "ternopil",
+    "name": "Тернопільська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "ternopil"
+    ],
+    "area": null,
+    "date": null,
+    "at": "18:59",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": 1,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav"
+ ],
+ "note": "\"16 жовтня з 18.59 додатково введена ще одна черга ГАВ\".",
+ "uncertain": false
+}

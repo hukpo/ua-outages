@@ -1,0 +1,112 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4393",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-14T20:35:49+02:00",
+  "edited": false,
+  "title": null,
+  "text": "📢 Шановні мешканці м. ПАВЛОГРАД‼️\n\nГПВ на 15 ЛИСТОПАДА для споживачів міста, які тимчасово вимикаються за окремим графіком:\n📌 1 черга:\n✔️ 00:00 - 03:00;\n✔️ 08:00 - 13:00;\n✔️ 18:00 - 23:00.\n\n📌 2 черга:\n✔️ 03:00 - 08:00;\n✔️ 13:00 - 18:00;\n✔️ 23:00 - 24:00.\n\nДякуємо за розуміння та вибачаємося за тимчасові незручності‼️",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. ПАВЛОГРАД",
+    "date": "2026-11-15",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       {
+        "from": "00:00",
+        "to": "03:00",
+        "kind": "off"
+       },
+       {
+        "from": "08:00",
+        "to": "13:00",
+        "kind": "off"
+       },
+       {
+        "from": "18:00",
+        "to": "23:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       {
+        "from": "03:00",
+        "to": "08:00",
+        "kind": "off"
+       },
+       {
+        "from": "13:00",
+        "to": "18:00",
+        "kind": "off"
+       },
+       {
+        "from": "23:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gpv",
+  "gpv-schedule",
+  "tricky"
+ ],
+ "note": "Павлоград's separate two-queue ГПВ for 15 Nov (posted 14 Nov). Queues \"1\"/\"2\" are the city's own names, not in the region's 1.1…6.2 list — the SDK validator would reject them; how it should be handled is open.",
+ "uncertain": true
+}

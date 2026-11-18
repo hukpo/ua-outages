@@ -1,0 +1,85 @@
+{
+ "input": {
+  "url": "https://t.me/prykarpattyaoblenergo_official/3078",
+  "source": {
+   "kind": "telegram",
+   "channel": "prykarpattyaoblenergo_official"
+  },
+  "publishedAt": "2025-10-16T18:39:19+03:00",
+  "edited": false,
+  "title": null,
+  "text": "Введені 2 черги аварійних вимкнень 💡\n\nЗа вказівкою НЕК «Укренерго», сьогодні з 18:30 введені дві черги ГАВ – пʼята та шоста.\n\nЗауважте! Оскільки вимкнення аварійні, попередити заздалегідь, як і знати їхню тривалість, неможливо❗️\nТож вся оперативна інформація появляється в нас у Telegram- і Viber-каналах.\n\n📌Ознайомитися з ГАВ можна на головній сторінці сайту – Графіки вимкнень – Графіки аварійних вимкнень або за посиланням https://oe.if.ua/uk/sections/5e9f1c5fdb9c42704449b999#6357cca0db9c423b261eb7a3.",
+  "replyTo": null,
+  "photoCount": 2,
+  "regions": [
+   {
+    "id": "ivano-frankivsk",
+    "name": "Івано-Франківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "ivano-frankivsk"
+    ],
+    "area": null,
+    "date": null,
+    "at": "18:30",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "5",
+     "6"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "album",
+  "tricky"
+ ],
+ "note": "\"сьогодні з 18:30 введені дві черги ГАВ – пʼята та шоста\" (ordinal words). Photos are ГАВ tables of settlements per queue without hours: labelled photosAreSchedules false — not sure that is wanted.",
+ "uncertain": true
+}

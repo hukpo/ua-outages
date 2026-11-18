@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/client.js'
 import { assessFreshness } from '../../src/freshness.js'
+import type { PostAnalysis, PostEvent, PostInput, TextProcessor } from '../../src/ai/types.js'
 import {
   announcements,
   khmelnytskyiProvider,
   newsLinks,
   parseEmergencyQueues,
   parseQueues,
-  textSchedules,
 } from '../../src/providers/khmelnytskyi.js'
 import type { DaySchedule } from '../../src/types.js'
-import { expectUnpublished, fixture, mockFetch, type Route } from '../helpers.js'
+import { ev, expectUnpublished, fakeText, fixture, intervalsOf, mockFetch, type Route } from '../helpers.js'
 
 const SITE = 'https://hoe.com.ua'
 
@@ -93,6 +93,160 @@ describe('Khmelnytskoblenergo', () => {
   })
 })
 
+/** "1.1 10:00-14:00, 20:00-24:00" lines → a gpv start */
+const day = (date: string, lines: string, extra: Partial<PostEvent> = {}): PostEvent =>
+  ev({
+    kind: 'gpv',
+    action: 'start',
+    regions: ['khmelnytskyi'],
+    date,
+    schedule: lines
+      .trim()
+      .split('\n')
+      .map((l) => {
+        const [queue, hours] = l.trim().split(/ (.*)/) as [string, string]
+        return { queue, intervals: intervalsOf(hours) }
+      }),
+    ...extra,
+  })
+
+// What a correct model answers, transcribed from the fixtures; the page, the news posts and the
+// channel carry the same blocks
+const NOV14 = `
+  1.1 06:00-10:00, 17:00-20:00
+  1.2 06:00-10:00, 17:00-20:00
+  2.1 06:00-10:00, 17:00-20:00
+  2.2 17:00-20:00
+  3.1 10:00-13:00, 20:00-22:00
+  3.2 10:00-13:00
+  4.1 10:00-13:00, 20:00-22:00
+  4.2 20:00-24:00
+  5.1 13:00-17:00, 22:00-24:00
+  5.2 13:00-17:00, 22:00-24:00
+  6.1 13:00-17:00
+  6.2 14:00-17:00, 20:00-22:00`
+const NOV15 = `
+  1.1 19:00-22:00
+  1.2 19:00-22:00
+  3.2 16:00-19:00
+  4.1 16:00-19:00
+  4.2 16:00-19:00
+  5.2 19:00-22:00
+  6.1 22:00-24:00
+  6.2 22:00-24:00`
+const NOV15_1600 = `
+  1.1 19:00-22:00
+  1.2 19:00-22:00
+  3.1 17:00-19:00
+  3.2 17:00-19:00
+  4.1 17:00-19:00
+  4.2 17:00-19:00
+  5.1 19:00-22:00
+  5.2 19:00-22:00
+  6.1 22:00-24:00
+  6.2 22:00-24:00`
+const NOV15_1730 = `
+  1.1 19:00-22:00
+  1.2 19:00-22:00
+  2.1 19:00-22:00
+  2.2 19:00-22:00
+  3.1 17:00-19:00, 22:00-24:00
+  3.2 17:00-19:00, 22:00-24:00
+  4.1 17:00-19:00, 22:00-24:00
+  4.2 17:00-19:00, 22:00-24:00
+  5.1 19:00-22:00
+  5.2 19:00-22:00
+  6.1 17:30-19:00, 22:00-24:00
+  6.2 17:30-19:00, 22:00-24:00`
+const NOV16 = `
+  1.1 10:00-14:00, 20:00-24:00
+  1.2 10:00-14:00, 18:00-22:00
+  2.1 14:00-18:00, 22:00-24:00
+  2.2 10:00-14:00, 21:00-24:00
+  3.1 14:00-18:00
+  3.2 18:00-22:00
+  4.1 14:00-18:00
+  4.2 14:00-18:00
+  5.1 06:00-10:00, 16:00-20:00
+  5.2 06:00-10:00, 18:00-21:00
+  6.1 06:00-10:00
+  6.2 18:00-22:00`
+const NOV16_2300 = `
+  1.1 10:00-14:00, 20:00-24:00
+  1.2 10:00-14:00, 18:00-22:00
+  2.1 03:00-06:00, 14:00-18:00, 22:00-24:00
+  2.2 10:00-14:00, 21:00-24:00
+  3.1 01:00-03:00, 14:00-18:00
+  3.2 01:00-03:00, 18:00-22:00
+  4.1 00:00-01:00, 14:00-18:00
+  4.2 00:00-01:00, 14:00-18:00
+  5.1 06:00-10:00, 16:00-20:00
+  5.2 06:00-10:00, 18:00-21:00
+  6.1 06:00-10:00
+  6.2 03:00-06:00, 18:00-22:00`
+const NOV16_1500 = `
+  1.1 20:00-24:00
+  1.2 18:00-22:00
+  2.1 14:00-18:00, 22:00-24:00
+  2.2 21:00-24:00
+  3.1 14:00-18:00
+  3.2 18:00-22:00
+  4.1 14:00-18:00
+  4.2 14:00-18:00
+  5.1 18:00-20:00
+  5.2 18:00-21:00
+  6.1 15:00-18:00
+  6.2 18:00-22:00`
+const NOV17 = `
+  1.1 14:00-18:00, 22:00-24:00
+  1.2 06:00-10:00, 18:00-22:00
+  2.1 06:00-10:00, 18:00-22:00
+  2.2 06:00-10:00, 18:00-22:00
+  3.1 18:00-22:00
+  3.2 10:00-14:00, 22:00-24:00
+  4.1 10:00-14:00, 22:00-24:00
+  4.2 10:00-14:00, 18:00-22:00
+  5.1 14:00-18:00
+  5.2 14:00-18:00
+  6.1 14:00-18:00
+  6.2 14:00-18:00`
+
+/** Opening words of each block → the answer; the first match wins, so the specific ones go first */
+const ANSWERS: [string, Partial<PostAnalysis>][] = [
+  // "(оновлено з 15:00, 16.11.2026)" on the site, "(оновлено з 15:00)" in the channel
+  ['на 16 листопада (оновлено з 15:00', { events: [day('2026-11-16', NOV16_1500, { at: '15:00' })] }],
+  // a stamp of the evening before: the whole day
+  ['на 16 листопада (оновлено о 23:00', { events: [day('2026-11-16', NOV16_2300)], statedAt: '23:00' }],
+  [
+    'оновлено графік погодинних відключень (ГПВ) на 16 листопада.',
+    { events: [day('2026-11-16', NOV16_2300)] },
+  ],
+  ['16.11.2026 р. на Хмельниччині', { events: [day('2026-11-16', NOV16)] }],
+  ['16 листопада на Хмельниччині', { events: [day('2026-11-16', NOV16)] }],
+  ['17.11.2026 р. на Хмельниччині', { events: [day('2026-11-17', NOV17)] }],
+  ['на 15 листопада (16:00)', { events: [day('2026-11-15', NOV15_1600, { at: '16:00' })] }],
+  ['на 15 листопада (з 17:30)', { events: [day('2026-11-15', NOV15_1730, { at: '17:30' })] }],
+  ['15 листопада на Хмельниччині', { events: [day('2026-11-15', NOV15)] }],
+  ['14 листопада на Хмельниччині', { events: [day('2026-11-14', NOV14)] }],
+  // made-up posts of the tests below
+  ['на 17 листопада (оновлено з 18:00', { events: [day('2026-11-17', '1.1 18:00-22:00', { at: '18:00' })] }],
+  [
+    'на 17.11.2026 р. (оновлено з 19:00)',
+    { events: [day('2026-11-17', '1.1 19:00-21:00', { at: '19:00' })] },
+  ],
+  [
+    'на 17 листопада скасовано',
+    { events: [ev({ kind: 'gpv', action: 'cancel', regions: ['khmelnytskyi'], date: '2026-11-17' })] },
+  ],
+  ['(ГПВ) на 17 листопада.', { events: [day('2026-11-17', '1.1 14:00-18:00\n2.1 18:00-22:00')] }],
+]
+const answer = (input: PostInput) => {
+  const hit = ANSWERS.find(([k]) => input.text.includes(k))
+  if (hit) return hit[1]
+  // "Шановні споживачі!", the standing note about who orders the schedules
+  return []
+}
+
 describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
   const K = 'khmelnytskyi/'
   const hhmm = (d: DaySchedule) => d.intervals.map((i) => `${i.from.slice(11, 16)}-${i.to.slice(11, 16)}`)
@@ -106,10 +260,17 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     match: '/post/novini-kompaniji',
     body: fixture(K + 'news-list-2026-11-17T0045.fragment.html'),
   }
-  const NEWS: Route[] = [16, 17].map((d) => ({
-    match: `/post/prognoz-gpv-na-${d}-listopada.html`,
-    body: fixture(`${K}news-prognoz-gpv-na-${d}-listopada.fragment.html`),
-  }))
+  const NEWS: Route[] = [
+    ...[16, 17].map((d) => ({
+      match: `/post/prognoz-gpv-na-${d}-listopada.html`,
+      body: fixture(`${K}news-prognoz-gpv-na-${d}-listopada.fragment.html`),
+    })),
+    // the third post the list names; not captured, and about a day gone by then
+    {
+      match: '/post/pogodinni-vidkljuchennja-na-15-listopada.html',
+      body: '<div class="post"><p>…</p></div>',
+    },
+  ]
   const CHANNEL: Route = {
     match: 't.me/s/khmelnytskoblenergo',
     body: fixture(K + 'telegram-khmelnytskoblenergo-1888-1896.trimmed.html'),
@@ -117,12 +278,19 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
   const down = (match: string): Route => ({ match, status: 500, body: '' })
   const NIGHT = new Date('2026-11-17T00:34:00+02:00')
 
-  function schedules(routes: Route[], now = NIGHT) {
+  function schedules(routes: Route[], now = NIGHT, text: TextProcessor | null = fakeText(answer)) {
     const { fetch, calls } = mockFetch(routes)
-    const c = new OutageClient({ fetch, now: () => now, cacheTtlMs: 0, providers: [khmelnytskyiProvider()] })
+    const c = new OutageClient({
+      fetch,
+      now: () => now,
+      cacheTtlMs: 0,
+      providers: [khmelnytskyiProvider()],
+      ...(text ? { textProcessor: text } : {}),
+    })
     return c.getSchedules('khmelnytskyi').then((s) => ({ s, calls }))
   }
 
+  // the channel's posts have times of their own (unlike the page's blocks): ranked by them
   it('has today from Telegram and the news post while the page still shows yesterday', async () => {
     const { s, calls } = await schedules([PAGE, ARCHIVE, LIST, ...NEWS, CHANNEL])
     expect(s.groups).toHaveLength(12)
@@ -138,8 +306,35 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
       { id: 'telegram:@khmelnytskoblenergo', ok: true, dates: ['2026-11-17'] },
     ])
     expect(s.sources!.some((x) => x.disagrees)).toBe(false)
-    // page, archive, news list, one news post (today's), one channel page
-    expect(calls).toHaveLength(5)
+    // page, archive, news list, the three newest schedule posts of the list, one channel page
+    expect(calls).toHaveLength(7)
+  })
+
+  it('has today from the news post while the page still shows yesterday', async () => {
+    const { s, calls } = await schedules([PAGE, ARCHIVE, LIST, ...NEWS, down('t.me')])
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-16', '2026-11-17'])
+    // "17.11.2026 р.": "Підчерга 1.1 – 14:00-18:00; 22:00-24:00."
+    expect(hhmm(s.schedules['1.1']![1]!)).toEqual(['14:00-18:00', '22:00-00:00'])
+    expect(s.sources).toMatchObject([
+      // "(оновлено з 15:00, 16.11.2026)"
+      { id: 'site', ok: true, dates: ['2026-11-16'], updatedAt: '2026-11-16T15:00:00+02:00' },
+      // a first announcement carries no time
+      { id: 'news', ok: true, dates: ['2026-11-17'], updatedAt: null },
+      { id: 'telegram:@khmelnytskoblenergo', ok: false },
+    ])
+    expect(s.updatedAt).toBe('2026-11-16T15:00:00+02:00')
+    // page, archive, news list, the three newest schedule posts of the list, the channel
+    expect(calls.filter((x) => x.url.includes('hoe.com.ua'))).toHaveLength(6)
+  })
+
+  it('reads the same day the same way from the page and the news post', async () => {
+    const at = new Date('2026-11-16T23:30:00+02:00')
+    const site = await schedules([PAGE, ARCHIVE, down('/post/'), down('t.me')], at)
+    const news = await schedules([down('/page/'), LIST, ...NEWS, down('t.me')], at)
+    const nov16 = (r: typeof site) =>
+      r.s.groups.map((g) => hhmm(r.s.schedules[g]!.find((d) => d.date === '2026-11-16')!))
+    expect(nov16(news)).toEqual(nov16(site))
+    expect(news.s.updatedAt).toBe('2026-11-16T15:00:00+02:00')
   })
 
   it('layers "оновлено з 15:00" onto the day instead of losing the morning', async () => {
@@ -152,9 +347,21 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     // … and the 15:00 one replaced 5.1's 16:00-20:00 with 18:00-20:00
     expect(nov16('5.1')).toEqual(['06:00-10:00', '18:00-20:00'])
     expect(nov16('6.1')).toEqual(['06:00-10:00', '15:00-18:00'])
-    // the top block alone, as it was read before
-    const top = announcements(PAGE.body as string, NIGHT)[0]!
-    expect(top.body).toContain('оновлено з 15:00, 16.11.2026')
+    // the top block, as handed to the processor
+    expect(announcements(PAGE.body as string)[0]).toContain('оновлено з 15:00, 16.11.2026')
+  })
+
+  it("hands the processor each block as text, read against today's noon", async () => {
+    const text = fakeText(answer)
+    await schedules([PAGE, ARCHIVE, down('/post/'), down('t.me')], NIGHT, text)
+    expect(text.calls).toHaveLength(3)
+    expect(text.calls[0]).toMatchObject({
+      source: { kind: 'site', site: 'https://hoe.com.ua/page/pogodinni-vidkljuchennja' },
+      title: null,
+      publishedAt: '2026-11-17T12:00:00+02:00',
+    })
+    expect(text.calls[0]!.text).toContain('Підчерга 1.1 – 20:00-24:00.')
+    expect(text.calls[0]!.text).not.toContain('<')
   })
 
   it('reads the same day the same way from each of the three', async () => {
@@ -185,25 +392,43 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     expect(nov15('1.1').status).toBe('scheduled')
   })
 
-  it('finds the day posts in the news list by title, whatever the slug', () => {
-    const list = LIST.body as string
-    expect(newsLinks(list, NIGHT)).toEqual([
-      { path: '/post/prognoz-gpv-na-17-listopada.html', date: '2026-11-17' },
+  it('takes the news posts about the hourly schedule from the list, whatever the slug', () => {
+    expect(newsLinks(LIST.body as string)).toEqual([
+      '/post/prognoz-gpv-na-17-listopada.html',
+      '/post/prognoz-gpv-na-16-listopada.html',
+      '/post/pogodinni-vidkljuchennja-na-15-listopada.html',
+      '/post/prognoz-gpv-na-14-listopada.html',
+      '/post/pitannjavidpovid-grafiki-pogodinnih-vidkljuchen-gpv.html',
+      '/post/pogodinni-vidkljuchennja-na-13-listopada.html',
     ])
-    // "Погодинні відключення на 15 листопада (ОНОВЛЕНО, 17:10)"; "#ПитанняВідповідь. Графіки
-    // погодинних відключень (ГПВ)" has no date and is no schedule
-    expect(newsLinks(list, new Date('2026-11-14T22:00:00+02:00'))).toEqual([
-      { path: '/post/prognoz-gpv-na-16-listopada.html', date: '2026-11-16' },
-      { path: '/post/pogodinni-vidkljuchennja-na-15-listopada.html', date: '2026-11-15' },
-      { path: '/post/prognoz-gpv-na-14-listopada.html', date: '2026-11-14' },
-    ])
-    expect(() => newsLinks('<html></html>', NIGHT)).toThrow(expect.objectContaining({ code: 'parse' }))
+    expect(() => newsLinks('<html></html>')).toThrow(expect.objectContaining({ code: 'parse' }))
   })
 
-  it('fails with the page error when all three are down, and rejects an unreadable block', async () => {
+  it('fails with the page error when all three are down', async () => {
     await expect(schedules([down('hoe.com.ua'), down('t.me')])).rejects.toMatchObject({ code: 'http' })
-    const broken = '<div class="post"><p>ГПВ на 16 листопада</p><p>Підчерга А – зранку</p><hr /></div>'
-    expect(() => textSchedules(broken, NIGHT, '2026-11-16')).toThrow(/no subgroups read/)
+  })
+
+  it('a misread top block leaves its day not known on the page, rather than serve the block under it', async () => {
+    // "Підчерга 7.1" doesn't exist
+    const text = fakeText((input) =>
+      input.text.includes('(оновлено з 15:00, 16.11.2026)') &&
+      input.source.kind === 'site' &&
+      input.url.includes('/page/')
+        ? [day('2026-11-16', '7.1 20:00-24:00', { at: '15:00' })]
+        : answer(input),
+    )
+    const { s } = await schedules([PAGE, ARCHIVE, LIST, ...NEWS, CHANNEL], NIGHT, text)
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true })
+    // a page without times: the block may be about any day it still shows, today on
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toContain('2026-11-17')
+    // the news post has the same blocks
+    expect(s.sources![1]).toMatchObject({ id: 'news', ok: true })
+  })
+
+  it('needs a text processor', async () => {
+    await expect(schedules([PAGE, ARCHIVE, LIST, ...NEWS, CHANNEL], NIGHT, null)).rejects.toMatchObject({
+      code: 'config',
+    })
   })
 
   /** A preview page of made-up posts; the first is days old, so the window is read whole */
@@ -224,6 +449,8 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
   })
 
   it('"(оновлено з 18:00, …)" read at 17:10 is no time of publication: a newer Telegram post wins', async () => {
+    // the newer post gives only the hours from 19:00, with no whole day under it on the channel:
+    // the day is not known (neither the page's older 18:00 version nor "no outages" before 19:00)
     const now = new Date('2026-11-17T17:10:00+02:00')
     const PAGE_18 = sitePage(
       '<p>Оновлено графік погодинних відключень (ГПВ) на 17 листопада (оновлено з 18:00, 17.11.2026).</p><p>Підчерга 1.1 – 18:00-22:00.</p>',
@@ -237,17 +464,18 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
       },
     ])
     const { s } = await schedules([PAGE_18, ARCHIVE, down('/post/'), newer], now)
-    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['19:00-21:00'])
+    expect(s.schedules['1.1']![0]!.status).toBe('unknown')
     expect(s.updatedAt).toBe('2026-11-17T17:05:00+02:00')
     expect(s.sources).toMatchObject([
-      { id: 'site', dates: [], updatedAt: null, disagrees: true },
+      { id: 'site', dates: [], updatedAt: null },
       { id: 'news', ok: false },
       { id: 'telegram:@khmelnytskoblenergo', dates: ['2026-11-17'] },
     ])
 
-    // alone, the page still gives the day, and no `updatedAt` from the future
+    // alone, the page's update from 18:00 with no whole day under it: not known either, and no
+    // `updatedAt` from the future
     const alone = await schedules([PAGE_18, ARCHIVE, down('/post/'), down('t.me')], now)
-    expect(hhmm(alone.s.schedules['1.1']![0]!)).toEqual(['18:00-22:00'])
+    expect(alone.s.schedules['1.1']![0]!.status).toBe('unknown')
     expect(alone.s.updatedAt).toBeNull()
     // once 18:00 has passed the stamp is a time again
     const later = await schedules(
@@ -276,7 +504,6 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
       coveredThrough: '2026-11-17',
       issues: [{ code: 'source-failed' }],
     })
-    expect(announcements(sitePage(cancel, first).body as string, now)).toHaveLength(2)
 
     // a schedule published after the cancellation stands again
     const again = await schedules(
@@ -284,14 +511,19 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
       now,
     )
     expect(hhmm(again.s.schedules['1.1']![0]!)).toEqual(['14:00-18:00'])
-    // text without a date is about no day: the schedule under it stays
+    // a block about no day above the schedule leaves it standing
     const standing = '<p>Графіки погодинних відключень застосовуються за розпорядженням НЕК «Укренерго».</p>'
-    expect(announcements(sitePage(standing, first).body as string, now)).toHaveLength(1)
+    const kept = await schedules([sitePage(standing, first), ARCHIVE, down('/post/'), down('t.me')], now)
+    expect(hhmm(kept.s.schedules['1.1']![0]!)).toEqual(['14:00-18:00'])
   })
 
   it('nothing published on any of the three: twelve subgroups, today unknown, never `groups: []`', async () => {
     const now = new Date('2026-11-20T12:00:00+02:00')
-    const { s } = await schedules([sitePage(), ARCHIVE, LIST, channel([])], now)
+    const noSchedules: Route = {
+      match: '/post/novini-kompaniji',
+      body: '<div class="heading"><a href="/post/remont.html">Ремонт мереж</a></div>',
+    }
+    const { s } = await schedules([sitePage(), ARCHIVE, noSchedules, channel([])], now)
     expect(s.sources!.map((x) => [x.ok, x.dates])).toEqual([
       [true, []],
       [true, []],
@@ -299,5 +531,13 @@ describe('Khmelnytskoblenergo: page, news post and Telegram', () => {
     ])
     expectUnpublished(s, 12)
     expect(s.schedules['6.2']).toEqual([{ date: '2026-11-20', status: 'unknown', intervals: [] }])
+  })
+
+  // the page's blocks and news posts are read against today's noon: a post of a few days ago is
+  // still read as that day, not as a misread
+  it('reads news posts of days gone by as days gone by, not as misreads', async () => {
+    const now = new Date('2026-11-20T12:00:00+02:00')
+    const { s } = await schedules([sitePage(), ARCHIVE, LIST, ...NEWS, channel([])], now)
+    expect(s.sources![1]).toMatchObject({ id: 'news', ok: true, dates: [] })
   })
 })

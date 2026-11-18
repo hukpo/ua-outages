@@ -1,0 +1,111 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4421",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-17T19:34:17+02:00",
+  "edited": false,
+  "title": null,
+  "text": "📢 Шановні мешканці м. ПАВЛОГРАД‼️\n\nГПВ на 18 ЛИСТОПАДА для споживачів міста, які тимчасово вимикаються за окремим графіком:\n📌 2.2 черга:\n✔️ 01:00 - 06:00;\n✔️ 11:00 - 16:00;\n✔️ 21:00 - 24:00.\n\n📌 6.2 черга:\n✔️ 00:00 - 01:00;\n✔️ 06:00 - 11:00;\n✔️ 16:00 - 21:00.\n\nДякуємо за розуміння та вибачаємося за тимчасові незручності‼️",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. ПАВЛОГРАД",
+    "date": "2026-11-18",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "2.2",
+      "intervals": [
+       {
+        "from": "01:00",
+        "to": "06:00",
+        "kind": "off"
+       },
+       {
+        "from": "11:00",
+        "to": "16:00",
+        "kind": "off"
+       },
+       {
+        "from": "21:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       {
+        "from": "00:00",
+        "to": "01:00",
+        "kind": "off"
+       },
+       {
+        "from": "06:00",
+        "to": "11:00",
+        "kind": "off"
+       },
+       {
+        "from": "16:00",
+        "to": "21:00",
+        "kind": "off"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "gpv-schedule",
+  "tricky"
+ ],
+ "note": "Pavlohrad's separate city schedule, here naming standard queues 2.2/6.2. Area \"м. ПАВЛОГРАД\" as written (the post says \"м. ПАВЛОГРАД\"). ",
+ "uncertain": false
+}

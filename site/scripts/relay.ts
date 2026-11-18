@@ -20,13 +20,15 @@ import { OutageClient } from '../../src/index.js'
 import type { RegionId } from '../../src/index.js'
 import { mapLimit } from '../../src/util.js'
 import { RELAY_BRANCH, RELAYED, collect, logEntry } from './collect.js'
+import { processorOptions } from '../../scripts/processors.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..')
 const args = process.argv.slice(2)
 const push = args.includes('--push')
 const named = args.filter((a) => !a.startsWith('--')) as RegionId[]
 
-const client = new OutageClient({ cacheTtlMs: 0, timeoutMs: 25_000, retries: 2 })
+const ai = await processorOptions()
+const client = new OutageClient({ cacheTtlMs: 0, timeoutMs: 25_000, retries: 2, ...ai.options })
 const now = new Date()
 const wanted = named.length ? named : RELAYED
 const regions = await mapLimit(
@@ -65,3 +67,4 @@ if (push) {
     rmSync(dir, { recursive: true, force: true })
   }
 }
+ai.done()

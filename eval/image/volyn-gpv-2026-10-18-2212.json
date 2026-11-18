@@ -1,0 +1,90 @@
+{
+ "input": {
+  "url": "https://api-voe-poweron.inneti.net/media/2026/10/6ad3c89bb9049_GPV.png",
+  "caption": null,
+  "publishedAt": "2026-10-17T22:12:27+03:00",
+  "region": {
+   "id": "volyn",
+   "name": "Волинська область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": []
+  },
+  "file": "test/fixtures/volyn/gpv-2026-10-18-2212.png"
+ },
+ "expected": {
+  "isSchedule": true,
+  "kind": "gpv",
+  "date": "2026-10-18",
+  "statedAt": "22:12",
+  "schedule": [
+   {
+    "queue": "1.1",
+    "intervals": []
+   },
+   {
+    "queue": "1.2",
+    "intervals": []
+   },
+   {
+    "queue": "2.1",
+    "intervals": []
+   },
+   {
+    "queue": "2.2",
+    "intervals": []
+   },
+   {
+    "queue": "3.1",
+    "intervals": []
+   },
+   {
+    "queue": "3.2",
+    "intervals": []
+   },
+   {
+    "queue": "4.1",
+    "intervals": []
+   },
+   {
+    "queue": "4.2",
+    "intervals": []
+   },
+   {
+    "queue": "5.1",
+    "intervals": []
+   },
+   {
+    "queue": "5.2",
+    "intervals": []
+   },
+   {
+    "queue": "6.1",
+    "intervals": []
+   },
+   {
+    "queue": "6.2",
+    "intervals": []
+   }
+  ]
+ },
+ "tags": [
+  "gpv",
+  "fixture",
+  "tricky"
+ ],
+ "note": "a schedule with no outages at all (every cell \"наявне електропостачання\"): still isSchedule true, every queue []; statedAt 22:12 of the day before",
+ "uncertain": false
+}

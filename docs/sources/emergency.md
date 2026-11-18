@@ -41,15 +41,15 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
   page may be missed, so "nothing in force" from such a read is `unknown`. An edited post shows
   its latest text and "edited", without the edit time: when `previous` was that post in force,
   the "UPD … скасовано" end is the first reading that sees the edit, else the post time.
-- **Classifier** (`src/emergency/classify.ts`): per sentence, an emergency term plus an apply or
-  cancel verb; the first such sentence decides. Explainers ("Чому…?", "Нагадаємо…"), future or
-  negated cancels ("будуть скасовані після стабілізації", "не вдається скасувати") and reposted
-  national summaries (other oblasts named) don't count. DTEK's dialect drops "аварійні" (local
-  damage). National wording ("в окремих регіонах України", "у більшості регіонів", "у регіонах,
-  де…", "по всій країні") counts only when the sentence also names an oblast; "в усіх регіонах
-  (крім …)" includes the operator's. "Було застосовано" counts only with a time of the last day;
-  a purpose clause ("Щоб уникнути аварій, …") is set aside, not the whole sentence. Times of the
-  previous day ("О 23:55 скасовано" read at noon) are shifted by the Kyiv calendar day (DST).
+- **Reading** (since 0.5.0): each post goes to the client's text processor as one unit (its
+  text, the post it replies to, its photo count, the regions its channel covers) and comes back
+  as `PostEvent`s, validated and mapped to announcements (`src/ai/map.ts`). Up to 0.4.8 a regex
+  classifier did this per sentence (`src/emergency/classify.ts`, removed); the posts it was
+  tested on are in the eval set (`eval/text/`, tag `regression`), including the two it got
+  wrong in November 2026: Kropyvnytskyi 1834 «В 14:05 відміна дії графіку ГАВ» and Zaporizhzhia
+  3629, an explainer replying to the 3628 cancel. A post whose answer fails validation is an
+  "unclear" event: never an end; the state stays as before it, flagged in `unread` while it is the
+  newest word about its kind.
 - **Folding** (`src/emergency/status.ts`): ГАВ, СГАВ and unnamed emergency shutdowns are followed
   separately, one episode per area (null = whole region); a cancel for an area ends that area, a
   whole-region cancel ends all, and an area cancel with only a whole-region episode on (ЦЕК 09.11:
@@ -61,7 +61,10 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
   Several areas on: listed by start, queues only when they agree. Inactive shows the episode that
   ended last (Kirovohrad 22.01: СГАВ cancelled 12:58, ГАВ ended by the TTL at 20:25). TTL: 12 h
   after the last word, applied between posts too, so a new post after the gap starts a new
-  episode (Sumy 6 h: it never cancels, and the same commands last minutes to ~4 h in Poltava;
+  episode (Sumy: to the end of the apply's Kyiv day, not a TTL. It never cancels, and its ГАВ run
+  for hours, announced anew each morning: 09.11 1–5 at 09:44 and 6–10 added at 10:28, 10.11 1–5
+  at 09:07 and 6–10 added at 14:10; up to 0.4.x 6 h, which on 18.11.2026 ended the 08:05 apply at
+  14:09 while Ukrenergo still named Sumy at 10:37;
   Kharkiv stays 12 h: its own episodes ran from ~1 h to ~16 h, 10.10.2025 07:56 → "станом на
   23:54", and Ukrenergo still listed it on 04.11.2026 after the 02.11 apply). Posts that take
   effect later count from their time.
@@ -80,10 +83,12 @@ EmergencyShutdowns` is active. YASNO not showing it ends nothing by itself (`upd
   starts "Графік аварійних відключень", minus mislabelled
   "ГПВ ч 5,2" and a neighbour's "ГАО Кіровоград Обленерго". Running rows = active; their queue
   from "ГАВ черга 3" / "ГАВ 3 черга".
-- **@Ukrenergo**: only for Zakarpattia, Volyn, Rivne and Chernivtsi (merged with its own channel
-  by time), by oblast name in the same sentence, in any form ("Волинській області", "на Волині",
-  "на Закарпатті", "Рівненщині"); "аварійні відключення продовжують діяти лише у Харківській
-  області" ends it for the others; "можуть бути застосовані" is nothing.
+- **@Ukrenergo**: for Zakarpattia, Volyn, Rivne, Chernivtsi and Sumy (merged with their own
+  channels by time). Its national posts are read by the text processor once for all five, each
+  event naming the oblasts it is about ("Волинській області", "на Закарпатті", "Рівненщині");
+  "аварійні відключення продовжують діяти лише у Харківській області" cancels it for the
+  others; "можуть бути застосовані" is nothing. A post the processor can't read leaves the state
+  as it was, flagged (`unread`), and never extends an episode.
 
 Not used: Poltava's `dynamic-unloading-info.php` (start times only, end is a 23:59 placeholder,
 misses re-applications: the channel is better), Mykolaiv `outage-queue/by-type/1` `enabled`
@@ -96,4 +101,5 @@ misses re-applications: the channel is better), Mykolaiv `outage-queue/by-type/1
   21 identical district channels.
 - Chernivtsi deleted its channel history; the 2026 wording is UNVERIFIED.
 - Sumy, Cherkasy and Khmelnytskyi never post a cancel; Kharkiv rarely. Their end is the TTL.
-- Zakarpattia, Volyn and Rivne have no operator channel that announces ГАВ.
+- Volyn and Rivne have no operator channel that announces ГАВ; Zakarpattia's own channel
+  (`zakarpatenergyofficial`) rarely does, so Ukrenergo stands in.

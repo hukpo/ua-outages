@@ -1,0 +1,87 @@
+{
+ "input": {
+  "url": "https://t.me/poltavaOE/4526",
+  "source": {
+   "kind": "telegram",
+   "channel": "poltavaOE"
+  },
+  "publishedAt": "2026-11-10T21:06:33+02:00",
+  "edited": false,
+  "title": null,
+  "text": "ГАВ скасовано!\n\nО 21:00 скасовано 5 черг ГАВ (6-10 черги).",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "poltava",
+    "name": "Полтавська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "21:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "cancel"
+ ],
+ "note": "\"скасовано 5 черг ГАВ (6-10 черги)\": queues named, so queueCount left null.",
+ "uncertain": false
+}

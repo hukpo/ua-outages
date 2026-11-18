@@ -1,21 +1,22 @@
 import { getEventListeners } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
+import { siteInput, type Analyzed } from '../src/ai/posts.js'
+import { AiRuntime } from '../src/ai/runtime.js'
 import { OutageClient } from '../src/client.js'
 import { OutageError } from '../src/errors.js'
 import { Http, type FetchLike } from '../src/http.js'
 import { parseGpvDays } from '../src/providers/gpv.js'
-import { scheduleFromImages } from '../src/providers/image-schedule.js'
+import { archivePictures, readSitePictures } from '../src/providers/image-schedule.js'
 import { ivanoFrankivskProvider } from '../src/providers/ivano-frankivsk.js'
 import { kirovohradProvider } from '../src/providers/kirovohrad.js'
 import type { Provider } from '../src/providers/provider.js'
-import { postsToSchedule } from '../src/providers/posts.js'
+import { postsToDays, postsToSchedule } from '../src/providers/posts.js'
 import { ternopilProvider } from '../src/providers/ternopil.js'
-import { parseGroupLines } from '../src/providers/ua-text.js'
 import { kyivDate } from '../src/time.js'
 import { unpublished } from '../src/schedule.js'
 import type { RegionSchedule } from '../src/types.js'
 import { mapLimit } from '../src/util.js'
-import { fixture, mockFetch } from './helpers.js'
+import { ev, fakeImage, fixture, gpvSchedule, mockFetch } from './helpers.js'
 
 const IF_API = 'https://be-svitlo.oe.if.ua'
 const IF_EMPTY = fixture('ivano-frankivsk/schedule-by-queue.1.1.current-empty.json')
@@ -443,31 +444,55 @@ describe('cancellation edge cases', () => {
   it('reports a cancelled image read as cancelled, not as an unreadable image', async () => {
     const { fetch, calls } = hangingFetch()
     const ctrl = new AbortController()
+    const image = fakeImage(() => ({ schedule: [] }))
     const ctx = {
       http: new Http({ fetch }).withSignal(ctrl.signal),
       now: () => new Date(),
       signal: ctrl.signal,
+      ai: new AiRuntime({ imageProcessor: image }),
     }
     const at = new Date()
-    const pending = scheduleFromImages(
+    const pending = readSitePictures(
       ctx,
       'volyn',
-      [
-        {
-          date: '2026-11-15',
-          images: [
-            { path: '/a.png', at },
-            { path: '/b.png', at },
-          ],
-        },
-      ],
-      (p) => `https://example.ua${p}`,
-      { columns: 24, rows: 12, tables: 1, halves: false, palette: { on: [255, 255, 255], off: [0, 0, 0] } },
+      archivePictures(
+        ctx,
+        'volyn',
+        [
+          {
+            date: '2026-11-15',
+            images: [
+              { path: '/a.png', at },
+              { path: '/b.png', at },
+            ],
+          },
+        ],
+        (p: string) => `https://example.ua${p}`,
+      ),
     )
     await tick()
     ctrl.abort()
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     expect(calls).toHaveLength(1)
+    expect(image.calls).toHaveLength(0)
+  })
+
+  it('fails an image read without an image processor as `config`, before fetching anything', async () => {
+    const { fetch, calls } = hangingFetch()
+    const ctx = { http: new Http({ fetch }), now: () => new Date() }
+    await expect(
+      readSitePictures(
+        ctx,
+        'volyn',
+        archivePictures(
+          ctx,
+          'volyn',
+          [{ date: '2026-11-15', images: [{ path: '/a.png', at: new Date() }] }],
+          (p: string) => p,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: 'config' })
+    expect(calls).toHaveLength(0)
   })
 
   it('never lets an older cancellable fetch overwrite a newer cached schedule', async () => {
@@ -527,29 +552,33 @@ describe('silence is never "no outages"', () => {
     )
   })
 
-  it('text: a group named without times is unknown unless the line says the power stays on', () => {
-    const g = parseGroupLines(
-      '<p>1.1: графік уточнюється</p><p>2.1. Електроенергія є.</p><p>3.1 08:00-12:00</p>',
-    )
-    expect(g['1.1']).toBeNull()
-    expect(g['2.1']).toEqual([])
-    expect(g['3.1']).toHaveLength(1)
-  })
-
-  it('posts: a named group without times stays unknown even where unlisted groups mean "no outages"', () => {
-    const s = postsToSchedule(
-      'zaporizhzhia',
-      [
-        {
-          title: 'ГПВ на 15 листопада',
-          body: '<p>1.1: графік уточнюється</p><p>3.1: 08:00 – 12:00</p>',
-          publishedAt: NOW.toISOString(),
-        },
-      ],
-      NOW,
-      { omitted: 'none', groups: ['1.1', '1.2', '3.1'] },
-    )
+  it('posts: a group named without times stays unknown even where unlisted groups mean "no outages"', () => {
+    // "1.1: графік уточнюється", "2.1. Електроенергія є.", "3.1: 08:00 – 12:00", as a model reads them
+    const analyzed: Analyzed = {
+      input: siteInput(
+        { site: 'https://example.ua', title: null, text: '…', publishedAt: NOW.toISOString() },
+        'zaporizhzhia',
+      ),
+      analysis: {
+        events: [
+          ev({
+            kind: 'gpv',
+            action: 'start',
+            regions: ['zaporizhzhia'],
+            date: '2026-11-15',
+            schedule: gpvSchedule({ '1.1': null, '2.1': '', '3.1': '08:00-12:00' }, ['1.1', '2.1', '3.1']),
+          }),
+        ],
+        photosAreSchedules: false,
+        statedAt: null,
+      },
+      error: null,
+    }
+    const opts = { omitted: 'none', groups: ['1.1', '1.2', '2.1', '3.1'] } as const
+    const s = postsToSchedule('zaporizhzhia', postsToDays([analyzed], 'zaporizhzhia', NOW, opts), NOW, opts)
     expect(s.schedules['1.1']![0]).toMatchObject({ status: 'unknown', intervals: [] })
+    // said to have power: no outages
+    expect(s.schedules['2.1']![0]).toMatchObject({ status: 'scheduled', intervals: [] })
     // the operator lists only groups with outages: an unlisted one has none
     expect(s.schedules['1.2']![0]).toMatchObject({ status: 'scheduled', intervals: [] })
     expect(s.schedules['3.1']![0]!.intervals).toHaveLength(1)

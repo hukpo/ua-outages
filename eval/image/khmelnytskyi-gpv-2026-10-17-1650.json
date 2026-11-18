@@ -1,0 +1,187 @@
+{
+ "input": {
+  "url": "https://hoe.com.ua/Content/Uploads/2026/10/file20261017164437203.png",
+  "caption": "Графік погодинних відключень 17.10.2026 (оновлено, 16:50)",
+  "publishedAt": "2026-10-17T16:44:37+03:00",
+  "region": {
+   "id": "khmelnytskyi",
+   "name": "Хмельницька область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  "file": "test/fixtures/khmelnytskyi/gpv-2026-10-17-1650.png"
+ },
+ "expected": {
+  "isSchedule": true,
+  "kind": "gpv",
+  "date": "2026-10-17",
+  "statedAt": "16:50",
+  "schedule": [
+   {
+    "queue": "1.1",
+    "intervals": [
+     {
+      "from": "16:00",
+      "to": "19:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "1.2",
+    "intervals": [
+     {
+      "from": "16:00",
+      "to": "19:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.1",
+    "intervals": [
+     {
+      "from": "16:00",
+      "to": "19:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.2",
+    "intervals": [
+     {
+      "from": "16:00",
+      "to": "19:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.1",
+    "intervals": [
+     {
+      "from": "10:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "19:00",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.2",
+    "intervals": [
+     {
+      "from": "11:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "19:00",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.1",
+    "intervals": [
+     {
+      "from": "11:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "19:00",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.2",
+    "intervals": [
+     {
+      "from": "19:00",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.1",
+    "intervals": [
+     {
+      "from": "13:00",
+      "to": "16:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.2",
+    "intervals": [
+     {
+      "from": "13:00",
+      "to": "16:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.1",
+    "intervals": [
+     {
+      "from": "13:00",
+      "to": "16:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.2",
+    "intervals": [
+     {
+      "from": "14:00",
+      "to": "16:00",
+      "kind": "off"
+     }
+    ]
+   }
+  ]
+ },
+ "tags": [
+  "gpv",
+  "fixture"
+ ],
+ "note": "site table \"ОНОВЛЕНО, 16:50\"; publishedAt from the upload file name; caption = the archive link text; legend has a \"може бути відсутня\" (maybe) colour, unused here",
+ "uncertain": false
+}

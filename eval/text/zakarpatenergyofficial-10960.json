@@ -1,0 +1,46 @@
+{
+ "input": {
+  "url": "https://t.me/zakarpatenergyofficial/10960",
+  "source": {
+   "kind": "telegram",
+   "channel": "zakarpatenergyofficial"
+  },
+  "publishedAt": "2026-11-10T19:27:06+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚡️Електроенергія, вироблена закарпатськими вітряками, надходить до єдиної енергосистеми України та не експортується за кордон.\n\n«Усі 100% електроенергії, яку виробили закарпатські вітряки, йдуть в єдину енергосистему України і використовуються в енергосистемі Закарпатської області та України. Жоден кіловат електроенергії не був експортований в європейські країни», – наголосив Василь Іванчо на форумі Re:Open Zakarpattia.\n\n⚡️ Підписуйся на Енергетика_Закарпаття, щоб знати більше!",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "zakarpattia",
+    "name": "Закарпатська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "negative"
+ ],
+ "note": "Irrelevant (meter readings / wind power / weather warning).",
+ "uncertain": false
+}

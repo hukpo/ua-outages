@@ -1,0 +1,93 @@
+{
+ "input": {
+  "url": "https://t.me/mk_energy_ua/7339",
+  "source": {
+   "kind": "telegram",
+   "channel": "mk_energy_ua"
+  },
+  "publishedAt": "2024-11-11T10:39:04+02:00",
+  "edited": false,
+  "title": null,
+  "text": "О 10:45 готуються до відключення 3,4,5,6 черги ГАВ. Залишаються знеструмленими черги 1 та 2. Після цього відновимо електропостачання 7,8,9,10 чергам графіку АВАРІЙНИХ відключень.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "mykolaiv",
+    "name": "Миколаївська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "change",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:45",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6"
+    ],
+    "queuesRestored": [
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "tricky"
+ ],
+ "note": "\"О 10:45 готуються до відключення 3,4,5,6 … Залишаються знеструмленими 1 та 2. Після цього відновимо 7-10\" (posted 10:39). \"готуються\" is a near-certain plan, labelled as the change at 10:45.",
+ "uncertain": false
+}

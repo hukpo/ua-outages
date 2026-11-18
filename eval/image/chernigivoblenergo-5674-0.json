@@ -1,0 +1,51 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5674",
+  "caption": "⚠️ Шановні споживачі!\n\n💣 Внаслідок атаки ворога пошкоджено об'єкт електропостачання. Знеструмлено близько 37 тисяч абонентів у Чернігівському районі.\n\n🛠 Енергетики вже працюють над відновленням електропостачання.",
+  "publishedAt": "2026-11-08T01:32:50+02:00",
+  "region": {
+   "id": "chernihiv",
+   "name": "Чернігівська область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  "file": "eval/image/files/chernigivoblenergo-5674-0.jpg"
+ },
+ "expected": {
+  "isSchedule": false,
+  "kind": null,
+  "date": null,
+  "statedAt": null,
+  "schedule": []
+ },
+ "tags": [
+  "telegram",
+  "negative"
+ ],
+ "note": "\"УВАГА!\" banner over a photo of smoke after an attack",
+ "uncertain": false
+}

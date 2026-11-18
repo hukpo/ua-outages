@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/poltavaOE/4528",
+  "source": {
+   "kind": "telegram",
+   "channel": "poltavaOE"
+  },
+  "publishedAt": "2026-11-10T21:43:38+02:00",
+  "edited": false,
+  "title": null,
+  "text": "У зв'язку зі складною ситуацією в енергосистемі України, в Полтавській області 10 листопада 2026 року\nз 00:00 по 06:00 застосовується ГПВ в обсязі 3 черги.\nз 06:00 по 08:00 застосовується ГПВ в обсязі 3.5 черги.\nз 08:00 по 22:00 застосовується ГПВ в обсязі 4 черги.\nз 22:00 по 22:30 застосовується ГПВ в обсязі 3 черги.\nз 22:30 по 23:59 застосовується ГПВ в обсязі 4 черги.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "poltava",
+    "name": "Полтавська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "tricky"
+ ],
+ "note": "gpv by volume per time span (\"з 08:00 по 22:00 … в обсязі 4 черги\"): no queue hours in the text, schedule []; text says \"10 листопада\" though posted 10.11 21:43 and otherwise matches the 11.11 post 4525 (likely a typo for 11 листопада). Labelled as written: date null",
+ "uncertain": true
+}

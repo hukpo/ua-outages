@@ -26,3 +26,36 @@ export type { PowerState } from './schedule.js'
 export { kyivDate } from './time.js'
 export type * from './types.js'
 export { validateSchedule } from './validate.js'
+export type {
+  CallOptions,
+  ClockInterval,
+  EventAction,
+  EventKind,
+  ImageInput,
+  ImageProcessor,
+  ImageReading,
+  PostAnalysis,
+  PostEvent,
+  PostInput,
+  PostRegion,
+  ProcessedEvent,
+  ProcessorCache,
+  ProcessorResult,
+  ProcessorUsage,
+  TextProcessor,
+} from './ai/types.js'
+export {
+  IMAGE_CHECK_SCHEMA,
+  IMAGE_CHECK_SYSTEM,
+  IMAGE_SCHEMA,
+  IMAGE_SYSTEM,
+  PROMPT_VERSION,
+  TEXT_SCHEMA,
+  TEXT_SYSTEM,
+  imagePrompt,
+  textPrompt,
+} from './ai/prompts.js'
+export { validateImageReading, validatePostAnalysis } from './ai/validate.js'
+export { CHECK_LONG_EDGE, DEFAULT_MAX_LONG_EDGE, MemoryProcessorCache } from './ai/runtime.js'
+export { compactImage } from './image/compact.js'
+export type { CompactImage, CompactOptions } from './image/compact.js'

@@ -1,0 +1,92 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4341",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-08T15:36:16+02:00",
+  "edited": false,
+  "title": null,
+  "text": "📢 Шановні споживачі, ЕКСТРЕНІ ВІДКЛЮЧЕННЯ тривають‼️\n\nГРАФІКИ АВАРІЙНИХ ВІДКЛЮЧЕНЬ та СПЕЦІАЛЬНІ ГРАФІКИ АВАРІЙНИХ ВІДКЛЮЧЕНЬ введенні в повному обсязі. ГРАФІК ПОГОДИННИХ ВІДКЛЮЧЕНЬ не діє.\n\nЕнергетики працюють над усуненням наслідків ворожих атак на енергооб'єкти області, але, на жаль, повторні атаки ускладнюють і затримують відновлювальні роботи.\n\nПросимо поставитися до ситуації з розумінням і довіритися енергетикам, які 24/7 роблять все можливе та неможливе, щоб якнайшвидше повернути світло до ваших будинків.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "sgav",
+  "tricky"
+ ],
+ "note": "\"ЕКСТРЕНІ ВІДКЛЮЧЕННЯ тривають … ГАВ та СГАВ введенні в повному обсязі. ГПВ не діє.\" Two starts (one per schedule); no separate emergency event since ГАВ/СГАВ are named. Old test: a single gav apply (all).",
+ "uncertain": true
+}

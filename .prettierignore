@@ -2,8 +2,10 @@ dist
 research
 test/fixtures
 node_modules
-src/image/digit-model.ts
 _site
 .taste-skill
 site/public/map.json
 site/public/assets
+eval/raw
+eval/text
+eval/image

@@ -1,0 +1,81 @@
+{
+ "input": {
+  "url": "https://t.me/ternopiloblenerho/1141",
+  "source": {
+   "kind": "telegram",
+   "channel": "ternopiloblenerho"
+  },
+  "publishedAt": "2025-10-15T22:37:32+03:00",
+  "edited": false,
+  "title": null,
+  "text": "За командою НЕК \"Укренерго\" 15 жовтня з 22.27 по Тернопільській області скасовано графіки аварійних відключень (ГАВ).\n\nНеобхідність ощадливо споживати електроенергію актуальна. Зверніть увагу на роботу енергоємних приладів, не вмикайте одночасно кілька потужних електроприладів.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "ternopil",
+    "name": "Тернопільська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "ternopil"
+    ],
+    "area": null,
+    "date": null,
+    "at": "22:27",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "cancel"
+ ],
+ "note": "\"з 22.27 … скасовано ГАВ\".",
+ "uncertain": false
+}

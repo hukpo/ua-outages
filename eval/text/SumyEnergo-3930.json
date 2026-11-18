@@ -1,0 +1,92 @@
+{
+ "input": {
+  "url": "https://t.me/SumyEnergo/3930",
+  "source": {
+   "kind": "telegram",
+   "channel": "SumyEnergo"
+  },
+  "publishedAt": "2026-11-17T10:59:02+02:00",
+  "edited": true,
+  "title": null,
+  "text": "💡Шановні споживачі електроенергії! О 10:50 по м. Суми введені графіки аварійних відключень для 1-10 черг споживачів.\n\n❗️Причина - пошкодження енергосистеми внаслідок систематичних атак армії рф.\n\n⚠️Черга при ГАВ відображається на сайті АТ \"СУМИОБЛЕНЕРГО\" в розділі \"Відключення\" за Вашою адресою. А також в особистому кабінеті \"E-Svitlo\".\n\n❕Черга за графіками аварійних відключень не співпадає з чергою при погодинних, зверніть на це увагу!\n\n▶️ При ГАВ немає визначеного часу відновлення розподілу електроенергії, бо це аварійна ситуація.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "sumy",
+    "name": "Сумська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": "м. Суми",
+    "date": null,
+    "at": "10:50",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav",
+  "edit",
+  "tricky"
+ ],
+ "note": "area м. Суми; \"для 1-10 черг\" without \"в повному обсязі\": allQueues false, queues listed; edited but single statement",
+ "uncertain": false
+}

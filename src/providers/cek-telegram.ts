@@ -1,10 +1,12 @@
+import { analyzeAll, channelInputs } from '../ai/posts.js'
 import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
-import { OutageError } from '../errors.js'
 import { makeDay, type MinuteSlot } from '../schedule.js'
-import { addDays, kyivDate, kyivInstant, kyivMinuteOfDay, parseClock, toKyivIso } from '../time.js'
+import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
+import { OutageError } from '../errors.js'
+import { assembleDays, textPublications, textUnread } from './posts.js'
+import type { ProviderContext } from './provider.js'
 import type { SourceRead, SourceSpec } from './sources.js'
-import { findUaDate } from './ua-text.js'
 
 /**
  * ЦЕК's own channel, @cek_info. It posts each day's ГПВ as text the evening before (21:00–23:10)
@@ -49,195 +51,71 @@ export interface CekDay {
   url: string
   /** Off slots per group; null when a change that can't be applied exactly made them unknown */
   groups: Record<GroupId, MinuteSlot[] | null>
+  /** The day's hourly schedule was called off: newer than another source's list, it wins */
+  cancelled?: boolean
+  /** A newer post about the day couldn't be read yet (why): the day is as read before it */
+  unread?: string
 }
-
-const MONTHS = 'січня|лютого|березня|квітня|травня|червня|липня|серпня|вересня|жовтня|листопада|грудня'
-const DAY = new RegExp(
-  `(\\d{1,2})\\s+(?:${MONTHS})(?![\\p{L}])|(?<![\\d.:])\\d{1,2}\\.\\d{2}(?![\\d.:])`,
-  'iu',
-)
-const WHOLE_DAY = /з\s+00:00\s+до\s+24:00\s+(?:застосовуватимуться|діятимуть)/i
-const CHANGE = /зміни\s+[ув]\s+ГПВ/i
-const BACK_TO_GPV = /скасування\s+ЕКСТРЕНИХ\s+ВІДКЛЮЧЕНЬ[\s\S]*Повертаємося\s+до\s+ГРАФІК/i
-const LABEL = /^(?:🔹\s*)?(?:Черга\s+)?(\d+)\.(\d+)$/
-const TIMES = /^(?:✅\s*)?(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})$/
-const GROUP = /(?<![\d:.])(\d)\.(\d)(?![\d:])/g
-/** "м. ПАВЛОГРАД", "м. ЖОВТІ ВОДИ": the towns are in capitals */
-const TOWN = /(?<![\p{L}])м\.\s*([\p{Lu}][\p{Lu}'ʼ’ -]+)/u
-const CLOCK = String.raw`(\d{1,2}:\d{2})`
-const FROM = new RegExp(`^[\\s,]*з\\s+${CLOCK}(?:\\s+до\\s+${CLOCK})?`, 'i')
-const CLOCK_ANYWHERE = /\d{1,2}[:.]\d{2}/
-const WINDOWS = new RegExp(`(?:з\\s+${CLOCK}\\s+)?до\\s+${CLOCK}|з\\s+${CLOCK}`, 'gi')
 
 /**
- * The channel's posts → each day's ГПВ as it stands, by date. A post that is a ГПВ list and
- * can't be read exactly is a `parse` error when it is recent enough to matter (posted since
- * yesterday); older ones are skipped. Exported for tests.
+ * The channel's posts → each day's ГПВ as it stands, by date, read by the client's text
+ * processor. Lists for one town with its own numbering (an event with an `area`) aren't the
+ * regional schedule and are skipped. A change for part of the day ("з 16:00 до 24:00") replaces
+ * that part, and a group it leaves out has no outage in it; a correction in words adds its
+ * window, or makes the groups it names `unknown` when it doesn't give both ends. "Скасування
+ * екстрених відключень, повертаємося до ГПВ" makes the day's list stand again as of that post.
+ * A post that can't be read is a `parse` error when it is recent enough to matter (posted since
+ * yesterday). Exported for tests.
  */
-export function parseCekPosts(posts: readonly TelegramPost[], now: Date): Map<string, CekDay> {
-  const recent = kyivInstant(addDays(kyivDate(now), -1), 0).getTime()
-  const days = new Map<string, CekDay>()
-  for (const p of [...posts].sort((a, b) => a.id - b.id)) {
-    const postedAt = Date.parse(p.at)
-    try {
-      applyPost(days, p, postedAt)
-    } catch (e) {
-      if (postedAt >= recent) throw e
-    }
-  }
-  return days
-}
-
-function applyPost(days: Map<string, CekDay>, p: TelegramPost, postedAt: number): void {
-  const fail = (what: string): never => {
-    throw new OutageError('parse', `Telegram @${p.channel}: ГПВ post ${p.id}: ${what}`, {
-      region: 'dnipro-cek',
-      url: p.url,
+export async function cekDays(
+  ctx: ProviderContext,
+  posts: readonly TelegramPost[],
+): Promise<Map<string, CekDay>> {
+  const region = 'dnipro-cek'
+  const now = ctx.now()
+  const sorted = [...posts].sort((a, b) => a.id - b.id)
+  const all = await analyzeAll(ctx, region, channelInputs(sorted, region))
+  // town lists aren't the region's
+  const analyzed = all.map((a) =>
+    a.analysis ? { ...a, analysis: { ...a.analysis, events: a.analysis.events.filter((e) => !e.area) } } : a,
+  )
+  const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer', layerFrom: 'stated' } as const
+  // a post that couldn't be read (yet), or "графік оновлено, дивіться на сайті": the day stays
+  // as read before it, flagged; it is read again on the next poll
+  const days = assembleDays(
+    analyzed,
+    textPublications(analyzed, region, now, opts),
+    textUnread(analyzed, region, now, opts),
+    region,
+    now,
+    opts,
+  )
+  const out = new Map<string, CekDay>()
+  for (const [date, day] of days) {
+    const groups: Record<GroupId, MinuteSlot[] | null> = {}
+    // a group no list named: none in a whole day's list, not known when there was none
+    for (const g of CEK_GROUPS)
+      groups[g] = day.cancelled ? null : (day.groups[g] ?? (day.groups[g] === null || !day.based ? null : []))
+    out.set(date, {
+      at: day.at,
+      url: analyzed[day.post]?.input.url ?? '',
+      groups,
+      ...(day.cancelled ? { cancelled: true } : {}),
+      ...(day.unread ? { unread: day.unread.message } : {}),
     })
   }
-  const lines = p.text.split('\n').map((l) => l.trim())
-  const first = lines.findIndex((l) => LABEL.test(l))
-  const head = (first === -1 ? lines : lines.slice(0, first)).join(' ')
-  const town = TOWN.exec(head)?.[1]?.trim()
-  // one town's notice or its separate list ("📌 2.2 черга:"), not the region's schedule
-  if ((town && !/^ДНІПРО$/u.test(town)) || /окремим\s+графіком/i.test(head)) return
-
-  const posted = kyivDate(new Date(postedAt))
-  if (BACK_TO_GPV.test(head)) {
-    const day = days.get(posted)
-    if (!day) return
-    days.set(posted, { ...day, at: postedAt, url: p.url })
-    // "… - до 22:00 відключаються черги: 1.1, 1.2": true for a while, in no list
-    if (named(head).length) setUnknown(days, posted, named(head), postedAt, p.url)
-    return
-  }
-  const whole = WHOLE_DAY.test(head)
-  if (!whole && !CHANGE.test(head)) {
-    if (first !== -1) fail('a list under an unknown heading')
-    return
-  }
-  const d = DAY.exec(head)
-  const date = d && findUaDate(d[0], new Date(postedAt))
-  if (!d || !date) return fail('no date in the heading')
-  if (date < posted || date > addDays(posted, 2)) fail(`the date ${date} doesn't fit a post of ${posted}`)
-  const rest = head.slice(d.index + d[0].length)
-
-  if (first === -1) {
-    if (whole) fail('no list under the heading')
-    return applyProse(days, date, rest, postedAt, p.url)
-  }
-  const listed = readBlocks(lines.slice(first), fail)
-  const from = whole ? null : FROM.exec(rest)
-  // hours said some other way ("… на 17 ЛИСТОПАДА: з 10:00 до 16:00", "у період з …") are the
-  // part of the day the list is for: read as the whole day, the list would wipe the rest
-  if (!whole && CLOCK_ANYWHERE.test(`${head.slice(0, d.index)} ${rest.slice(from?.[0].length ?? 0)}`))
-    return fail('hours in the heading in an unknown wording')
-  const start = from ? parseClock(from[1]!) : 0
-  const end = from?.[2] ? parseClock(from[2]) : 1440
-  if (start === null || end === null || !(start < end)) return fail(`unexpected hours "${from?.[0]}"`)
-
-  const before = days.get(date)?.groups
-  const groups: Record<GroupId, MinuteSlot[] | null> = {}
-  for (const g of CEK_GROUPS) {
-    const now = listed[g] ?? []
-    if (start === 0 && end === 1440) groups[g] = now
-    else {
-      const was = before?.[g]
-      // without the hours before the window the day isn't known, unless they are over: a
-      // change "з 10:00 до 24:00" is posted around 10:00
-      if (was) groups[g] = [...outside(was, start, end), ...now]
-      else groups[g] = end === 1440 && start <= minuteOf(date, postedAt) + 60 ? now : null
+  // back to the hourly schedule after an emergency: the list stands again as of that post
+  for (const { input, analysis } of analyzed) {
+    if (!analysis) continue
+    const at = Date.parse(input.publishedAt)
+    for (const e of analysis.events) {
+      if (e.kind === 'gpv' || e.action !== 'cancel' || e.gpvApplies !== true) continue
+      const day = out.get(e.date ?? kyivDate(new Date(at)))
+      if (day && at > day.at) Object.assign(day, { at, url: input.url })
     }
-  }
-  days.set(date, { at: postedAt, url: p.url, groups })
-}
-
-/** "🔹 Черга 1.1" / "1.1", then its "HH:MM-HH:MM" lines, up to the closing "Попереджаємо, …" */
-function readBlocks(lines: string[], fail: (what: string) => never): Record<GroupId, MinuteSlot[]> {
-  const out: Record<GroupId, MinuteSlot[]> = {}
-  let current: MinuteSlot[] | null = null
-  for (const line of lines) {
-    if (!line) continue
-    if (/^Попереджаємо/i.test(line)) break
-    const label = LABEL.exec(line)
-    if (label) {
-      const group = `${Number(label[1])}.${Number(label[2])}`
-      if (!CEK_GROUPS.includes(group)) return fail(`unknown group "${line}"`)
-      if (out[group]) return fail(`group ${group} is listed twice`)
-      current = out[group] = []
-      continue
-    }
-    const t = TIMES.exec(line)
-    const start = t ? parseClock(t[1]!) : null
-    // "20:00-00:00" ends at midnight
-    const end = t ? parseClock(t[2]!) || 1440 : null
-    if (!current || start === null || end === null || !(start < end)) return fail(`unexpected line "${line}"`)
-    current.push({ start, end, kind: 'off' })
-  }
-  for (const [g, slots] of Object.entries(out)) if (!slots.length) fail(`group ${g} has no hours`)
-  if (!Object.keys(out).length) fail('no groups in the list')
-  return out
-}
-
-/** A change told in a sentence: applied when it is one window for named groups, else those groups are unknown. */
-function applyProse(days: Map<string, CekDay>, date: string, rest: string, at: number, url: string): void {
-  const day = days.get(date)
-  // nothing known about the day yet: a change to it tells nothing either
-  if (!day) return
-  const groups = named(rest)
-  const windows = [...rest.matchAll(WINDOWS)]
-  // "з 18:00 до 22:00 не застосовуються відключення …", "скасовуються …": the opposite of an outage
-  const negated = /(?<![\p{L}])(?:не|без)(?![\p{L}])|скасов|відмін/iu.test(
-    rest.slice(0, rest.search(/Попереджаємо/i) === -1 ? undefined : rest.search(/Попереджаємо/i)),
-  )
-  const w = windows.length === 1 ? windows[0]! : null
-  const start = w?.[1] ? parseClock(w[1]) : null
-  const end = w?.[2] ? parseClock(w[2]) : null
-  const exact =
-    groups.length > 0 &&
-    start !== null &&
-    end !== null &&
-    start < end &&
-    !negated &&
-    /додатково|відключаються|застосовуються\s+відк?лючення/i.test(rest)
-  if (!exact) return setUnknown(days, date, groups.length ? groups : CEK_GROUPS, at, url)
-  const next = { ...day.groups }
-  for (const g of groups) if (next[g]) next[g] = [...next[g], { start: start, end: end, kind: 'off' }]
-  days.set(date, { at, url, groups: next })
-}
-
-function setUnknown(
-  days: Map<string, CekDay>,
-  date: string,
-  groups: readonly GroupId[],
-  at: number,
-  url: string,
-): void {
-  const day = days.get(date)
-  if (!day) return
-  const next = { ...day.groups }
-  for (const g of groups) next[g] = null
-  days.set(date, { at, url, groups: next })
-}
-
-/** The groups a sentence names ("черги 5.1, 5.2 ,6.1,6.2") */
-const named = (text: string): GroupId[] => [
-  ...new Set([...text.matchAll(GROUP)].map((m) => `${m[1]}.${m[2]}`).filter((g) => CEK_GROUPS.includes(g))),
-]
-
-/** The parts of the slots outside [start, end) */
-function outside(slots: readonly MinuteSlot[], start: number, end: number): MinuteSlot[] {
-  const out: MinuteSlot[] = []
-  for (const s of slots) {
-    if (s.start < start) out.push({ ...s, end: Math.min(s.end, start) })
-    if (s.end > end) out.push({ ...s, start: Math.max(s.start, end) })
   }
   return out
 }
-
-/** Minutes from the midnight of `date` to the instant; negative the evening before */
-const minuteOf = (date: string, at: number) =>
-  kyivDate(new Date(at)) === date ? kyivMinuteOfDay(new Date(at)) : at < Date.parse(date) ? -1440 : 1440
 
 /** The channel as a schedule source: today and later. Exported for tests. */
 export function cekDaysToSource(days: ReadonlyMap<string, CekDay>, now: Date): SourceRead {
@@ -251,8 +129,13 @@ export function cekDaysToSource(days: ReadonlyMap<string, CekDay>, now: Date): S
       const slots = day.groups[g]
       schedules[g] = slots ? makeDay(date, slots) : { date, status: 'unknown', intervals: [] }
     }
-    out[date] = { schedules, publishedAt: toKyivIso(new Date(day.at)) }
-    if (!newest || day.at > newest.at) newest = day
+    out[date] = {
+      schedules,
+      publishedAt: Number.isFinite(day.at) ? toKyivIso(new Date(day.at)) : null,
+      ...(day.cancelled ? { cancelled: true } : {}),
+      ...(day.unread ? { unread: day.unread } : {}),
+    }
+    if (Number.isFinite(day.at) && (!newest || day.at > newest.at)) newest = day
   }
   return { days: out, groups: [...CEK_GROUPS], ...(newest ? { url: newest.url } : {}) }
 }
@@ -266,12 +149,20 @@ export function cekTelegramSource(): SourceSpec {
       const now = ctx.now()
       // back to the list posted the evening before yesterday, which later changes build on
       const since = kyivInstant(addDays(kyivDate(now), -2), 12 * 60)
-      const { posts } = await readChannelWindow(ctx, CEK_CHANNEL, {
+      const { posts, from } = await readChannelWindow(ctx, CEK_CHANNEL, {
         region: 'dnipro-cek',
         since,
         maxPages: 6,
       })
-      return cekDaysToSource(parseCekPosts(posts, now), now)
+      // without the list of the evening before, the day's changes would stand as all of it, and an
+      // unread post among the ones missed would never count
+      if (Date.parse(from) > since.getTime())
+        throw new OutageError(
+          'parse',
+          `Telegram @${CEK_CHANNEL}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
+          { region: 'dnipro-cek', url: `https://t.me/s/${CEK_CHANNEL}` },
+        )
+      return cekDaysToSource(await cekDays(ctx, posts), now)
     },
   }
 }

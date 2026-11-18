@@ -29,7 +29,18 @@ export interface SourceRead {
    */
   days: Record<
     string,
-    { schedules: Record<GroupId, DaySchedule>; publishedAt: string | null; cancelled?: boolean }
+    {
+      schedules: Record<GroupId, DaySchedule>
+      publishedAt: string | null
+      cancelled?: boolean
+      /**
+       * A newer post of the channel about the day couldn't be read (why): the day is as the posts
+       * read make it, and may be behind (it is read again on a later poll)
+       */
+      unread?: string
+      /** Only part of the day was published, with no whole day under it: `unknown` too, as of then */
+      partial?: boolean
+    }
   >
   /** Groups this channel knows of, listed in the result even when no day names them */
   groups?: GroupId[]
@@ -156,6 +167,14 @@ export async function mergeSources(
         statuses[i]!.disagrees = true
     }
   }
+  // the days a channel couldn't read, and why
+  reads.forEach((r, i) => {
+    const unread = Object.entries(r?.days ?? {})
+      .filter(([, d]) => d.unread)
+      .map(([date, d]) => ({ date, message: d.unread! }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+    if (unread.length) statuses[i]!.unread = unread
+  })
   // a channel that won no day still says when it last published something
   reads.forEach((r, i) => {
     if (!r || statuses[i]!.dates.length) return
@@ -180,7 +199,7 @@ export async function mergeSources(
 }
 
 const hasPublished = (day: SourceRead['days'][string]) =>
-  !!day.cancelled || Object.values(day.schedules).some((d) => d.status !== 'unknown')
+  !!day.cancelled || !!day.partial || Object.values(day.schedules).some((d) => d.status !== 'unknown')
 
 /** Instant of a `publishedAt`; none (or unreadable) sorts before every real one */
 function time(iso: string | null): number {

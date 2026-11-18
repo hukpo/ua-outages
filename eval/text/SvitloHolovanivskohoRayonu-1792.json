@@ -1,0 +1,81 @@
+{
+ "input": {
+  "url": "https://t.me/SvitloHolovanivskohoRayonu/1792",
+  "source": {
+   "kind": "telegram",
+   "channel": "SvitloHolovanivskohoRayonu"
+  },
+  "publishedAt": "2026-11-15T20:07:48+02:00",
+  "edited": false,
+  "title": null,
+  "text": "На 15.11.2026 за розпорядженням НЕК \"Укренерго\" скасовано графік погодинних відключень (ГПВ) станом на 20:00 15.11.2026:",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "kirovohrad",
+    "name": "Кіровоградська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "cancel",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": "20:00"
+ },
+ "tags": [
+  "gpv",
+  "cancel",
+  "tricky"
+ ],
+ "note": "Unique to this channel (Kropyvnytskyi has only \"ГПВ та ГОП скасовано до окремого розпорядження\", which this channel also mirrors). \"скасовано ГПВ станом на 20:00 15.11.2026:\" ends with a colon and lists nothing. \"станом на 20:00\" read as statedAt; at could arguably be \"20:00\".",
+ "uncertain": true
+}

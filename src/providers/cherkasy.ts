@@ -1,21 +1,22 @@
+import { siteInput } from '../ai/posts.js'
+import type { PostInput } from '../ai/types.js'
+import { STANDARD_GROUPS } from '../schedule.js'
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
-import type { ProviderInfo, RegionSchedule } from '../types.js'
+import type { ProviderInfo } from '../types.js'
 import { mapLimit } from '../util.js'
 import { cherkasyAddresses } from './cherkasy-addresses.js'
-import { daysToSource, postsToDays, postsToSchedule, readChannelPosts, type SchedulePost } from './posts.js'
+import { daysToSource, readChannelPosts, readSchedulePosts } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
-import { findUaDate, parseGroupPost } from './ua-text.js'
 
 /**
  * Cherkasyoblenergo publishes each day's schedule as a news post, "Графік погодинних
  * відключень (ГПВ) на 6 листопада", with lines like "1.1 00:00 - 02:00, 07:00 - 10:00", and
  * the same text in its Telegram channel a few minutes later. Corrections come as a newer post
  * ("Оновлено графік … на 6 листопада") that lists only the hours still ahead, so a day is its
- * first post with the updates layered on top. The site's CMS has a JSON API: the posts are
- * searched and the ones for today and tomorrow fetched. Both channels are read, because the
+ * first post with the updates layered on top. The site's CMS has a JSON API: the posts the
+ * search finds since yesterday are fetched and read by the client's text processor. Both channels are read, because the
  * site post has been missing past midnight while the channel had the day.
  *
  * Address search goes through the operator's own lookup, see `cherkasy-addresses.ts`.
@@ -33,14 +34,8 @@ const API = 'https://www.cherkasyoblenergo.com/api/v1/posts'
 const SEARCH_URL = `${API}/search?${new URLSearchParams({ q: 'ГПВ', lang: 'uk', page: '0', size: '20' })}`
 const CHANNEL = 'pat_cherkasyoblenergo'
 
-/** Hourly schedule posts. Emergency (ГАВ) and industrial (ГОП) notices have no group windows. */
-const SCHEDULE_TITLE = /ГПВ|погодинн/i
-
-/** A title that calls the schedule off; emergency (ГАВ) ones aren't about the hourly schedule */
-const CANCEL_TITLE = /^(?![\s\S]*(?:аварійн|ГАВ))[\s\S]*(?:скасов|відмін|не\s+застосов|не\s+діятим)/iu
-
-/** Posts fetched per call at most: a day has had 5 versions, plus tomorrow's */
-const MAX_POSTS = 10
+/** Posts fetched per call at most: a day has had 5 versions, plus tomorrow's and notices */
+const MAX_POSTS = 20
 
 const POSTS = { groups: STANDARD_GROUPS, updates: 'layer' } as const
 
@@ -87,80 +82,56 @@ async function readSite(ctx: ProviderContext): Promise<SourceRead> {
   const now = ctx.now()
   const search = await ctx.http.json<SearchResponse>(SEARCH_URL, { region })
   const posts = await mapLimit(
-    pickSchedulePosts(search, now),
+    recentPosts(search, now),
     3,
     async (slug) => {
       const url = `${API}/${encodeURIComponent(slug)}?lang=uk`
       const res = await ctx.http.json<PostResponse>(url, { region })
       if (typeof res?.data?.content !== 'string')
         throw new OutageError('parse', `Cherkasy post ${slug}: no "content"`, { region, url })
-      return res.data
+      return { ...res.data, slug }
     },
     ctx.signal,
   )
-  return daysToSource(postsToDays(preparePosts(posts), now, POSTS), POSTS)
+  const { days } = await readSchedulePosts(ctx, region, cherkasyPosts(posts), POSTS)
+  // yesterday's first post (the evening before) is outside the window: its updates alone would
+  // stand as the whole day
+  for (const date of [...days.keys()]) if (date < kyivDate(now)) days.delete(date)
+  return daysToSource(days, POSTS)
 }
 
 /**
- * Slugs of the schedule posts that make up today and later, newest first: for each day its
- * updates back to the first post published before the day began (that one is the whole day,
- * the later ones list only the hours ahead), and before them the cancellations since yesterday
- * whose title names no day. Exported for tests.
- * The day comes from the title: slugs are reused ("onovleno-…-na-1-lystopada" is about 3 листопада).
+ * Slugs of the posts the search found since yesterday's start, newest first: every version of
+ * today's and tomorrow's schedule is among them (a day's first post comes the evening before),
+ * and the processor tells schedules from notices. Exported for tests.
  */
-export function pickSchedulePosts(res: SearchResponse, now: Date): string[] {
+export function recentPosts(res: SearchResponse, now: Date): string[] {
   const list = res?.data?.content
   if (!Array.isArray(list))
     throw new OutageError('parse', 'Cherkasy post search: no "data.content" list', { region: INFO.id })
-  const today = kyivDate(now)
-  const found: { slug: string; at: number; date: string }[] = []
-  /** Cancellations whose title names no day ("Скасовано застосування ГПВ"): the text says which */
-  const cancellations: string[] = []
-  for (const p of list) {
-    if (!p.slug || !p.title || !SCHEDULE_TITLE.test(p.title)) continue
-    const at = Date.parse(kyivIso(p.publishedAt ?? p.createdAt) ?? '')
-    const date = findUaDate(p.title, Number.isFinite(at) ? new Date(at) : now)
-    if (!date && CANCEL_TITLE.test(p.title) && at >= kyivInstant(addDays(today, -1), 0).getTime())
-      cancellations.push(p.slug)
-    if (!date || date < today || date > addDays(today, 2)) continue
-    found.push({ slug: p.slug, at, date })
-  }
-  found.sort((a, b) => b.at - a.at)
-  const whole = new Set<string>()
-  // a cancellation left unread would leave the schedule it calls off standing
-  const slugs: string[] = [...new Set(cancellations)].slice(0, 3)
-  for (const p of found) {
-    if (whole.has(p.date) || slugs.includes(p.slug)) continue
-    slugs.push(p.slug)
-    // published before its day: nothing older is needed for that day
-    if (!(p.at >= kyivInstant(p.date, 0).getTime())) whole.add(p.date)
-  }
-  return slugs.slice(0, MAX_POSTS)
+  const since = kyivInstant(addDays(kyivDate(now), -1), 0).getTime()
+  return list
+    .map((p) => ({ slug: p.slug, at: Date.parse(kyivIso(p.publishedAt ?? p.createdAt) ?? '') }))
+    .filter((p): p is { slug: string; at: number } => !!p.slug && p.at >= since)
+    .sort((a, b) => b.at - a.at)
+    .slice(0, MAX_POSTS)
+    .map((p) => p.slug)
 }
 
-/** Full posts → schedule, the site alone. Exported for tests. */
-export function parseCherkasyPosts(
-  posts: readonly (PostSummary & { content?: string })[],
-  now: Date,
-): RegionSchedule {
-  return postsToSchedule(INFO.id, preparePosts(posts), now, { updates: 'layer' })
-}
-
-function preparePosts(posts: readonly (PostSummary & { content?: string })[]): SchedulePost[] {
-  const prepared: SchedulePost[] = posts.map((p) => ({
-    title: p.title ?? '',
-    body: flattenPostHtml(p.content ?? ''),
-    publishedAt: kyivIso(p.publishedAt ?? p.createdAt) ?? '',
-  }))
-  // a schedule post we can't read is a format change; a cancellation legitimately has no lines
-  const unreadable = prepared.filter(
-    (p) => !Object.keys(parseGroupPost(p.body)).length && !/не\s+застосов|скасова/i.test(p.body),
+/** Full posts → inputs for the text processor. Exported for tests. */
+export function cherkasyPosts(posts: readonly (PostSummary & { content?: string })[]): PostInput[] {
+  return posts.map((p) =>
+    siteInput(
+      {
+        url: p.slug ? `${API}/${encodeURIComponent(p.slug)}?lang=uk` : null,
+        site: INFO.website,
+        title: p.title ?? '',
+        text: flattenPostHtml(p.content ?? ''),
+        publishedAt: kyivIso(p.publishedAt ?? p.createdAt) ?? '',
+      },
+      INFO.id,
+    ),
   )
-  if (unreadable.length && unreadable.length === prepared.length)
-    throw new OutageError('parse', `Cherkasy: no group lines in "${unreadable[0]!.title}"`, {
-      region: INFO.id,
-    })
-  return prepared
 }
 
 /**

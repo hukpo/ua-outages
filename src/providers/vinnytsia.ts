@@ -1,5 +1,5 @@
+import { STANDARD_GROUPS } from '../schedule.js'
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
 import { toKyivIso } from '../time.js'
 import type { ProviderInfo } from '../types.js'
 import { asSource } from './as-source.js'

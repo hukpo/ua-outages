@@ -1,0 +1,57 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5689",
+  "source": {
+   "kind": "telegram",
+   "channel": "chernigivoblenergo"
+  },
+  "publishedAt": "2026-11-10T12:38:00+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚠️ Шановні споживачі!\n\n💣 Внаслідок атаки ворога пошкоджено об'єкт електропостачання. Знеструмлено близько 27 тисяч абонентів у Чернігівському і Ніжинському районах.\n\n🛠 Енергетики приступлять до виконання аварійно-відновлювальних робіт щойно дозволить безпекова ситуація.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "chernihiv",
+    "name": "Чернігівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "tricky"
+ ],
+ "note": "attack damage; keyword hit is \"аварійно-відновлювальних робіт\"",
+ "uncertain": false
+}

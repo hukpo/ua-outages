@@ -1,6 +1,5 @@
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
-import { makeDay, unpublished, type MinuteSlot } from '../schedule.js'
+import { makeDay, unpublished, type MinuteSlot, STANDARD_GROUPS } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { AddressQuery, DaySchedule, GroupId, RegionId, ProviderInfo, RegionSchedule } from '../types.js'
 import { SharedTask } from '../util.js'

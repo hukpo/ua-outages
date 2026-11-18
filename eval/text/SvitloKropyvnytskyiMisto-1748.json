@@ -1,0 +1,58 @@
+{
+ "input": {
+  "url": "https://t.me/SvitloKropyvnytskyiMisto/1748",
+  "source": {
+   "kind": "telegram",
+   "channel": "SvitloKropyvnytskyiMisto"
+  },
+  "publishedAt": "2026-11-04T19:47:44+02:00",
+  "edited": false,
+  "title": null,
+  "text": "В 19:45 04.11.2026 отримано розпорядження диспетчера НЕК \"Укренерго\" застосувати Графіки обмеження потужності (ГОП) в обсязі 1, 2, 3, 4, 5 черг, з 00:00 05.11.2026 року по 23:59 05.11.2026р., у зв’язку з дефіцитом потужності в енергосистемі України.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "kirovohrad",
+    "name": "Кіровоградська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "tricky"
+ ],
+ "note": "ГОП \"в обсязі 1, 2, 3, 4, 5 черг\" for 05.11 — industry limits, other; must not become ГАВ queues.",
+ "uncertain": false
+}

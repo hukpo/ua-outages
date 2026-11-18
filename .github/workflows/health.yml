@@ -31,6 +31,11 @@ jobs:
       # DTEK's Donetsk site answers non-browser clients with a bot check; drop it from the skip
       # list once that changes
       HEALTH_ARGS: --address --json --skip donetsk
+      # posts and pictures are read with GPT-6.1 Terra (answers cached between runs)
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      # with it, ГАВ / СГАВ posts are read again by Claude Haiku, Claude Opus judging a disagreement
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      UA_OUTAGES_PROCESSOR_CACHE: .processor-cache.json
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,6 +43,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/cache/restore@v4
+        with:
+          path: .processor-cache.json
+          key: health-processor-cache-${{ github.run_id }}
+          restore-keys: health-processor-cache-
 
       # Exit 0 = all work, 1 = something is broken (scripts/health.ts). One failed request
       # shouldn't open an issue: a failing check is repeated after two minutes, and only the
@@ -52,6 +62,12 @@ jobs:
           # no report at all: the script crashed, which is a failure of this workflow
           jq -e '.regions | length > 0' report.json > /dev/null
           jq -r '.regions[] | "\(.status)\t\(.region)\t\(.message // "")"' report.json
+
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .processor-cache.json
+          key: health-processor-cache-${{ github.run_id }}
 
       - name: Open, update or close the issue
         run: |

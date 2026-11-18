@@ -1,0 +1,110 @@
+{
+ "input": {
+  "url": "https://t.me/poltavaOE/4557",
+  "source": {
+   "kind": "telegram",
+   "channel": "poltavaOE"
+  },
+  "publishedAt": "2026-11-16T21:18:25+02:00",
+  "edited": true,
+  "title": null,
+  "text": "ГАВ скасовано!\n\nО 21:07 скасовано ГАВ (6-10 черги. О 20:45 відміна СГАВ.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "poltava",
+    "name": "Полтавська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "21:07",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "20:45",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav",
+  "sgav",
+  "cancel",
+  "edit",
+  "tricky"
+ ],
+ "note": "\"О 21:07 скасовано ГАВ (6-10 черги. О 20:45 відміна СГАВ.\" Edited post; the СГАВ sentence may have been added by the edit but is not marked as such: addedInEdit false",
+ "uncertain": true
+}

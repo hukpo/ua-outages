@@ -1,0 +1,57 @@
+{
+ "input": {
+  "url": "https://t.me/lvivoblenergo/3007",
+  "source": {
+   "kind": "telegram",
+   "channel": "lvivoblenergo"
+  },
+  "publishedAt": "2026-09-11T10:46:03+03:00",
+  "edited": false,
+  "title": null,
+  "text": "Повідомити енергетиків про аварійну ситуацію чи вимкнення можна без дзвінків — одразу через застосунок «КомКом».\n\nПідготували для вас коротку відеоінструкцію, як передати заявку диспетчеру за кілька кліків: youtu.be/ESQsU7CKxEk.\n\n📲 Завантажити застосунок: loe.lviv.ua/page/komkom-app.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "lviv",
+    "name": "Львівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "explainer"
+ ],
+ "note": "App/service promo mentioning відключення/графіки/ГПВ/ГАВ/черг in general terms: no event.",
+ "uncertain": false
+}

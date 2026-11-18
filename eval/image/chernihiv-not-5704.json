@@ -1,0 +1,52 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5704",
+  "caption": "⚠️ Шановні споживачі!\n\nВнаслідок аварії на об'єкті електропостачання знеструмлено близько 80 тисяч абонентів у Корюківському, Новгород-Сіверському і Ніжинському районах.\n\n🛠 Енергетики працюють над відновленням електропостачання.",
+  "publishedAt": "2026-11-13T00:21:03+02:00",
+  "region": {
+   "id": "chernihiv",
+   "name": "Чернігівська область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  "file": "test/fixtures/chernihiv/not-schedules/tg-5704.jpg"
+ },
+ "expected": {
+  "isSchedule": false,
+  "kind": null,
+  "date": null,
+  "statedAt": null,
+  "schedule": []
+ },
+ "tags": [
+  "negative",
+  "fixture",
+  "telegram"
+ ],
+ "note": "chernihiv.test.ts: not a schedule (banner of an accident post)",
+ "uncertain": false
+}

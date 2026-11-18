@@ -1,0 +1,81 @@
+{
+ "input": {
+  "url": "https://t.me/kharkivenergy/2326",
+  "source": {
+   "kind": "telegram",
+   "channel": "kharkivenergy"
+  },
+  "publishedAt": "2026-11-07T07:08:42+02:00",
+  "edited": false,
+  "title": null,
+  "text": "✅Шановні споживачі!\n\n⚡️Аварійні обмеження електропостачання скасовані!\n\n📌Продовжують діяти графіки погодинних відключень.\n\nВсім гарної суботи!\nНасолоджуймося вихідними та світлом у домівках, але не забуваймо про ощадливе користування електроенергією, щоб підтримати нашу енергосистему🙏.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "kharkiv",
+    "name": "Харківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "cancel",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "emergency",
+  "cancel"
+ ],
+ "note": "\"Аварійні обмеження електропостачання скасовані! Продовжують діяти ГПВ\".",
+ "uncertain": false
+}

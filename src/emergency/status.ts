@@ -1,7 +1,46 @@
-import { toKyivIso } from '../time.js'
+import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { EmergencyStatus, RegionId } from '../types.js'
-import type { Announcement, EmergencyKind } from './classify.js'
 import { sortQueues } from './queues.js'
+
+export type EmergencyKind = 'gav' | 'sgav' | 'emergency'
+
+export interface Announcement {
+  /**
+   * apply: in force (new, more queues, or "тривають"); cancel: lifted (all, or the queues named);
+   * update: the set of switched-off queues changed ("заміна черг"); unclear: the headline names
+   * an emergency schedule, but what happened can't be read
+   */
+  action: 'apply' | 'cancel' | 'update' | 'unclear'
+  kind: EmergencyKind
+  /** When it took effect: the time in the text, else the post time. ISO, Kyiv offset */
+  at: string
+  /** `at` came from the text */
+  timed: boolean
+  /** apply: queues switched off; cancel: queues switched back on; update: queues switched off now */
+  queues: string[] | null
+  /** update, apply: queues switched back on ("(1-5 ввімкнені)", "замість 1 та 2 черг …") */
+  restored: string[] | null
+  /** "10 черг" without numbers; with numbers, how many */
+  count: number | null
+  /** "в повному обсязі": every queue */
+  all: boolean
+  /** apply: adds to what is in force ("додатково", "ще") instead of replacing it */
+  add: boolean
+  /**
+   * apply: "знову введені ГАВ (для 6-10 черг)": the queues named are in force again, so whatever
+   * ran before was lifted in between (Sumy never posts that)
+   */
+  again: boolean
+  /** cancel of some queues only ("скасовано 5 черг ГАВ (з 6 по 10)") */
+  partial: boolean
+  /** ГПВ applies alongside: true; suspended: false; not said: null */
+  scheduleApplies: boolean | null
+  area: string | null
+  /** A cancellation written into an earlier apply post ("UPD: … скасовано"); its time is unknown */
+  edited: boolean
+  /** apply: said to last at least until then ("до кінця доби"); ISO, Kyiv offset */
+  until?: string | null
+}
 
 /** One classified announcement with the post it came from. */
 export interface EmergencyEvent {
@@ -17,6 +56,12 @@ export interface FoldOptions {
   now: Date
   /** An apply without a later cancel or update for this long has ended (inferred) */
   ttlHours: number
+  /**
+   * Instead: an apply without a later word lasts to the end of its Kyiv day (inferred then). For
+   * operators that never post a cancel and whose emergency outages run for hours, announced anew
+   * each morning (Sumy)
+   */
+  holdToEndOfDay?: boolean
   source: EmergencyStatus['source']
   /** The status the caller got last time: dates an "UPD: … скасовано" edit (see `end`) */
   previous?: EmergencyStatus
@@ -51,7 +96,8 @@ const MESSAGE_MAX = 2000
  * One area, however it is written: "у Ніжинському і Прилуцькому районах" and "…та Прилуцькому…",
  * "м. Полтава" and "м. Полтаві"
  */
-const areaKey = (area: string | null) =>
+/** An area's wording reduced to what tells it apart ("м. Павлоград" = "м. Павлограді") */
+export const areaKey = (area: string | null) =>
   area
     ? area
         .toLowerCase()
@@ -81,8 +127,18 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
   const tracks = new Map<string, Track>()
   /** The newest cancel that had nothing running to end (the apply was before the window) */
   let orphanCancel: EmergencyEvent | null = null
+  /** The newest word posted after a cancel announced for later, taking effect before it */
   let lastUnclear: EmergencyEvent | null = null
-  let lastDecisiveAt = 0
+  /**
+   * What such a word leaves in doubt, until a word posted after it about each: ГАВ (with the
+   * unnamed ones) and СГАВ apart, so a СГАВ cancel says nothing about a ГАВ in doubt
+   */
+  const doubt = new Set<'main' | 'sgav'>()
+  /** The newest post that couldn't be read, and what it may have changed (the same way) */
+  let lastUnread: EmergencyEvent | null = null
+  const unreadDoubt = new Set<'main' | 'sgav'>()
+  const groupsOf = (k: EmergencyKind): ('main' | 'sgav')[] =>
+    k === 'emergency' ? ['main', 'sgav'] : k === 'sgav' ? ['sgav'] : ['main']
 
   const timeOf = (e: EmergencyEvent) => Math.max(Date.parse(e.posted), Date.parse(e.announcement.at))
   const keyOf = (kind: EmergencyKind, area: string | null) => `${kind}|${areaKey(area)}`
@@ -163,14 +219,29 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     return false
   }
 
+  /** Queues back on while which ones were off isn't known: fewer, while that leaves some */
+  const restoreCount = (t: Track, n: number) => {
+    t.count = t.count !== null && t.count - n > 0 ? t.count - n : null
+  }
+  /** Whole cancels announced for later, as processed */
+  const aheadCancels: { kinds: EmergencyKind[]; area: string | null; at: number; posted: number }[] = []
+  /** The operator announces СГАВ (in this window): an unread post may be one */
+  const usesSgav = events.some((e) => e.announcement.kind === 'sgav')
+
   const ttl = opts.ttlHours * 3600_000
   const now = opts.now.getTime()
-  /** Episodes nobody followed up on for the TTL ended then (operators that never cancel) */
+  /**
+   * When a word nobody followed up on stops counting: after the TTL; with `holdToEndOfDay`, at the
+   * end of its day, and not sooner than the TTL (an apply at 21:00 runs into the night). The same
+   * for an apply, an unread post and a cancel of part of the queues
+   */
+  const lapse = (at: number) => (opts.holdToEndOfDay ? Math.max(endOfKyivDay(at), at + ttl) : at + ttl)
+  /** Episodes nobody followed up on ended then (operators that never cancel); the end is exclusive */
   const expire = (at: number) => {
     for (const t of tracks.values()) {
       // "до кінця доби": not before then
-      const end = Math.max(t.lastAt + ttl, t.until)
-      if (t.active && at > end) {
+      const end = Math.max(lapse(t.lastAt), t.until)
+      if (t.active && at >= end) {
         t.active = false
         t.endedAt = toKyivIso(new Date(end))
         t.inferred = true
@@ -183,15 +254,48 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     // "О 19:00 - заміна черг" posted at 18:52: not yet; the state stays as it is until then
     if (Date.parse(a.at) > now) continue
     // a new post after a long silence starts a new episode, it doesn't continue yesterday's
-    expire(timeOf(e))
-    if (a.action === 'unclear') {
-      // "ГАВ: …" that can't be read while one runs: it is still news about it, the state stands
-      const on = [...tracks.values()].filter((t) => t.active && (t.kind === a.kind || a.kind === 'emergency'))
-      if (on.length) for (const t of on) touch(t, e)
-      else lastUnclear = e
+    // by when it was posted: one taking effect later must not run the clock ahead of the posts
+    // after it ("СГАВ з 14:00" posted at 08:00 doesn't end at 11:00 what a 10:00 post still lifts)
+    expire(Date.parse(e.posted))
+    // a word posted after a cancel announced for later, and taking effect before it ("о 12:00
+    // скасовуються" at 08:00, "ГАВ діють" at 10:00): a reminder, or the cancel called off. Which
+    // one isn't said: once the cancel's time has come, not known
+    const pending = a.action === 'apply' || a.action === 'update'
+    const overtaken =
+      pending &&
+      aheadCancels.find(
+        (c) =>
+          c.kinds.includes(a.kind) &&
+          (!c.area || areaKey(c.area) === areaKey(a.area)) &&
+          Date.parse(a.at) < c.at &&
+          Date.parse(e.posted) > c.posted,
+      )
+    if (overtaken) {
+      // a reminder or the cancel called off: not known once the cancel's time has come
+      lastUnclear = e
+      for (const g of groupsOf(a.kind)) doubt.add(g)
+      for (const t of tracks.values()) if (t.active) for (const g of groupsOf(t.kind)) doubt.add(g)
       continue
     }
-    lastDecisiveAt = Math.max(lastDecisiveAt, timeOf(e))
+    if (a.action === 'unclear') {
+      // a post that can't be read (yet: it is asked again on a later poll) may have ended what runs
+      // or started something: the state stays as the posts before it make it, flagged, and it
+      // doesn't keep an episode alive. What it may have changed: what runs, ГАВ in any case (what
+      // an unread post most often starts), and СГАВ where the operator announces it
+      lastUnread = e
+      unreadDoubt.add('main')
+      if (usesSgav) unreadDoubt.add('sgav')
+      for (const t of tracks.values()) if (t.active) for (const g of groupsOf(t.kind)) unreadDoubt.add(g)
+      continue
+    }
+    // a word posted after the unread one settles its kinds; one posted before it but taking
+    // effect later ("об 11:00 вводяться", posted 10:40) doesn't
+    for (const [last, set] of [
+      [lastUnclear, doubt],
+      [lastUnread, unreadDoubt],
+    ] as const)
+      if (last && Date.parse(e.posted) >= Date.parse(last.posted))
+        for (const g of groupsOf(a.kind)) set.delete(g)
 
     if (a.action === 'cancel') {
       const kinds: EmergencyKind[] =
@@ -203,6 +307,10 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
       // with no area followed separately, the one whole-region episode is what it ends
       if (a.area && !targets.length && ![...tracks.values()].some((t) => t.active && t.area))
         targets = on.filter((t) => !t.area)
+      // a whole cancel announced for later: what is posted after it but takes effect before it
+      // is checked against it (above)
+      if (a.timed && !a.partial && Date.parse(a.at) > Date.parse(e.posted))
+        aheadCancels.push({ kinds, area: a.area, at: Date.parse(a.at), posted: Date.parse(e.posted) })
       for (const t of targets) {
         if (!a.partial || lift(t, a)) end(t, e)
         else touch(t, e)
@@ -219,12 +327,35 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     if (a.action === 'update') {
       const t = running(a.kind, a.area)
       if (!t) {
-        if (a.queues?.length) start(a, e, a.kind)
+        // "тепер відключено 2 черги" with nothing known before: on, with those queues or that many
+        if (a.queues?.length || a.count !== null) start(a, e, a.kind)
         continue
       }
-      // "знеструмлюються 6-10, вмикаються 1-5": the new set
+      if (a.add) {
+        // "додатково 3": ids added to ids; "ще 2 черги" without ids: more, which ones not known
+        if (a.queues) t.queues = t.queues ? new Set([...t.queues, ...a.queues]) : null
+        else if (a.count !== null) t.queues = null
+        t.count = t.queues
+          ? t.queues.size
+          : t.count !== null && (a.count ?? a.queues?.length ?? null) !== null
+            ? t.count + (a.count ?? a.queues!.length)
+            : null
+      } else if (a.queues) {
+        // "заміна черг: тепер 3 та 4": the new set. Queues it neither names off nor back on, while
+        // it names some back on ("9,10,1,2 знеструмлюємо; 3-6 заживлені" while 3-8 were off):
+        // whether 7 and 8 stay off isn't said
+        const left = t.queues
+          ? [...t.queues].filter((q) => !a.queues!.includes(q) && !(a.restored ?? []).includes(q))
+          : []
+        t.queues = a.restored?.length && left.length ? null : new Set(a.queues)
+        t.count = t.queues ? t.queues.size : null
+      } else if (a.count !== null) {
+        // the volume now; queue ids that don't fit it are no longer known
+        if (t.queues && t.queues.size !== a.count) t.queues = null
+        t.count = a.count
+      }
       if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
-      if (a.queues) t.queues = new Set([...(t.queues ?? []), ...a.queues])
+      else if (a.restored?.length && !a.queues && a.count === null) restoreCount(t, a.restored.length)
       if (t.queues) t.count = t.queues.size
       touch(t, e)
       if (t.queues && !t.queues.size) end(t, e)
@@ -239,6 +370,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     }
     // "для 6-10 черг (1-5 ввімкнені)": those are back on
     if (t.queues && a.restored) for (const q of a.restored) t.queues.delete(q)
+    else if (a.restored?.length && !a.queues && a.count === null) restoreCount(t, a.restored.length)
     if (a.queues && a.again && t.queues?.size && a.queues.every((q) => t.queues!.has(q))) {
       // "знову введені ГАВ (для 6-10 черг)" while 6-10 are off: all was lifted in between, unannounced
       t.queues = new Set(a.queues)
@@ -266,15 +398,19 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
 
   const message = (e: EmergencyEvent | null) =>
     e ? { text: e.text.slice(0, MESSAGE_MAX), url: e.url, at: e.posted } : null
+  // a newer post that couldn't be read yet: the state below, flagged (it lapses with the TTL)
+  const unread =
+    lastUnread && unreadDoubt.size && now < lapse(timeOf(lastUnread)) ? message(lastUnread)! : null
   const status = (s: Omit<EmergencyStatus, 'region' | 'source' | 'fetchedAt'>): EmergencyStatus => ({
     region: opts.region,
     ...s,
+    ...(unread ? { unread } : {}),
     source: opts.source,
     fetchedAt,
   })
 
-  // the newest word can't be read: say so rather than guess (it expires with the TTL)
-  if (lastUnclear && timeOf(lastUnclear) > lastDecisiveAt && now - timeOf(lastUnclear) <= ttl)
+  // a word that may have called off a cancel announced for later: not known (it expires with the TTL)
+  if (lastUnclear && doubt.size && now < lapse(timeOf(lastUnclear)))
     return status({
       state: 'unknown',
       kind: lastUnclear.announcement.kind,
@@ -342,7 +478,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     const a = orphanCancel.announcement
     // "скасовано ГАВ для 6-10 черг", "м. Павлоград: скасовано" with nothing known before: the
     // rest may still be on, so not a region-wide "cancelled"…
-    const recent = now - timeOf(orphanCancel) <= ttl
+    const recent = now < lapse(timeOf(orphanCancel))
     if ((a.partial || a.area) && recent)
       return status({
         state: 'unknown',
@@ -363,7 +499,7 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
         kind: a.kind,
         scheduleApplies: null,
         since: null,
-        endedAt: toKyivIso(new Date(timeOf(orphanCancel) + ttl)),
+        endedAt: toKyivIso(new Date(lapse(timeOf(orphanCancel)))),
         queues: null,
         queueCount: null,
         area: null,
@@ -397,4 +533,10 @@ export function foldEvents(events: readonly EmergencyEvent[], opts: FoldOptions)
     inferred: false,
     message: null,
   })
+}
+
+/** The next Kyiv midnight after `ms` */
+function endOfKyivDay(ms: number): number {
+  const day = kyivDate(new Date(ms))
+  return kyivInstant(addDays(day, 1), 0).getTime()
 }

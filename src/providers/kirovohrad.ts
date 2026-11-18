@@ -16,6 +16,7 @@ import {
   KIROVOHRAD_CHANNEL,
   KIROVOHRAD_GROUPS,
   gpvVersionsToSource,
+  type GpvChannel,
   readGpvChannel,
   standingVersions,
   type GpvVersion,
@@ -186,7 +187,7 @@ export function kirovohradProvider(): Provider {
 
     async getSchedules(ctx) {
       // read once, used twice: as a source of its own, and to date the site's grid
-      let channel: Promise<GpvVersion[]> | undefined
+      let channel: Promise<GpvChannel> | undefined
       const versions = () => (channel ??= readGpvChannel(ctx))
       let sameList = false
       const s = await mergeSources(
@@ -201,8 +202,12 @@ export function kirovohradProvider(): Provider {
               // the channel being down is its own failure; the grid then stands undated by it
               const known = await versions().catch(() => null)
               const now = ctx.now()
-              sameList = !!grid && !!known && showsStandingList(grid, known, now)
-              return gridToSource(grid, known, now)
+              sameList = !!grid && !!known && showsStandingList(grid, known.versions, now)
+              const read = gridToSource(grid, known?.versions ?? null, now)
+              // a newer post the channel couldn't read: its versions don't vouch for the grid's time
+              for (const [date, day] of Object.entries(read.days))
+                if (known?.unread.has(date)) day.publishedAt = null
+              return read
             },
           },
           {

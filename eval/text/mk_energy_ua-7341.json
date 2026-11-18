@@ -1,0 +1,93 @@
+{
+  "input": {
+    "url": "https://t.me/mk_energy_ua/7341",
+    "source": {
+      "kind": "telegram",
+      "channel": "mk_energy_ua"
+    },
+    "publishedAt": "2024-11-11T12:46:21+02:00",
+    "edited": false,
+    "title": null,
+    "text": "Ситуація по ГАВ станом на 12:45:\n♦️9,10,1,2 черги знеструмлюємо;\n♦️7,8 - залишаються відключеними;\n♦️3,4,5,6 - будуть заживлені.",
+    "replyTo": null,
+    "photoCount": 0,
+    "regions": [
+      {
+        "id": "mykolaiv",
+        "name": "Миколаївська область",
+        "queues": [
+          "1.1",
+          "1.2",
+          "2.1",
+          "2.2",
+          "3.1",
+          "3.2",
+          "4.1",
+          "4.2",
+          "5.1",
+          "5.2",
+          "6.1",
+          "6.2"
+        ],
+        "emergencyQueues": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "events": [
+      {
+        "kind": "gav",
+        "action": "change",
+        "regions": [
+          "mykolaiv"
+        ],
+        "area": null,
+        "date": null,
+        "at": "12:45",
+        "until": null,
+        "allQueues": false,
+        "queues": [
+          "1",
+          "2",
+          "7",
+          "8",
+          "9",
+          "10"
+        ],
+        "queuesRestored": [
+          "3",
+          "4",
+          "5",
+          "6"
+        ],
+        "queueCount": null,
+        "additive": false,
+        "again": false,
+        "gpvApplies": null,
+        "addedInEdit": false,
+        "untilFurtherNotice": false,
+        "schedule": []
+      }
+    ],
+    "photosAreSchedules": false,
+    "statedAt": "12:45"
+  },
+  "tags": [
+    "regression",
+    "gav",
+    "tricky"
+  ],
+  "note": "\"Ситуація по ГАВ станом на 12:45: 9,10,1,2 знеструмлюємо; 7,8 залишаються; 3,4,5,6 будуть заживлені\" → statedAt 12:45. [p11: \"станом на HH:MM\" is the time of the action when the post gives no other]",
+  "uncertain": false
+}

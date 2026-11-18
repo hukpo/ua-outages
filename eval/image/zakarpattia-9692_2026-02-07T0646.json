@@ -1,0 +1,217 @@
+{
+ "input": {
+  "url": "https://t.me/zakarpatenergyofficial/9692",
+  "caption": "Увага! Змінено графік погодинних включень/відключень електроенергії ГПВ на 07.02.2026 згідно з розпорядженням НЕК «Укренерго».\n\nЗастосування графіків – вимушена міра після масових ракетно-дронових атак, які пошкодили енергетичну інфраструктуру країни. Графіки застосовуються виключно за вказівкою диспетчера НЕК «Укренерго».\n\nДля перевірки своєї черги та виду обмежень електропостачання, уточнення інформації використовуйте:\n\nЧат-бот в Telegram: https://t.me/zakarpatenergybot\nЧат-бот у Viber: https://chats.viber.com/zakarpatenergybot\nСайт: https://zakarpat.energy/customers/break-in-electricity-supply/\nКол-центр: 0800501620",
+  "publishedAt": "2026-02-07T06:46:05+02:00",
+  "region": {
+   "id": "zakarpattia",
+   "name": "Закарпатська область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": []
+  },
+  "file": "test/fixtures/zakarpattia/posters/9692_2026-02-07T0646.jpg"
+ },
+ "expected": {
+  "isSchedule": true,
+  "kind": "gpv",
+  "date": "2026-02-07",
+  "statedAt": null,
+  "schedule": [
+   {
+    "queue": "1.1",
+    "intervals": [
+     {
+      "from": "08:30",
+      "to": "11:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "1.2",
+    "intervals": [
+     {
+      "from": "08:30",
+      "to": "11:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.1",
+    "intervals": [
+     {
+      "from": "08:30",
+      "to": "11:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:30",
+      "to": "15:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.2",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "11:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.1",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "11:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.2",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "11:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.1",
+    "intervals": [
+     {
+      "from": "04:30",
+      "to": "08:30",
+      "kind": "off"
+     },
+     {
+      "from": "11:30",
+      "to": "13:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.2",
+    "intervals": [
+     {
+      "from": "04:30",
+      "to": "09:00",
+      "kind": "off"
+     },
+     {
+      "from": "11:30",
+      "to": "13:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "22:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.1",
+    "intervals": [
+     {
+      "from": "04:30",
+      "to": "09:00",
+      "kind": "off"
+     },
+     {
+      "from": "11:30",
+      "to": "13:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.2",
+    "intervals": [
+     {
+      "from": "04:30",
+      "to": "09:00",
+      "kind": "off"
+     },
+     {
+      "from": "11:30",
+      "to": "13:30",
+      "kind": "off"
+     },
+     {
+      "from": "22:30",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.1",
+    "intervals": [
+     {
+      "from": "04:30",
+      "to": "08:30",
+      "kind": "off"
+     },
+     {
+      "from": "11:30",
+      "to": "13:30",
+      "kind": "off"
+     },
+     {
+      "from": "17:30",
+      "to": "20:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.2",
+    "intervals": [
+     {
+      "from": "04:30",
+      "to": "08:30",
+      "kind": "off"
+     },
+     {
+      "from": "11:30",
+      "to": "13:30",
+      "kind": "off"
+     },
+     {
+      "from": "15:00",
+      "to": "17:30",
+      "kind": "off"
+     }
+    ]
+   }
+  ]
+ },
+ "tags": [
+  "gpv",
+  "fixture",
+  "telegram"
+ ],
+ "note": "from test/fixtures/zakarpattia/posters/labels.json (hand-read, 800x210 table of half-hour cells; rows 1-1…6-2 = 1.1…6.2)",
+ "uncertain": false
+}

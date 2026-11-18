@@ -1,0 +1,142 @@
+{
+ "input": {
+  "url": "https://t.me/SvitloKropyvnytskyiMisto/1820",
+  "source": {
+   "kind": "telegram",
+   "channel": "SvitloKropyvnytskyiMisto"
+  },
+  "publishedAt": "2026-11-15T20:50:39+02:00",
+  "edited": false,
+  "title": null,
+  "text": "На 15.11.2026 за розпорядженням НЕК \"Укренерго\" внесено зміни до графіка погодинних відключень (ГПВ) станом на 20:50 15.11.2026:\n\nЧерга 4.1: 22-24\nЧерга 4.2: 22-24\nЧерга 5.1: 22-24\nЧерга 5.2: 22-24\nЧерга 6.1: 22-24\nЧерга 6.2: 22-24",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "kirovohrad",
+    "name": "Кіровоградська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "4.1",
+      "intervals": [
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "20:50"
+ },
+ "tags": [
+  "gpv",
+  "gpv-schedule",
+  "tricky"
+ ],
+ "note": "Only 6 of 12 queues are listed (the others presumably have no outages); the label lists only the written queues. [p2: gpv start = schedule for a day, new or updated; change = correction to some queues]",
+ "uncertain": false
+}

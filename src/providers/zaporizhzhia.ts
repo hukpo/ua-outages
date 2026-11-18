@@ -1,15 +1,19 @@
+import { analyzeAll, siteInput, type Analyzed } from '../ai/posts.js'
+import { htmlToText } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
-import { slotsToIntervals } from '../schedule.js'
-import { addDays, kyivInstant, parseClock, toKyivIso } from '../time.js'
-import type { ProviderInfo, RegionSchedule } from '../types.js'
+import { slotsToIntervals, STANDARD_GROUPS } from '../schedule.js'
+import { addDays, kyivDate, kyivInstant, parseClock, toKyivIso } from '../time.js'
+import type { ProviderInfo } from '../types.js'
 import {
   daysToSource,
+  gpvEvents,
+  groundTimeless,
+  assembleDays,
   postsToDays,
-  postsToSchedule,
   readChannelPosts,
+  textPublications,
+  textUnread,
   type PostDay,
-  type SchedulePost,
 } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
@@ -19,7 +23,8 @@ import { zoeAddresses } from './zaporizhzhia-addresses.js'
  * Zaporizhzhiaoblenergo posts schedules on a WordPress archive page, newest first; corrections
  * are new posts ("ОНОВЛЕНО ГПВ НА 5 ЛИСТОПАДА … (оновлено 21:25)"), each listing the whole day.
  * The posts carry no machine timestamps: page order decides which version is current, and the
- * operator's own "(оновлено HH:MM)" is the time of a version. A post lists only the groups that
+ * operator's own "(оновлено HH:MM)" (`PostAnalysis.statedAt`) is the time of a version. The
+ * articles are read by the client's text processor. A post lists only the groups that
  * have outages that day; the rest have none.
  *
  * The site is the complete record (8–13 versions a day). The Telegram channel repeats well
@@ -37,6 +42,8 @@ const INFO: ProviderInfo = {
 
 const CHANNEL = 'Zaporizhzhyaoblenergo_news'
 const POSTS = { omitted: 'none', groups: STANDARD_GROUPS } as const
+/** The site's articles: no time of their own, the page order is theirs */
+const SITE_POSTS = { ...POSTS, timeless: true } as const
 
 /** The site's page: what it says per date, and every version on it for comparing with Telegram */
 interface SiteRead {
@@ -55,7 +62,7 @@ export function zaporizhzhiaProvider(): Provider {
       // one fetch of the page serves both readers
       let page: Promise<SiteRead> | undefined
       const site = () =>
-        (page ??= ctx.http.text(INFO.website, { region: INFO.id }).then((html) => readZoe(html, ctx.now())))
+        (page ??= ctx.http.text(INFO.website, { region: INFO.id }).then((html) => readZoe(ctx, html)))
       return mergeSources(
         ctx,
         INFO.id,
@@ -88,7 +95,19 @@ async function readChannel(ctx: ProviderContext, site: SiteRead | null): Promise
     for (const [date, day] of days) {
       const versions = site.versions.filter((v) => v.date === date)
       const same = versions.findIndex((v) => v.content === contentOf(date, day))
-      if (same > 0 || (same === 0 && site.read.days[date]?.publishedAt)) delete read.days[date]
+      if (same > 0 || (same === 0 && site.read.days[date]?.publishedAt)) {
+        // the site has it: the channel's copy goes, a post it couldn't read about the day stays said
+        const unread = read.days[date]?.unread
+        if (unread)
+          read.days[date] = {
+            schedules: Object.fromEntries(
+              STANDARD_GROUPS.map((g) => [g, { date, status: 'unknown' as const, intervals: [] }]),
+            ),
+            publishedAt: null,
+            unread,
+          }
+        else delete read.days[date]
+      }
     }
   return read
 }
@@ -104,20 +123,16 @@ const contentOf = (date: string, day: PostDay) =>
           .join(',')
   }).join('|')
 
-function articlesOf(html: string, now: Date) {
-  const articles = [...html.matchAll(/<article\b[^>]*>([\s\S]*?)<\/article>/g)]
+/** The page's articles, newest first: id, title, plain text. Exported for tests. */
+export function articlesOf(html: string): { id: string | null; title: string; text: string }[] {
+  const articles = [...html.matchAll(/<article\b([^>]*)>([\s\S]*?)<\/article>/g)]
   if (!articles.length)
     throw new OutageError('parse', 'Zaporizhzhia: no posts on the page', { region: INFO.id })
-  return articles.map((a, i) => {
-    const title = decode(/<h2[^>]*>([\s\S]*?)<\/h2>/.exec(a[1]!)?.[1] ?? '').replace(/<[^>]+>/g, ' ')
-    // first on the page = newest: the order is all the page gives, the real times come from the titles
-    const post: SchedulePost = {
-      title,
-      body: decode(a[1]!),
-      publishedAt: new Date(now.getTime() - i * 1000).toISOString(),
-    }
-    return { post, stamp: /\(\s*оновлено\s*(?:об?|з)?\s*(\d{1,2}[:.]\d{2})\s*\)/i.exec(title)?.[1] ?? null }
-  })
+  return articles.map((a) => ({
+    id: /\bid="post-(\d+)"/.exec(a[1]!)?.[1] ?? null,
+    title: htmlToText(/<h2[^>]*>([\s\S]*?)<\/h2>/.exec(a[2]!)?.[1] ?? ''),
+    text: htmlToText(a[2]!.replace(/<h2[^>]*>[\s\S]*?<\/h2>/, '')),
+  }))
 }
 
 /**
@@ -142,44 +157,49 @@ export function stampTimes(
   })
 }
 
-function readZoe(html: string, now: Date): SiteRead {
-  const articles = articlesOf(html, now)
-  const posts = articles.map((a) => a.post)
+/**
+ * The page → its days. The articles have no time of their own: each is given today's noon as
+ * the date to read it against (stable through the day, so it is analysed once a day at most),
+ * the page order says which is newer, and "(оновлено HH:MM)" dates the versions.
+ */
+async function readZoe(ctx: ProviderContext, html: string): Promise<SiteRead> {
+  const now = ctx.now()
+  const reference = toKyivIso(kyivInstant(kyivDate(now), 12 * 60))
+  const inputs = articlesOf(html).map((a) =>
+    siteInput(
+      {
+        url: a.id ? `https://www.zoe.com.ua/?p=${a.id}` : null,
+        site: INFO.website,
+        title: a.title,
+        text: a.text,
+        publishedAt: reference,
+      },
+      INFO.id,
+    ),
+  )
+  const analyzed = groundTimeless(await analyzeAll(ctx, INFO.id, inputs), INFO.id, SITE_POSTS)
   // each article alone: the date and content of every version
-  const each = posts.map((p) => [...postsToDays([p], now, POSTS)][0])
+  const each = analyzed.map((a) => [...postsToDays([a], INFO.id, now, SITE_POSTS)][0])
   const times = stampTimes(
-    articles.map((a, i) => ({ date: each[i]?.[0] ?? null, stamp: a.stamp })),
+    analyzed.map((a, i) => ({ date: each[i]?.[0] ?? null, stamp: stampOf(a) })),
     now,
   )
-  const days = postsToDays(posts, now, POSTS)
+  // an article above the newest one read fine for its day may be the current version of it: that
+  // day is flagged (only a whole day newer on the page stands in for it)
+  const days = assembleDays(
+    analyzed,
+    textPublications(analyzed, INFO.id, now, SITE_POSTS),
+    textUnread(analyzed, INFO.id, now, SITE_POSTS),
+    INFO.id,
+    now,
+    SITE_POSTS,
+  )
   return {
     read: daysToSource(days, { ...POSTS, publishedAt: (day) => times[day.post] ?? null }),
     versions: each.flatMap((e) => (e ? [{ date: e[0], content: contentOf(e[0], e[1]) }] : [])),
   }
 }
 
-/** The site's page alone → schedule. Exported for tests. */
-export function parseZoe(html: string, now: Date): RegionSchedule {
-  const s = postsToSchedule(
-    INFO.id,
-    articlesOf(html, now).map((a) => a.post),
-    now,
-    POSTS,
-  )
-  // the page gives no edit times but the operator's own "(оновлено HH:MM)"; a day whose current
-  // article has none (its first post) has no known time, and the fetch time isn't one
-  const stamps = Object.values(readZoe(html, now).read.days)
-    .map((d) => d.publishedAt)
-    .filter((t): t is string => !!t)
-    .sort((a, b) => Date.parse(a) - Date.parse(b))
-  return { ...s, updatedAt: stamps.at(-1) ?? null }
-}
-
-function decode(s: string) {
-  return s
-    .replace(/&#8211;|&ndash;/g, '–')
-    .replace(/&#8212;|&mdash;/g, '—')
-    .replace(/&nbsp;|&#160;/g, ' ')
-    .replace(/&#039;|&#8217;|&rsquo;/g, '’')
-    .replace(/&amp;/g, '&')
-}
+/** "(оновлено 21:25)": the processor's `statedAt`, for an article that publishes a schedule */
+const stampOf = (a: Analyzed) =>
+  a.analysis && gpvEvents(a.analysis, INFO.id).length ? a.analysis.statedAt : null

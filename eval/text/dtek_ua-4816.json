@@ -1,0 +1,168 @@
+{
+ "input": {
+  "url": "https://t.me/dtek_ua/4816",
+  "source": {
+   "kind": "telegram",
+   "channel": "dtek_ua"
+  },
+  "publishedAt": "2026-11-09T10:21:59+02:00",
+  "edited": false,
+  "title": null,
+  "text": "💡Дніпропетровщина: енергетикам вдалося стабілізувати ситуацію в більшій частині області\n\nЗа командою Укренерго діють графікі відключень.\n\n‼️В Павлограді, частині Самарського та Синельниківського районів тривають екстрені відключення.\n\n▪️В разі змін будемо вас інформувати у нашому телеграм-каналі.\n\n‼️Підписуйтесь та поділіться з родичами і друзями.",
+  "replyTo": null,
+  "photoCount": 2,
+  "regions": [
+   {
+    "id": "kyiv",
+    "name": "м. Київ",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "kyiv-region",
+    "name": "Київська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "dnipro",
+    "name": "Дніпропетровська область (ДТЕК Дніпровські електромережі)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "odesa",
+    "name": "Одеська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   },
+   {
+    "id": "donetsk",
+    "name": "Донецька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "dnipro"
+    ],
+    "area": "Павлограді, частині Самарського та Синельниківського районів",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "emergency",
+  "tricky",
+  "album"
+ ],
+ "note": "\"За командою Укренерго діють графікі відключень\" for most of the region (album = Дніпропетровська schedule for 9 Nov) while \"В Павлограді, частині Самарського та Синельниківського районів тривають екстрені відключення\"; area kept as written (locative)",
+ "uncertain": false
+}

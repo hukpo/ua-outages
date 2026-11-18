@@ -1,0 +1,79 @@
+{
+ "input": {
+  "url": "https://t.me/prykarpattyaoblenergo_official/4194",
+  "source": {
+   "kind": "telegram",
+   "channel": "prykarpattyaoblenergo_official"
+  },
+  "publishedAt": "2026-10-17T16:41:35+03:00",
+  "edited": false,
+  "title": null,
+  "text": "Оновлені графіки погодинних вимкнень на сьогодні ✔️",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "ivano-frankivsk",
+    "name": "Івано-Франківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "ivano-frankivsk"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv"
+ ],
+ "note": "\"Оновлені графіки погодинних вимкнень на сьогодні\" with the table as photo: gpv change (update), schedule only in the picture → []. The picture says \"Оновлено 17.10.2026 16:37\" but the text does not → statedAt null. [p2: gpv start = schedule for a day, new or updated; change = correction to some queues]",
+ "uncertain": false
+}

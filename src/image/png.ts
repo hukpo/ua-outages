@@ -168,9 +168,3 @@ function concat(parts: Uint8Array[]): Uint8Array {
   }
   return out
 }
-
-/** RGB of a pixel. */
-export function pixel(img: RgbaImage, x: number, y: number): [number, number, number] {
-  const o = (Math.round(y) * img.width + Math.round(x)) * 4
-  return [img.data[o]!, img.data[o + 1]!, img.data[o + 2]!]
-}

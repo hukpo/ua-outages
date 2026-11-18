@@ -69,7 +69,7 @@ export interface RegionInfo {
   /** Page where people can see the schedule themselves */
   website: string
   capabilities: {
-    /** False when the operator publishes the schedule only as an image; `getSchedules` then throws `unsupported` */
+    /** The SDK reads this region's schedule (see `requires` for what it needs) */
     schedule: boolean
     /** Can find a group from a street address (`findGroup`) */
     addressSearch: boolean
@@ -79,6 +79,14 @@ export interface RegionInfo {
     emergency: boolean
     /** `getHouseOutage` can tell whether a house is off right now and why; filled in by the client */
     houseOutage?: boolean
+    /**
+     * Processors the schedule is read with, filled in by the client: without them
+     * `getSchedules` answers `OutageError('config')`, or, where a structured source remains
+     * (Kirovohrad, Chernivtsi, ЦЕК), that source alone with the others failed in `sources`.
+     * Emergency announcements from Telegram always need `textProcessor`; without it
+     * `getEmergency` is `unknown` unless YASNO or the Mykolaiv feed answers.
+     */
+    requires?: ('textProcessor' | 'imageProcessor')[]
   }
 }
 
@@ -87,8 +95,8 @@ export interface RegionInfo {
  * works out (`streetSearch`, `emergency`).
  */
 export type ProviderInfo = Omit<RegionInfo, 'capabilities'> & {
-  capabilities: Omit<RegionInfo['capabilities'], 'emergency' | 'streetSearch' | 'houseOutage'> &
-    Partial<Pick<RegionInfo['capabilities'], 'emergency' | 'streetSearch' | 'houseOutage'>>
+  capabilities: Omit<RegionInfo['capabilities'], 'emergency' | 'streetSearch' | 'houseOutage' | 'requires'> &
+    Partial<Pick<RegionInfo['capabilities'], 'emergency' | 'streetSearch' | 'houseOutage' | 'requires'>>
 }
 
 /**
@@ -160,6 +168,12 @@ export interface SourceStatus {
    * differ. Usually this channel is simply behind; if the newer one is wrong, this is the trace.
    */
   disagrees?: boolean
+  /**
+   * Days with a newer post on this channel that couldn't be read (the AI answer failed, its
+   * picture didn't read): they are as the posts read before it make them, and may be behind until
+   * it reads (asked again on a later poll). Show them with a warning; this says why
+   */
+  unread?: { date: string; message: string }[]
 }
 
 /** Why a result is the last good one instead of a new one (`staleIfError`). */
@@ -452,6 +466,12 @@ export interface EmergencyStatus {
   inferred: boolean
   /** The newest announcement this status is based on */
   message: { text: string; url: string | null; at: string } | null
+  /**
+   * A newer post that couldn't be read yet (the AI answer failed, or its readings disagree): the
+   * state is as the posts before it make it, and may be behind until it reads (asked again on a
+   * later poll). Show it with a warning and a link to the post
+   */
+  unread?: { text: string; url: string | null; at: string }
   source: 'telegram' | 'api' | 'yasno' | 'ukrenergo'
   fetchedAt: string
 }

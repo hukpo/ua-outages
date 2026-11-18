@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/SvitloKropyvnytskyiMisto/1327",
+  "source": {
+   "kind": "telegram",
+   "channel": "SvitloKropyvnytskyiMisto"
+  },
+  "publishedAt": "2026-01-22T09:08:50+02:00",
+  "edited": false,
+  "title": null,
+  "text": "❗Увага! Важлива інформація!\n\n22.01.2026 з 09 год. 08 хв. за розпорядженням НЕК \"Укренерго\" по режиму роботи ОЕС України введено в дію спеціальний графік аварійних відключень (СГАВ).\n\nШановні споживачі, зверніть увагу: у разі одночасного введення в дію СГАВ та ГПВ час відключення за вашим графіком може бути збільшено. Слідкуйте за інформацією на наших офіційних каналах.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "kirovohrad",
+    "name": "Кіровоградська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": "09:08",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "sgav"
+ ],
+ "note": "\"з 09 год. 08 хв.\"",
+ "uncertain": false
+}

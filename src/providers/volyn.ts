@@ -1,20 +1,20 @@
 import { OutageError } from '../errors.js'
 import { emergencyQueues, queueNames } from '../emergency/queues.js'
-import { STANDARD_GROUPS, type TableLayout } from '../image/table.js'
-import { compareGroups, normalizeGroup } from '../schedule.js'
+import { compareGroups, normalizeGroup, STANDARD_GROUPS } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant } from '../time.js'
 import { houseKey, normalizeSettlement, normalizeStreet, normalizeText } from '../text.js'
 
 export { houseKey }
 import type { AddressQuery, City, GroupId, GroupMatch, House, ProviderInfo, Street } from '../types.js'
-import { readDatedImages, type DatedImages } from './image-schedule.js'
+import { archivePictures, readSitePictures, type DatedImages } from './image-schedule.js'
+import { daysToSource } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources } from './sources.js'
 
 /**
  * Volynoblenergo (energy.volyn.ua). The hourly schedule is published only as a PNG with two
  * tables (00–12 and 12–24, half-hour cells); the operator's archive API lists the images per
- * date, and the cells are read by colour (see `src/image`). The archive is the only channel
+ * date, and each picture is read by the client's image processor. The archive is the only channel
  * (the operator has no Telegram channel): it holds tomorrow's picture from about 22:15 the
  * evening before and every version of today's, each with its upload time, which is `updatedAt`.
  * Only pictures dated today or later are read; with none, today is `unknown`.
@@ -94,9 +94,14 @@ export function volynProvider(): Provider {
               // a picture for a past date says nothing about today
               const today = kyivDate(ctx.now())
               const dates = latestGraphs(archive, today).filter((d) => d.date <= addDays(today, 2))
-              return {
-                days: await readDatedImages(ctx, region, dates, (path) => `${IMAGE_API}${path}`, LAYOUT),
-              }
+              const opts = { groups: STANDARD_GROUPS }
+              const days = await readSitePictures(
+                ctx,
+                region,
+                archivePictures(ctx, region, dates, (path) => `${IMAGE_API}${path}`),
+                opts,
+              )
+              return daysToSource(days, opts)
             },
           },
         ],
@@ -314,15 +319,6 @@ function bare(name: string, kind: 'street' | 'settlement'): string {
 }
 
 const IMAGE_API = 'https://api-voe-poweron.inneti.net'
-
-/** Two tables (00–12, 12–24) of 24 half-hour cells */
-const LAYOUT: TableLayout = {
-  columns: 24,
-  rows: 12,
-  tables: 2,
-  halves: false,
-  palette: { on: [185, 200, 215], off: [68, 110, 155] },
-}
 
 /**
  * The newest image per schedule date, for `from` and later, each with the time it was uploaded:

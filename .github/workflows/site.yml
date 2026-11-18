@@ -31,9 +31,26 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # processor answers from earlier runs: each post and picture is parsed once, not every 15 min
+      - uses: actions/cache/restore@v4
+        with:
+          path: .processor-cache.json
+          key: processor-cache-${{ github.run_id }}
+          restore-keys: processor-cache-
       - run: npx tsx site/scripts/build-data.ts
         env:
           PREVIOUS_SITE: https://hukpo.github.io/ua-outages/
+          # posts and pictures are read with GPT-6.1 Terra; without the secret those regions fail with
+          # `config` (the site shows them as errors)
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # with it, ГАВ / СГАВ posts are read again by Claude Haiku, Claude Opus judging a disagreement
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          UA_OUTAGES_PROCESSOR_CACHE: .processor-cache.json
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: .processor-cache.json
+          key: processor-cache-${{ github.run_id }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

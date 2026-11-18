@@ -72,7 +72,7 @@ One channel, `site`: the archive API. There is no second official channel to mer
 so `sources` has one entry.
 
 - `GET /api/archive_gpv_graphs?page=1` lists the pictures per `dateGraph`, newest first. For
-  every date from today on (up to two days ahead) the newest picture is read by colour. Tomorrow's
+  every date from today on (up to two days ahead) the newest picture is read by the image processor. Tomorrow's
   picture is in the archive the evening before (for 18.10 at 17.10 22:12, for 19.10 at 18.10
   22:32, for 20.10 at 19.10 22:26), so today and tomorrow come in one result from then on.
 - A picture for a past date is never today: with nothing dated today or later the twelve groups

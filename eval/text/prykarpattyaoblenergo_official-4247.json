@@ -1,0 +1,61 @@
+{
+ "input": {
+  "url": "https://t.me/prykarpattyaoblenergo_official/4247",
+  "source": {
+   "kind": "telegram",
+   "channel": "prykarpattyaoblenergo_official"
+  },
+  "publishedAt": "2026-11-13T08:57:32+02:00",
+  "edited": false,
+  "title": null,
+  "text": "Шановні споживачі!\n\n📌 Зверніть увагу: сьогодні, 13 листопада, технічні роботи продовжаться. У зв’язку з цим особистий кабінет замовника послуг з приєднання (https://connect.oe.if.ua/), а також Viber-бот АТ «Прикарпаттяобленерго» (https://chats.viber.com/oeifuabot) будуть тимчасово недоступні з 12:30 до 13:30.\n\n🙌🏼 Просимо врахувати цю інформацію та за потреби скористатися зазначеними сервісами після завершення технічних робіт.\n\nПерепрошуємо за тимчасові незручності та дякуємо за розуміння! 🧡",
+  "replyTo": {
+   "url": "https://t.me/prykarpattyaoblenergo_official/4241",
+   "text": "До уваги споживачів! 📌Завтра, 13 листопада, у зв’язку з проведенням технічних робіт, особистий кабінет замовника послуг з приєднання (https://connect.oe.if.ua/), а також Viber-бот АТ «Прикарпаттяобленерго» (https://chats.viber.com/oeifuabot ) будуть тимчасово…"
+  },
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "ivano-frankivsk",
+    "name": "Івано-Франківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "negative",
+  "reply"
+ ],
+ "note": "Service downtime notice replying to 4241; irrelevant.",
+ "uncertain": false
+}

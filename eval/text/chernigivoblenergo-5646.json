@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5646",
+  "source": {
+   "kind": "telegram",
+   "channel": "chernigivoblenergo"
+  },
+  "publishedAt": "2026-11-03T15:01:03+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚠️ За вказівкою НЕК \"Укренерго\", у Чернігівській області застосовано 3 черги Спеціального графіка аварійних відключень (СГАВ).\n\n☝️ Нагадаємо: СГАВ вводиться у разі серйозних пошкоджень або дефіциту в енергосистемі і діє до окремого розпорядження НЕК \"Укренерго\".\n\n🤔 Перевірити свій особистий графік за номером особового рахунку можна:\n🔸 на нашому сайті – https://chernihivoblenergo.com.ua/blackouts\n🔸 у Viber-боті – https://chernihivoblenergo.com.ua/in_viber\n🔸 у Telegram-боті – tg://resolve?domain=ChernigivOEbot.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "chernihiv",
+    "name": "Чернігівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": 3,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "sgav"
+ ],
+ "note": "\"застосовано 3 черги СГАВ\"; \"СГАВ вводиться у разі…\" is the explainer part.",
+ "uncertain": false
+}

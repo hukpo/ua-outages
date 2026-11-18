@@ -1,0 +1,79 @@
+{
+ "input": {
+  "url": "https://t.me/mk_energy_ua/22542",
+  "source": {
+   "kind": "telegram",
+   "channel": "mk_energy_ua"
+  },
+  "publishedAt": "2026-11-15T17:03:41+02:00",
+  "edited": false,
+  "title": null,
+  "text": "УВАГА ‼️\nМаємо нове розпорядження від НЕК \"Укренерго\".\nЧас відключення для деяких підчерг змінено.\nОновлений графік тут 👉🏼 off.energy.mk.ua",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "mykolaiv",
+    "name": "Миколаївська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv"
+ ],
+ "note": "\"Час відключення для деяких підчерг змінено\" [p2: gpv start = schedule for a day, new or updated; change = correction to some queues] UNCERTAIN: no photo and no hours (\"дивіться на off.energy.mk.ua\"), so validate.ts rejects a schedule-less gpv start (\"a ГПВ start without any queue\"). Labelled the fact (the day schedule was updated); events: [] is the other defensible answer.",
+ "uncertain": true
+}

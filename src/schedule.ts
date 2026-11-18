@@ -90,14 +90,14 @@ export function unpublished(
 }
 
 /**
- * Normalizes how operators name groups: "GPV1.1", "1.1", "Черга 1.1", "1 черга 2 підчерга",
- * "Група 3.2", "4" → "1.1", "1.1", "1.1", "1.2", "3.2", "4". Returns null if there's no number.
+ * Normalizes how operators name groups: "GPV1.1", "1.1", "1/1", "Черга 1.1", "1 черга 2 підчерга",
+ * "Група 3.2", "4" → "1.1", "1.1", "1.1", "1.1", "1.2", "3.2", "4". Returns null if there's no number.
  */
 export function normalizeGroup(raw: string): GroupId | null {
   const s = raw.toLowerCase()
   const sub = /(\d+)\s*(?:черга|queue)?\D{0,12}?(\d+)\s*під/.exec(s)
   if (sub) return `${Number(sub[1])}.${Number(sub[2])}`
-  const m = /(\d+)\s*[.,_-]\s*(\d+)/.exec(s) ?? /(\d+)/.exec(s)
+  const m = /(\d+)\s*[.,_/-]\s*(\d+)/.exec(s) ?? /(\d+)/.exec(s)
   if (!m) return null
   return m[2] === undefined ? String(Number(m[1])) : `${Number(m[1])}.${Number(m[2])}`
 }
@@ -169,3 +169,6 @@ function mergeAdjacent(list: Interval[]): Interval[] {
 }
 
 const clamp = (n: number) => Math.min(1440, Math.max(0, n))
+
+/** The standard 6 queues × 2 subqueues most operators use, in order */
+export const STANDARD_GROUPS: readonly GroupId[] = [1, 2, 3, 4, 5, 6].flatMap((q) => [`${q}.1`, `${q}.2`])

@@ -1,18 +1,23 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
+import type { ImageInput, ImageProcessor, PostInput, TextProcessor } from '../../src/ai/types.js'
 import { OutageClient } from '../../src/client.js'
-import { readFileSync } from 'node:fs'
 import { assessFreshness } from '../../src/freshness.js'
-import { decodeJpeg } from '../../src/image/jpeg.js'
-import { decodePng } from '../../src/image/png.js'
-import { readQueueColourTable } from '../../src/image/queue-table.js'
-import {
-  readZakarpattiaPicture,
-  schedulePostDate,
-  splitHouses,
-  zakarpattiaProvider,
-} from '../../src/providers/zakarpattia.js'
+import { compactImage } from '../../src/image/compact.js'
+import { splitHouses, zakarpattiaProvider } from '../../src/providers/zakarpattia.js'
+import { STANDARD_GROUPS } from '../../src/schedule.js'
 import type { DaySchedule } from '../../src/types.js'
-import { expectUnpublished, fixture, fixtureBytes, mockFetch, type Route } from '../helpers.js'
+import {
+  ev,
+  expectUnpublished,
+  fakeImage,
+  fakeText,
+  fixture,
+  fixtureBytes,
+  intervalsOf,
+  mockFetch,
+  type Route,
+} from '../helpers.js'
 
 const NOW = new Date('2026-11-05T23:30:00+02:00')
 const API = 'https://api-outage-zakarpat-energy.inneti.net/api'
@@ -33,8 +38,66 @@ const LABELS = JSON.parse(fixture('zakarpattia/posters/labels.json')) as Record<
   { date: string; rows: string[][] }
 >
 
+/** The posts' captions: "графік погодинних включень/відключень … на 17.10.2026", picture attached */
+const CAPTION_DATES: Record<string, string> = {
+  '10845': '2026-10-17',
+  '10848': '2026-10-17',
+  '10850': '2026-10-17',
+  '9691': '2026-02-07',
+  '9692': '2026-02-07',
+  '9695': '2026-02-07',
+  '9718': '2026-02-09',
+}
+const captions = (): TextProcessor & { calls: PostInput[] } =>
+  fakeText((input) => {
+    const date = CAPTION_DATES[input.url.split('/').at(-1)!]
+    return date
+      ? {
+          photosAreSchedules: true,
+          events: [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date })],
+        }
+      : undefined
+  })
+
+/** A picture as the image processor gets it, by its compacted bytes → the labelled poster */
+const digest = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
+let byDigest: Map<string, string> | null = null
+const posterOf = (input: ImageInput) => {
+  byDigest ??= new Map(
+    Object.keys(LABELS)
+      .filter((n) => !n.startsWith('_'))
+      .map((n) => [digest(compactImage(poster(n), { maxLongEdge: 1100 }).bytes), n]),
+  )
+  return byDigest.get(digest(input.bytes))
+}
+/** What a model reads on each labelled poster; anything else isn't a schedule */
+const pictures = (): ImageProcessor & { calls: ImageInput[] } =>
+  fakeImage((input) => {
+    const name = posterOf(input)
+    if (!name) return undefined
+    const { date, rows } = LABELS[name]!
+    return {
+      date,
+      schedule: STANDARD_GROUPS.map((queue, i) => ({
+        queue,
+        intervals: intervalsOf(rows[i]!.map((r) => r.replace(/-00:00$/, '-24:00')).join(', ')),
+      })),
+    }
+  })
+
+interface Processors {
+  text?: TextProcessor | null
+  image?: ImageProcessor | null
+}
+const processors = (p: Processors) => ({
+  textProcessor: p.text === null ? undefined : (p.text ?? captions()),
+  imageProcessor: p.image === null ? undefined : (p.image ?? pictures()),
+})
+
 /** The channel as it stood on 17.10.2026 (three schedule posts) or 07–08.02.2026 (four) */
-function channel(opts: { now: string; page?: string; today?: string; tomorrow?: string; routes?: Route[] }) {
+function channel(
+  opts: { now: string; page?: string; today?: string; tomorrow?: string; routes?: Route[] } & Processors,
+) {
   const { fetch, calls } = mockFetch([
     ...(opts.routes ?? []),
     { match: 't.me/s/zakarpatenergyofficial', body: fixture(`zakarpattia/${opts.page ?? TG_OCTOBER}`) },
@@ -55,16 +118,25 @@ function channel(opts: { now: string; page?: string; today?: string; tomorrow?: 
     },
   ])
   const now = new Date(opts.now)
+  const p = processors(opts)
   return {
-    client: new OutageClient({ fetch, now: () => now, cacheTtlMs: 0, providers: [zakarpattiaProvider()] }),
+    client: new OutageClient({
+      fetch,
+      now: () => now,
+      cacheTtlMs: 0,
+      providers: [zakarpattiaProvider()],
+      ...p,
+    }),
     calls,
     now,
+    ...p,
   }
 }
 
 function client(
   queues = fixture('zakarpattia/pw_address_queues.city-769.street-9373.json'),
   todayImage = '',
+  p: Processors = {},
 ) {
   const { fetch, calls } = mockFetch([
     // the channel's last schedule posts are of 17.10: nothing in the window
@@ -79,7 +151,13 @@ function client(
     { match: `${API}/pw_address_queues?pagination=false&city.id=769&street.id=9373`, body: queues },
   ])
   return {
-    client: new OutageClient({ fetch, now: () => NOW, cacheTtlMs: 0, providers: [zakarpattiaProvider()] }),
+    client: new OutageClient({
+      fetch,
+      now: () => NOW,
+      cacheTtlMs: 0,
+      providers: [zakarpattiaProvider()],
+      ...processors(p),
+    }),
     calls,
   }
 }
@@ -157,87 +235,6 @@ describe('Zakarpattiaoblenergo', () => {
   })
 })
 
-describe('Zakarpattiaoblenergo schedule picture', () => {
-  it('reads all eight hand-labelled pictures exactly', () => {
-    const names = Object.keys(LABELS).filter((n) => !n.startsWith('_'))
-    expect(names).toHaveLength(8)
-    for (const name of names) {
-      const { date, rows } = LABELS[name]!
-      const day = readZakarpattiaPicture(poster(name), date)
-      expect(Object.keys(day), name).toHaveLength(12)
-      expect(
-        Object.values(day).map((d) => hhmm(d)),
-        name,
-      ).toEqual(rows)
-    }
-  })
-
-  it('refuses pictures that are not this table', () => {
-    const others = [
-      decodePng(fixtureBytes('volyn/gpv-2026-10-17-1847.png')),
-      decodePng(fixtureBytes('khmelnytskyi/announcement-2026-10-17-1658.png')),
-      decodeJpeg(fixtureBytes('chernihiv/posters/tg-5631.jpg')),
-    ]
-    for (const img of others) expect(() => readQueueColourTable(img)).toThrow()
-    expect(() => readZakarpattiaPicture(fixtureBytes('volyn/gpv-2026-10-17-1847.png'), '2026-10-17')).toThrow(
-      expect.objectContaining({ code: 'parse' }),
-    )
-  })
-
-  it('refuses a cell that is neither white nor its row colour, and a table with a row missing', () => {
-    const paint = (
-      box: { x0: number; x1: number; y0: number; y1: number },
-      rgb: [number, number, number],
-    ) => {
-      const img = decodeJpeg(poster('10845_2026-10-17T0900.jpg'))
-      const data = new Uint8Array(img.data)
-      for (let y = box.y0; y <= box.y1; y++)
-        for (let x = box.x0; x <= box.x1; x++) data.set(rgb, (y * img.width + x) * 4)
-      return { ...img, data }
-    }
-    // untouched, it reads
-    expect(readQueueColourTable(decodeJpeg(poster('10845_2026-10-17T0900.jpg')))).toHaveLength(12)
-    // 1-1 at 03:00, grey: a colour the table doesn't use
-    expect(() => readQueueColourTable(paint({ x0: 171, x1: 183, y0: 51, y1: 60 }, [150, 150, 150]))).toThrow(
-      /neither white nor/,
-    )
-    // the same cell in queue 2's green: not this row's colour
-    expect(() => readQueueColourTable(paint({ x0: 171, x1: 183, y0: 51, y1: 60 }, [147, 208, 81]))).toThrow(
-      /neither white nor/,
-    )
-    // half of the cell filled
-    expect(() => readQueueColourTable(paint({ x0: 171, x1: 176, y0: 51, y1: 60 }, [255, 255, 0]))).toThrow(
-      /neither white nor/,
-    )
-    // the label of row 6-2 wiped: eleven rows
-    expect(() => readQueueColourTable(paint({ x0: 0, x1: 76, y0: 193, y1: 206 }, [255, 255, 255]))).toThrow(
-      /sub-queue cells/,
-    )
-  })
-
-  it('takes the date of a post from its caption', () => {
-    expect(
-      schedulePostDate(
-        'До уваги споживачів графік погодинних включень/відключень електроенергії на 17.10.2026',
-      ),
-    ).toBe('2026-10-17')
-    expect(
-      schedulePostDate(
-        'Увага! Змінено графік погодинних включень/відключень електроенергії ГПВ на 09.02.2026 згідно з розпорядженням НЕК «Укренерго».',
-      ),
-    ).toBe('2026-02-09')
-    expect(schedulePostDate('графік погодинних включень/відключень електроенергії на 31.02.2026')).toBeNull()
-    expect(
-      schedulePostDate('Укренерго про ситуацію в енергосистемі України на сьогодні, 16 жовтня'),
-    ).toBeNull()
-    expect(
-      schedulePostDate(
-        'У низці регіонів України повернулися графіки відключень світла. Станом на 08.10.2026',
-      ),
-    ).toBeNull()
-  })
-})
-
 describe('Zakarpattiaoblenergo schedule', () => {
   it("reads the channel's newest picture for today; the post time is updatedAt", async () => {
     const { client: c, calls, now } = channel({ now: '2026-10-17T14:30:00+03:00' })
@@ -250,7 +247,8 @@ describe('Zakarpattiaoblenergo schedule', () => {
     expect(s.sources).toEqual([
       {
         id: TELEGRAM,
-        url: 'https://t.me/s/zakarpatenergyofficial',
+        // the newest post that shaped the day
+        url: 'https://t.me/zakarpatenergyofficial/10850',
         ok: true,
         dates: ['2026-10-17'],
         updatedAt: '2026-10-17T14:19:19+03:00',
@@ -263,7 +261,8 @@ describe('Zakarpattiaoblenergo schedule', () => {
         updatedAt: null,
       },
     ])
-    expect(calls.filter((c) => c.url.includes('telesco.pe'))).toHaveLength(1)
+    // every version of the day is read: a re-issued picture counts from its post time on
+    expect(calls.filter((c) => c.url.includes('telesco.pe'))).toHaveLength(3)
     expect(assessFreshness(s, { now })).toMatchObject({ state: 'fresh', today: 'published' })
   })
 
@@ -274,7 +273,8 @@ describe('Zakarpattiaoblenergo schedule', () => {
     expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-02-09'])
     expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['9718_2026-02-08T2108.jpg']!.rows)
     expect(s.updatedAt).toBe('2026-02-08T21:08:00+02:00')
-    expect(calls.filter((c) => c.url.includes('telesco.pe'))).toHaveLength(1)
+    // the three of 07.02 are read too (the window starts yesterday), and dropped as past
+    expect(calls.filter((c) => c.url.includes('telesco.pe'))).toHaveLength(4)
   })
 
   it('never presents a post for a past date as today', async () => {
@@ -288,7 +288,8 @@ describe('Zakarpattiaoblenergo schedule', () => {
       [TELEGRAM, true, []],
       ['api', true, []],
     ])
-    expect(calls.filter((c) => c.url.includes('telesco.pe'))).toHaveLength(0)
+    // yesterday's posts are read (the window starts there), their day dropped
+    expect(calls.filter((c) => c.url.includes('telesco.pe'))).toHaveLength(3)
   })
 
   it("reads the API picture for a day the channel names; the channel's dated reading wins", async () => {
@@ -375,7 +376,7 @@ describe('Zakarpattiaoblenergo schedule', () => {
     await expect(undated.client.getSchedules('zakarpattia')).rejects.toThrow()
   })
 
-  it("doesn't show the API picture as the day when the channel's newest picture for it can't be read", async () => {
+  it("the channel's newest picture can't be read: the version before it stands, flagged", async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
       today: '/media/gpv-today.png',
@@ -385,25 +386,109 @@ describe('Zakarpattiaoblenergo schedule', () => {
         { match: '/media/gpv-today.png', body: poster('10848_2026-10-17T0951.jpg') },
       ],
     })
-    // before: the API's older version stood as today. Now neither channel has the day
-    await expect(c.getSchedules('zakarpattia')).rejects.toMatchObject({
-      code: 'parse',
-      message: expect.stringContaining('2026-10-17'),
-    })
+    // the older version stands, flagged: the 14:19 post is read again on the next poll
+    const s = await c.getSchedules('zakarpattia')
+    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10848_2026-10-17T0951.jpg']!.rows)
+    expect(s.sources![0]!.unread).toEqual([
+      { date: '2026-10-17', message: expect.stringMatching(/announces a schedule picture/) },
+    ])
   })
 
-  it("fails the channel when its newest picture can't be read, not falling back to an older one", async () => {
+  it("a newest picture that can't be read: the version before it, flagged", async () => {
     const { client: c } = channel({
       now: '2026-10-17T14:30:00+03:00',
       // the 14:19 post now carries something else
       routes: [{ match: 'file/GGnm0DhyTx', body: fixtureBytes('chernihiv/posters/tg-5631.jpg') }],
     })
     const s = await c.getSchedules('zakarpattia')
-    expectUnpublished(s, 12)
+    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10848_2026-10-17T0951.jpg']!.rows)
     expect(s.sources![0]).toMatchObject({
       id: TELEGRAM,
-      ok: false,
-      error: { code: 'parse', message: expect.stringContaining('2026-10-17') },
+      ok: true,
+      unread: [{ date: '2026-10-17', message: expect.stringMatching(/announces a schedule picture/) }],
     })
+  })
+
+  it('an unreadable re-issue, then a later re-issue of the same day: the day as read, flagged', async () => {
+    const { client: c } = channel({
+      now: '2026-10-17T14:30:00+03:00',
+      // the 10:51 post now carries something else; the 14:19 one reads, from 14:19 on
+      routes: [{ match: 'file/WpmvXvc4pw', body: fixtureBytes('chernihiv/posters/tg-5631.jpg') }],
+    })
+    const s = await c.getSchedules('zakarpattia')
+    expect(s.sources![0]).toMatchObject({ id: TELEGRAM, ok: true, unread: [{ date: '2026-10-17' }] })
+    expect(s.schedules['1.1']![0]!.status).not.toBe('unknown')
+  })
+
+  it('sends the captions to the text processor and the pictures, with them, to the image processor', async () => {
+    const { client: c, textProcessor, imageProcessor } = channel({ now: '2026-10-17T14:30:00+03:00' })
+    await c.getSchedules('zakarpattia')
+    const text = textProcessor as ReturnType<typeof captions>
+    const image = imageProcessor as ReturnType<typeof pictures>
+    expect(text.calls.map((x) => x.url)).toEqual([
+      'https://t.me/zakarpatenergyofficial/10845',
+      'https://t.me/zakarpatenergyofficial/10848',
+      'https://t.me/zakarpatenergyofficial/10850',
+    ])
+    expect(text.calls[0]!.photoCount).toBe(1)
+    expect(image.calls.map((x) => [x.url, x.caption?.slice(0, 20)])).toEqual(
+      text.calls.map((x) => [x.url, x.text.slice(0, 20)]),
+    )
+  })
+
+  it('a picture and its caption naming different days: the day is not known', async () => {
+    // the caption of 10850 says 18.10; its picture is of 17.10
+    const text = fakeText((input) =>
+      input.url.endsWith('/10850')
+        ? {
+            photosAreSchedules: true,
+            events: [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date: '2026-10-18' })],
+          }
+        : {
+            photosAreSchedules: true,
+            events: [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date: '2026-10-17' })],
+          },
+    )
+    const s = await channel({ now: '2026-10-17T14:30:00+03:00', text }).client.getSchedules('zakarpattia')
+    expect(s.sources![0]!.unread![0]!.message).toMatch(
+      /the picture reads 2026-10-17, its post says 2026-10-18/,
+    )
+  })
+
+  it("a newest caption that can't be read: the version before it, flagged", async () => {
+    const text = fakeText((input) =>
+      input.url.endsWith('/10850')
+        ? [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date: '2026-13-01' })]
+        : {
+            photosAreSchedules: true,
+            events: [ev({ kind: 'gpv', action: 'start', regions: ['zakarpattia'], date: '2026-10-17' })],
+          },
+    )
+    const s = await channel({ now: '2026-10-17T14:30:00+03:00', text }).client.getSchedules('zakarpattia')
+    expect(s.groups.map((g) => hhmm(s.schedules[g]![0]!))).toEqual(LABELS['10848_2026-10-17T0951.jpg']!.rows)
+    // the days it may be about, its own and the next
+    expect(s.sources![0]!.unread!.map((u) => u.date)).toEqual(['2026-10-17', '2026-10-18'])
+  })
+
+  it('needs both processors for the schedule; the address search needs neither', async () => {
+    // the API's picture is dated by the channel's captions: without either processor, nothing
+    for (const p of [{ text: null }, { image: null }] as Processors[])
+      await expect(
+        channel({ now: '2026-10-17T14:30:00+03:00', ...p }).client.getSchedules('zakarpattia'),
+      ).rejects.toMatchObject({ code: 'config' })
+    const m = await client(undefined, '', { text: null, image: null }).client.findGroup('zakarpattia', {
+      city: 'Ужгород',
+      street: 'Корзо',
+      house: '15',
+    })
+    expect(m.group).toBe('4.2')
+  })
+
+  it('answers `config` without processors, not "nothing published"', async () => {
+    await expect(
+      channel({ now: '2026-10-17T14:30:00+03:00', text: null, image: null }).client.getSchedules(
+        'zakarpattia',
+      ),
+    ).rejects.toMatchObject({ code: 'config' })
   })
 })

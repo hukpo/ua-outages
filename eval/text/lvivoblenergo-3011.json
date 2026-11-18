@@ -1,0 +1,58 @@
+{
+ "input": {
+  "url": "https://t.me/lvivoblenergo/3011",
+  "source": {
+   "kind": "telegram",
+   "channel": "lvivoblenergo"
+  },
+  "publishedAt": "2026-10-13T10:32:12+03:00",
+  "edited": true,
+  "title": null,
+  "text": "Де дізнаватися про відключення світла та послуги «Львівобленерго»: усі офіційні канали.\n\nЩоб оперативно дізнаватися про графіки вимкнень, аварійні й планові роботи, передавати показники та знаходити відповіді на поширені питання щодо електропостачання, користуйтеся офіційними ресурсами компанії:\n\n🌐 Офіційний сайт «Львівобленерго»: loe.lviv.ua;\n\n📱Мобільний застосунок КомКом: loe.lviv.ua/page/komkom-app;\n\n🤖 Чат-боти:\nДля побутових споживачів:\n🔵 Telegram: @loeserviceBot;\n🟣 Viber: viber.com/loebot.\n\nДля бізнесу (юридичних осіб):\n🔵 Telegram: @loebiznesbot;\n🟣 Viber: viber.com/loebiznesbot.\n\n📢 Новинні канали:\n🟣«Львівобленерго Новини» у Viber: invite.viber.com/?g2=AQASFc0UrpZ0nlAyCmezkSL8Z8SL%2FsZyKKN8ALV3VidwiprjRHTlqjDs4%2F5NChdp.\n🔵«Львівобленерго Новини» у Telegram: t.me/s/lvivoblenergo.\n\nА також сторінки соцмереж у Facebook: facebook.com/lvivoblenergo та Instagram: @lviv.oblenergo.\n\nДоєднуйтесь та діліться з близькими, щоб завжди мати під рукою перевірені джерела інформації.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "lviv",
+    "name": "Львівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "explainer",
+  "edit"
+ ],
+ "note": "App/service promo mentioning відключення/графіки/ГПВ/ГАВ/черг in general terms: no event.",
+ "uncertain": false
+}

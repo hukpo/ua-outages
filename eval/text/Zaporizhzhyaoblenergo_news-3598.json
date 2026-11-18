@@ -1,0 +1,207 @@
+{
+ "input": {
+  "url": "https://t.me/Zaporizhzhyaoblenergo_news/3598",
+  "source": {
+   "kind": "telegram",
+   "channel": "Zaporizhzhyaoblenergo_news"
+  },
+  "publishedAt": "2026-11-14T19:32:12+02:00",
+  "edited": false,
+  "title": null,
+  "text": "Відповідно до команди НЕК «Укренерго», з метою стабілізації ситуації в Об’єднаній енергосистемі 15 листопада по Запорізькій області будуть застосовані графіки погодинних відключень (ГПВ).\n\nГодини відсутності електропостачання по чергам (підчергам) (з урахуванням 30 хвилин на перемикання):\n\n⚡ Черга 1.1\nз 12:00 до 17:00\n\n⚡ Черга 1.2\nз 12:00 до 17:00\n\n⚡ Черга 2.1\nз 21:00 до 22:30\n\n⚡ Черга 3.1\nз 21:00 до 24:00\n\n⚡ Черга 3.2\nз 12:00 до 17:00\n\n⚡ Черга 4.1\nз 16:30 до 21:30\n\n⚡ Черга 4.2\nз 07:30 до 12:30\nз 16:30 до 21:30\n\n⚡ Черга 5.1\nз 16:30 до 21:30\n\n⚡ Черга 5.2\nз 07:30 до 12:30\nз 21:00 до 24:00\n\n⚡ Черга 6.1\nз 15:30 до 20:30\n\n⚡ Черга 6.2\nз 07:30 до 12:30\nз 20:00 до 24:00\n\nТакож з 00:00 до 24:00 для промисловості та бізнесу діятимуть ГОП у повному обсязі (5 черг). Актуальні графіки відключень цілодобово – на нашому сайті на сторінці Стабілізаційні відключення.",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "zaporizhzhia",
+    "name": "Запорізька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-15",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       {
+        "from": "12:00",
+        "to": "17:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       {
+        "from": "12:00",
+        "to": "17:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       {
+        "from": "21:00",
+        "to": "22:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       {
+        "from": "21:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       {
+        "from": "12:00",
+        "to": "17:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       {
+        "from": "16:30",
+        "to": "21:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       {
+        "from": "07:30",
+        "to": "12:30",
+        "kind": "off"
+       },
+       {
+        "from": "16:30",
+        "to": "21:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       {
+        "from": "16:30",
+        "to": "21:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       {
+        "from": "07:30",
+        "to": "12:30",
+        "kind": "off"
+       },
+       {
+        "from": "21:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       {
+        "from": "15:30",
+        "to": "20:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       {
+        "from": "07:30",
+        "to": "12:30",
+        "kind": "off"
+       },
+       {
+        "from": "20:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "gpv-schedule",
+  "tricky"
+ ],
+ "note": "The post lists 11 queues: «Черга 2.2» is missing from the text, so it is not in the label (never invent). Banner photo.",
+ "uncertain": false
+}

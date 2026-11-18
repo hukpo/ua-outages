@@ -1,0 +1,6778 @@
+{
+ "SumyEnergo-3658": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SumyEnergo-3831": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "14:49",
+    "until": null,
+    "allQueues": true,
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SumyEnergo-3863": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "13:16",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": true,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SumyEnergo-3874": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": "2026-11-09",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SumyEnergo-3881": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "17:50",
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SumyEnergo-3887": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": "2026-11-11",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SumyEnergo-3892": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": "2026-11-11",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SumyEnergo-3898": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": "2026-11-13",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SumyEnergo-3912": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SumyEnergo-3919": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "16:50",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SumyEnergo-3924": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": "2026-11-16",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SumyEnergo-3929": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": "2026-11-17",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SvitloHolovanivskohoRayonu-1804": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": "Головані́вський район",
+    "date": null,
+    "at": "06:08",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SvitloKropyvnytskyiMisto-1328": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": "12:58",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SvitloKropyvnytskyiMisto-1748": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SvitloKropyvnytskyiMisto-1785": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-01:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-01:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "05:20"
+ },
+ "SvitloKropyvnytskyiMisto-1790": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "06:00-08:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "06:00-08:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:00-07:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:00-07:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-01:00",
+       "12:00-13:00",
+       "16:30-18:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-01:00",
+       "16:30-18:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "08:00-10:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "08:00-10:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "16:12"
+ },
+ "SvitloKropyvnytskyiMisto-1795": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": "2026-11-12",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "07:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "07:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "07:00-08:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "07:00-08:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "12:00-14:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "12:00-14:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-21:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "08:00-10:00",
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "08:00-10:00",
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "21:03"
+ },
+ "SvitloKropyvnytskyiMisto-1801": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-00:30",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "00:00-00:30",
+       "08:00-10:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-00:30",
+       "08:00-10:00",
+       "16:00-18:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "07:50"
+ },
+ "SvitloKropyvnytskyiMisto-1806": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": "2026-11-14",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "07:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "07:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "10:00-12:00",
+       "14:00-16:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "07:00-08:00",
+       "10:00-12:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "07:00-08:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-00:30",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-00:30",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "00:00-00:30",
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "00:28"
+ },
+ "SvitloKropyvnytskyiMisto-1811": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": "2026-11-14",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-00:30",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-00:30",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "00:00-00:30",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "15:01"
+ },
+ "SvitloKropyvnytskyiMisto-1816": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "2.1",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "15:45"
+ },
+ "SvitloKropyvnytskyiMisto-1821": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": "2026-11-15",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "4.1",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "22:00-23:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "22:00-23:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "22:41"
+ },
+ "SvitloKropyvnytskyiMisto-1827": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": "2026-11-17",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "00:00-02:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-02:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "04:00-06:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "04:00-06:00",
+       "12:00-14:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "02:00-04:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "02:00-04:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "06:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "06:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "SvitloKropyvnytskyiMisto-1832": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:12",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SvitloKropyvnytskyiMisto-1834": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": "14:05",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "SvitloKropyvnytskyiMisto-1837": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-06:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-06:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-06:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-06:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-06:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-06:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "19:47"
+ },
+ "SvitloKropyvnytskyiMisto-1842": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "08:00-10:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "00:00-02:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-02:00",
+       "08:00-10:00",
+       "12:00-14:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-01:00",
+       "04:00-06:00",
+       "12:00-14:00",
+       "16:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "00:00-01:00",
+       "04:00-06:00",
+       "12:00-14:00",
+       "16:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "06:00-08:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "02:00-04:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "18:00-20:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "02:00-04:00",
+       "10:00-12:00",
+       "14:00-16:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "06:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "06:00-08:00",
+       "14:00-16:00",
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": "00:57"
+ },
+ "Ukrenergo-5596": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5603": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5608": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5613": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5624": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5630": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5636": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5644": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Ukrenergo-5650": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3577": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "08:30-10:30",
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "08:30-13:30",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "05:30-07:00",
+       "13:00-18:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "05:30-07:00",
+       "13:00-18:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "10:00-15:00",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "08:30-13:30",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-01:00",
+       "05:30-10:30",
+       "14:30-19:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-01:00",
+       "05:30-10:30",
+       "14:30-19:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "08:30-10:30",
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "10:00-15:00",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "10:00-15:00",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "10:00-15:00",
+       "19:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3583": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-11",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "17:30-19:30"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "05:30-07:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "05:30-07:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "10:00-12:30",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-01:00",
+       "05:30-10:30",
+       "17:30-19:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-01:00",
+       "05:30-10:30",
+       "17:30-19:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "17:30-19:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "10:00-13:30",
+       "19:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3589": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-11",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "15:30-19:30"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "05:30-07:00",
+       "16:00-19:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "05:30-07:00",
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "10:00-12:30"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-01:00",
+       "05:30-10:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-01:00",
+       "05:30-10:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "15:30-19:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "10:00-13:30"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3594": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-13",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "14:30-18:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "13:00-16:30"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:30-09:00",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:30-10:30",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-01:00",
+       "13:00-16:30"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "08:30-13:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-01:00",
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "16:00-21:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "06:30-07:30",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "10:00-13:30"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "16:00-21:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-01:00",
+       "06:30-07:30",
+       "20:30-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3602": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-16",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "10:00-15:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "02:30-07:30",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "11:30-16:30"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "05:30-10:30",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "05:30-10:30",
+       "16:00-21:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "02:30-07:30",
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "11:30-16:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "00:00-03:00",
+       "07:00-12:00",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "10:00-15:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-03:00",
+       "07:00-12:00",
+       "16:00-21:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3610": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3615": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-16",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "02:30-06:00",
+       "11:30-16:30",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "02:30-07:30",
+       "11:30-16:30",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "00:00-03:00",
+       "07:00-12:00",
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-03:00",
+       "07:00-12:00",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-03:00",
+       "05:30-10:30",
+       "16:30-21:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "00:00-03:00",
+       "05:30-10:30",
+       "14:30-19:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "02:30-06:00",
+       "10:00-13:00",
+       "16:30-21:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "02:30-07:30",
+       "10:00-15:00",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "02:30-07:30",
+       "11:30-13:00",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "00:00-03:00",
+       "07:00-12:00",
+       "16:00-21:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "02:30-07:30",
+       "11:30-15:00",
+       "20:30-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-03:00",
+       "07:00-12:00",
+       "16:00-21:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3622": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3628": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3629": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "Zaporizhzhyaoblenergo_news-3630": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": "2026-11-18",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "00:00-04:30",
+       "10:00-15:00",
+       "19:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:00-04:30",
+       "13:00-18:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "08:30-13:30",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-00:30",
+       "08:30-13:30",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "04:00-09:00",
+       "18:00-23:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "04:00-09:00",
+       "13:30-18:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "08:30-13:30",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-00:30",
+       "05:30-10:30",
+       "14:30-19:30",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "00:00-04:30",
+       "08:30-13:30",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "04:00-09:00",
+       "13:00-18:00",
+       "22:30-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "00:00-04:30",
+       "13:00-18:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "04:00-09:00",
+       "13:00-18:00",
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4340": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4362": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. Павлоград",
+    "date": "2026-11-12",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       "00:00-05:00",
+       "10:00-15:00",
+       "20:00-24:00"
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       "05:00-10:00",
+       "15:00-20:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4368": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": "2026-11-12",
+    "at": "16:00",
+    "until": "24:00",
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "19:30-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "19:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "16:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "16:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "19:30-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "19:30-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4374": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "cancel",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. Дніпро",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. Дніпро",
+    "date": null,
+    "at": null,
+    "until": "22:00",
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": null
+     },
+     {
+      "queue": "1.2",
+      "intervals": null
+     },
+     {
+      "queue": "5.1",
+      "intervals": null
+     },
+     {
+      "queue": "5.2",
+      "intervals": null
+     },
+     {
+      "queue": "6.1",
+      "intervals": null
+     },
+     {
+      "queue": "6.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4380": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": null,
+    "at": "06:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1.1"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4385": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. Павлоград",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4391": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "cancel",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. Дніпро",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4397": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4409": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": "2026-11-16",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "00:30-04:00",
+       "11:00-14:30",
+       "21:30-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:30-04:00",
+       "11:00-14:30",
+       "21:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "11:00-14:30",
+       "21:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "11:00-14:30",
+       "21:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "04:00-07:30",
+       "14:30-18:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "04:00-07:30",
+       "14:30-18:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "06:00-07:30",
+       "14:30-18:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "06:00-07:30",
+       "14:30-18:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "00:00-00:30",
+       "07:30-11:00",
+       "18:00-21:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "00:00-00:30",
+       "07:30-11:00",
+       "18:00-21:30"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "07:30-11:00",
+       "18:00-21:30"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "07:30-11:00",
+       "18:00-21:30"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4415": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. Павлоград",
+    "date": "2026-11-17",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "2.2",
+      "intervals": [
+       "05:00-10:00",
+       "15:00-20:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-05:00",
+       "10:00-15:00",
+       "20:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "cek_info-4420": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": "2026-11-17",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "15:00-22:00",
+       "23:30-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "15:00-23:30"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "11:30-13:30",
+       "15:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "13:30-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "11:30-15:00",
+       "18:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "11:30-15:00",
+       "18:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "11:30-17:00",
+       "18:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "11:30-15:00",
+       "17:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "11:30-18:30",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "11:30-18:30",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "11:30-20:30",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "11:30-18:30",
+       "20:30-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5583": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": "13:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "2.1",
+      "intervals": null
+     },
+     {
+      "queue": "2.2",
+      "intervals": null
+     },
+     {
+      "queue": "1.1",
+      "intervals": null
+     },
+     {
+      "queue": "1.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5665": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5673": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": "2026-11-08",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.2",
+      "intervals": null
+     },
+     {
+      "queue": "2.1",
+      "intervals": null
+     },
+     {
+      "queue": "6.2",
+      "intervals": null
+     },
+     {
+      "queue": "1.1",
+      "intervals": null
+     },
+     {
+      "queue": "3.1",
+      "intervals": null
+     },
+     {
+      "queue": "3.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5679": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": "2026-11-09",
+    "at": null,
+    "until": "00:00",
+    "allQueues": false,
+    "queues": [
+     "4.1",
+     "4.2"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "4.1",
+      "intervals": null
+     },
+     {
+      "queue": "4.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5686": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5694": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5710": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": "12:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1.1",
+     "1.2"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": null
+     },
+     {
+      "queue": "1.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5716": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": "01:00",
+    "allQueues": false,
+    "queues": [
+     "5.1",
+     "5.2"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "5.1",
+      "intervals": null
+     },
+     {
+      "queue": "5.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "chernigivoblenergo-5722": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "chernihiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": "15:00",
+    "allQueues": false,
+    "queues": [
+     "6.1",
+     "6.2"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "6.1",
+      "intervals": null
+     },
+     {
+      "queue": "6.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "dtek_ua-4578": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "kyiv-region"
+    ],
+    "area": "Броварський, Бучанський, Вишгородський та Бориспільський райони",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "dtek_ua-4678": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "cancel",
+    "regions": [
+     "kyiv-region"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "dtek_ua-4767": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "kyiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "dtek_ua-4801": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "dnipro"
+    ],
+    "area": null,
+    "date": "2026-11-07",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "dtek_ua-4813": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "dtek_ua-4821": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "kyiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "kyiv-region"
+    ],
+    "area": "Вишгородський і Бучанський райони",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "dtek_ua-4839": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2324": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": "2026-11-07",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "03:30-06:00",
+       "07:00-10:30",
+       "14:00-21:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "07:00-10:30",
+       "14:00-21:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:00-10:30",
+       "14:00-21:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:00-10:30",
+       "14:00-21:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-03:30",
+       "07:00-14:00",
+       "17:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "00:00-03:30",
+       "07:00-14:00",
+       "17:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-03:30",
+       "17:30-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-03:30",
+       "17:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "00:00-07:00",
+       "10:30-17:30",
+       "21:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "03:30-07:00",
+       "10:30-17:30",
+       "21:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "03:30-07:00",
+       "10:30-17:30",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "03:30-07:00",
+       "10:30-17:30",
+       "21:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2329": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2344": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2349": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2361": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2368": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2373": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "kharkivenergy-2378": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": "2026-11-18",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "05:30-09:00",
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "05:30-09:00",
+       "16:00-19:30",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "05:30-09:00",
+       "12:30-19:30"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "05:30-09:00",
+       "16:00-19:30"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-02:00",
+       "09:00-12:30",
+       "16:00-23:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "00:00-02:00",
+       "09:00-12:30",
+       "16:00-23:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-02:00",
+       "05:30-12:30",
+       "19:30-23:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "00:00-02:00",
+       "09:00-12:30",
+       "19:30-23:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "02:00-05:30",
+       "12:30-16:00",
+       "19:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "02:00-05:30",
+       "12:30-16:00",
+       "19:30-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "02:00-05:30",
+       "09:00-16:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "02:00-05:30",
+       "12:30-16:00",
+       "23:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "khmelnytskoblenergo-1851": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "khmelnytskoblenergo-1857": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "khmelnytskyi"
+    ],
+    "area": null,
+    "date": "2026-11-09",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "10:00-14:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "10:00-14:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "10:00-14:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "10:00-14:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "khmelnytskoblenergo-1867": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "khmelnytskyi"
+    ],
+    "area": null,
+    "date": "2026-11-10",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "06:00-11:00",
+       "15:00-19:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "06:00-11:00",
+       "15:00-19:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:00-11:00",
+       "15:00-19:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:00-11:00",
+       "15:00-19:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "11:00-15:00",
+       "19:00-23:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "11:00-15:00",
+       "19:00-23:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "06:00-11:00",
+       "15:00-18:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "06:00-11:00",
+       "15:00-18:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "11:00-15:00",
+       "19:00-23:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "11:00-15:00",
+       "19:00-23:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "11:00-15:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "11:00-15:00",
+       "18:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "khmelnytskoblenergo-1872": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "khmelnytskyi"
+    ],
+    "area": null,
+    "date": "2026-11-12",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "12:00-15:30"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "12:00-15:30"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "12:00-16:00",
+       "22:30-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "12:00-16:00",
+       "22:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "15:30-19:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "15:30-19:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "07:00-08:30",
+       "16:00-19:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "07:00-08:30",
+       "16:00-19:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "19:00-22:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "19:00-22:30"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "08:30-12:00",
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "08:30-12:00",
+       "19:00-22:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "khmelnytskoblenergo-1891": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "khmelnytskyi"
+    ],
+    "area": null,
+    "date": "2026-11-15",
+    "at": "17:30",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "17:00-19:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "17:00-19:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "17:00-19:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "17:00-19:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "17:30-19:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "17:30-19:00",
+       "22:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "khmelnytskoblenergo-1896": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "khmelnytskyi"
+    ],
+    "area": null,
+    "date": "2026-11-17",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "14:00-18:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:00-10:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "10:00-14:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "10:00-14:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "10:00-14:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "14:00-18:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "lvivoblenergo-2831": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "lviv"
+    ],
+    "area": "північні райони Львівщини",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": 10,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "lvivoblenergo-2965": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "lvivoblenergo-2977": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "lvivoblenergo-3000": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "lvivoblenergo-3007": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "mk_energy_ua-21455": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "cancel",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "mk_energy_ua-22544": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": "2026-11-16",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "07:00-10:30",
+       "14:00-17:30",
+       "21:00-22:30"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "07:00-10:30",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "10:30-14:00",
+       "17:30-21:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "10:30-14:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "10:30-14:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "14:00-17:30"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "05:30-07:00",
+       "15:30-21:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "05:30-07:00",
+       "17:30-21:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "14:00-17:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "07:00-10:30",
+       "17:30-21:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "05:30-07:00",
+       "17:30-22:30"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "14:00-17:30",
+       "21:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "mk_energy_ua-22572": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "mk_energy_ua-7336": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "mk_energy_ua-7341": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": "12:45",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": "12:45",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "3",
+     "4",
+     "5",
+     "6"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": "12:45"
+ },
+ "oe_cv_ua-4003": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       "21:00-23:30"
+      ]
+     },
+     {
+      "queue": "3",
+      "intervals": [
+       "19:00-21:30"
+      ]
+     },
+     {
+      "queue": "4",
+      "intervals": [
+       "17:00-19:30"
+      ]
+     },
+     {
+      "queue": "5",
+      "intervals": []
+     },
+     {
+      "queue": "6",
+      "intervals": []
+     },
+     {
+      "queue": "7",
+      "intervals": [
+       "06:00-08:30"
+      ]
+     },
+     {
+      "queue": "8",
+      "intervals": [
+       "06:00-08:30"
+      ]
+     },
+     {
+      "queue": "9",
+      "intervals": [
+       "12:00-13:30",
+       "16:00-17:30"
+      ]
+     },
+     {
+      "queue": "10",
+      "intervals": [
+       "10:00-12:30"
+      ]
+     },
+     {
+      "queue": "11",
+      "intervals": [
+       "08:00-10:30"
+      ]
+     },
+     {
+      "queue": "12",
+      "intervals": [
+       "08:00-09:30"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "oe_cv_ua-4008": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       "15:00-17:30",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       "15:00-17:30",
+       "21:00-23:30"
+      ]
+     },
+     {
+      "queue": "3",
+      "intervals": [
+       "16:00-18:30",
+       "21:00-23:30"
+      ]
+     },
+     {
+      "queue": "4",
+      "intervals": [
+       "16:00-18:30",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "5",
+      "intervals": [
+       "07:00-09:30",
+       "17:00-19:30"
+      ]
+     },
+     {
+      "queue": "6",
+      "intervals": [
+       "07:00-09:30",
+       "17:00-19:30"
+      ]
+     },
+     {
+      "queue": "7",
+      "intervals": [
+       "09:00-11:30",
+       "18:00-20:30"
+      ]
+     },
+     {
+      "queue": "8",
+      "intervals": [
+       "09:00-11:30",
+       "18:00-20:30"
+      ]
+     },
+     {
+      "queue": "9",
+      "intervals": [
+       "11:00-13:30",
+       "19:00-21:30"
+      ]
+     },
+     {
+      "queue": "10",
+      "intervals": [
+       "11:00-13:30",
+       "19:00-21:30"
+      ]
+     },
+     {
+      "queue": "11",
+      "intervals": [
+       "13:00-15:30",
+       "20:00-22:30"
+      ]
+     },
+     {
+      "queue": "12",
+      "intervals": [
+       "13:00-15:30",
+       "20:00-22:30"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "oe_cv_ua-4014": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       "07:00-09:30",
+       "15:00-17:30"
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       "09:00-11:30",
+       "17:00-19:30"
+      ]
+     },
+     {
+      "queue": "3",
+      "intervals": [
+       "09:00-11:30",
+       "17:00-19:30"
+      ]
+     },
+     {
+      "queue": "4",
+      "intervals": [
+       "09:00-11:30",
+       "17:00-19:30"
+      ]
+     },
+     {
+      "queue": "5",
+      "intervals": [
+       "11:00-13:30",
+       "19:00-21:30"
+      ]
+     },
+     {
+      "queue": "6",
+      "intervals": [
+       "11:00-13:30",
+       "19:00-21:30"
+      ]
+     },
+     {
+      "queue": "7",
+      "intervals": [
+       "11:00-13:30",
+       "19:00-21:30"
+      ]
+     },
+     {
+      "queue": "8",
+      "intervals": [
+       "13:00-15:30",
+       "21:00-23:30"
+      ]
+     },
+     {
+      "queue": "9",
+      "intervals": [
+       "07:00-09:30",
+       "15:00-17:30",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "10",
+      "intervals": [
+       "07:00-09:30",
+       "15:00-17:30",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "11",
+      "intervals": [
+       "13:00-15:30",
+       "21:00-23:30"
+      ]
+     },
+     {
+      "queue": "12",
+      "intervals": [
+       "13:00-15:30",
+       "21:00-23:30"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "oe_cv_ua-4019": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": "2026-11-14",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       "12:00-14:30",
+       "18:00-20:30"
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       "12:00-14:30",
+       "18:00-20:30"
+      ]
+     },
+     {
+      "queue": "3",
+      "intervals": [
+       "12:00-14:30",
+       "18:00-20:30"
+      ]
+     },
+     {
+      "queue": "4",
+      "intervals": [
+       "10:00-12:30",
+       "18:00-20:30"
+      ]
+     },
+     {
+      "queue": "5",
+      "intervals": [
+       "10:00-12:30",
+       "16:00-18:30"
+      ]
+     },
+     {
+      "queue": "6",
+      "intervals": [
+       "10:00-12:30",
+       "16:00-18:30",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "7",
+      "intervals": [
+       "08:00-10:30",
+       "16:00-18:30",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "8",
+      "intervals": [
+       "08:00-10:30",
+       "16:00-18:30",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "9",
+      "intervals": [
+       "08:00-10:30",
+       "14:00-16:30",
+       "20:00-22:30"
+      ]
+     },
+     {
+      "queue": "10",
+      "intervals": [
+       "06:00-08:30",
+       "14:00-16:30",
+       "20:00-22:30"
+      ]
+     },
+     {
+      "queue": "11",
+      "intervals": [
+       "06:00-08:30",
+       "14:00-16:30",
+       "20:00-22:30"
+      ]
+     },
+     {
+      "queue": "12",
+      "intervals": [
+       "06:00-08:30",
+       "14:00-16:30",
+       "20:00-22:30"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "oe_cv_ua-4024": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "oe_cv_ua-4034": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "oe_cv_ua-4046": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "oe_cv_ua-4056": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "cancel",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": "2026-11-17",
+    "at": null,
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-1961": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:35",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-1976": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "13:29",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-1982": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": "2026-11-08",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-08:00",
+       "10:00-14:00",
+       "16:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:00-03:00",
+       "05:00-08:00",
+       "11:00-15:00",
+       "17:00-21:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "00:00-02:00",
+       "04:00-08:00",
+       "10:00-14:00",
+       "16:00-20:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-03:00",
+       "05:00-09:00",
+       "11:00-15:00",
+       "17:00-21:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "01:00-04:00",
+       "07:00-10:00",
+       "12:00-16:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "01:00-04:00",
+       "08:00-11:00",
+       "13:00-17:00",
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "00:00-03:00",
+       "06:00-10:00",
+       "12:00-16:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "02:00-05:00",
+       "07:00-11:00",
+       "13:00-17:00",
+       "19:00-23:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "00:00-01:00",
+       "03:00-06:00",
+       "08:00-12:00",
+       "14:00-18:00",
+       "20:00-23:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "00:00-01:00",
+       "03:00-07:00",
+       "09:00-13:00",
+       "15:00-19:00",
+       "21:00-23:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "02:00-05:00",
+       "08:00-12:00",
+       "14:00-18:00",
+       "20:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-01:00",
+       "03:00-07:00",
+       "09:00-13:00",
+       "15:00-19:00",
+       "21:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-1991": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": "2026-11-10",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "04:00-08:00",
+       "10:00-14:00",
+       "16:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:00-03:00",
+       "05:00-09:00",
+       "11:00-15:00",
+       "17:00-21:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "00:00-02:00",
+       "05:00-07:00",
+       "10:00-14:00",
+       "16:00-20:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-03:00",
+       "06:00-09:00",
+       "11:00-15:00",
+       "17:00-21:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "00:00-02:00",
+       "06:00-10:00",
+       "12:00-16:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "01:00-04:00",
+       "07:00-11:00",
+       "13:00-17:00",
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "02:00-04:00",
+       "06:00-10:00",
+       "12:00-16:00",
+       "18:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "01:00-05:00",
+       "07:00-11:00",
+       "13:00-17:00",
+       "19:00-23:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "04:00-06:00",
+       "08:00-12:00",
+       "14:00-18:00",
+       "20:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "00:00-01:00",
+       "03:00-07:00",
+       "09:00-13:00",
+       "15:00-19:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "02:00-06:00",
+       "08:00-12:00",
+       "14:00-18:00",
+       "20:00-23:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "00:00-01:00",
+       "03:00-05:00",
+       "09:00-13:00",
+       "15:00-19:00",
+       "21:00-23:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-1996": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-2001": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "22:30-24:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "22:30-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "20:00-22:30"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "21:00-22:30"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "21:30-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-2015": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-2021": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "18:00-21:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "19:00-21:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "20:00-23:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "17:00-18:00",
+       "20:00-23:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "17:00-19:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "17:00-18:00",
+       "20:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "17:00-18:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "17:30-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "17:30-20:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "18:00-20:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "18:00-20:00",
+       "23:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-2026": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "pat_cherkasyoblenergo-2032": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": "2026-11-18",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.1",
+      "intervals": [
+       "00:00-02:00",
+       "06:00-08:00",
+       "12:00-14:00",
+       "17:00-19:00"
+      ]
+     },
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:00-02:00",
+       "06:00-08:00",
+       "12:00-14:00",
+       "18:00-21:00"
+      ]
+     },
+     {
+      "queue": "2.1",
+      "intervals": [
+       "06:00-08:00",
+       "12:00-14:00",
+       "17:00-19:00",
+       "22:00-24:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "06:00-08:00",
+       "12:00-15:00",
+       "18:00-21:00"
+      ]
+     },
+     {
+      "queue": "3.1",
+      "intervals": [
+       "02:00-04:00",
+       "08:00-10:00",
+       "14:00-16:00",
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "08:00-10:00",
+       "14:00-16:00",
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.1",
+      "intervals": [
+       "02:00-04:00",
+       "08:00-10:00",
+       "14:00-16:00",
+       "19:00-22:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "08:00-10:00",
+       "14:00-17:00",
+       "21:00-23:00"
+      ]
+     },
+     {
+      "queue": "5.1",
+      "intervals": [
+       "04:00-06:00",
+       "10:00-12:00",
+       "15:00-17:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "10:00-12:00",
+       "16:00-18:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.1",
+      "intervals": [
+       "04:00-06:00",
+       "10:00-12:00",
+       "16:00-18:00",
+       "23:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "10:00-12:00",
+       "16:00-19:00",
+       "22:00-24:00"
+      ]
+     }
+    ]
+   },
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": "ВСП «Уманські енергетичні мережі», Жашківської, Монастирищенської та Христинівської філій",
+    "date": "2026-11-18",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1.2",
+      "intervals": [
+       "00:00-03:00",
+       "06:00-09:00",
+       "12:00-15:00",
+       "18:00-21:00"
+      ]
+     },
+     {
+      "queue": "2.2",
+      "intervals": [
+       "00:00-03:00",
+       "06:00-09:00",
+       "12:00-15:00",
+       "18:00-21:00"
+      ]
+     },
+     {
+      "queue": "3.2",
+      "intervals": [
+       "00:00-03:00",
+       "06:00-09:00",
+       "12:00-15:00",
+       "18:00-21:00"
+      ]
+     },
+     {
+      "queue": "4.2",
+      "intervals": [
+       "03:00-06:00",
+       "09:00-12:00",
+       "15:00-18:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "5.2",
+      "intervals": [
+       "03:00-06:00",
+       "09:00-12:00",
+       "15:00-18:00",
+       "21:00-24:00"
+      ]
+     },
+     {
+      "queue": "6.2",
+      "intervals": [
+       "03:00-06:00",
+       "09:00-12:00",
+       "15:00-18:00",
+       "21:00-24:00"
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4453": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "11:11",
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4498": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:10",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": 5,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4513": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "18:45",
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4518": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4523": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "15:12",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4529": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4538": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": "2026-11-13",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "poltavaOE-4544": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "16:50",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4550": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "12:27",
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4556": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "18:52",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": 2,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4562": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": false,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "poltavaOE-4568": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": null,
+    "at": "11:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "prykarpattyaoblenergo_official-3070": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "ivano-frankivsk"
+    ],
+    "area": null,
+    "date": null,
+    "at": "18:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "1",
+     "2"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "prykarpattyaoblenergo_official-3091": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "ivano-frankivsk"
+    ],
+    "area": null,
+    "date": null,
+    "at": "22:02",
+    "until": null,
+    "allQueues": true,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "prykarpattyaoblenergo_official-4218": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "prykarpattyaoblenergo_official-4248": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ternopiloblenerho-1830": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ternopiloblenerho-1847": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ternopiloblenerho-1861": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "ternopil"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "ternopiloblenerho-1873": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "zakarpatenergyofficial-10921": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "zakarpatenergyofficial-10934": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "zakarpatenergyofficial-10946": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "zakarpatenergyofficial-10960": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "zakarpatenergyofficial-10966": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "zakarpatenergyofficial-10979": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1854": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1859": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1871": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1876": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1881": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1888": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1894": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": "2026-11-08",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1899": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": "2026-11-09",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "ztoe_ua-1904": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": "2026-11-13",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "ztoe_ua-1909": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": "2026-11-15",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ }
+}

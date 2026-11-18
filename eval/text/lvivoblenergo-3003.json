@@ -1,0 +1,58 @@
+{
+ "input": {
+  "url": "https://t.me/lvivoblenergo/3003",
+  "source": {
+   "kind": "telegram",
+   "channel": "lvivoblenergo"
+  },
+  "publishedAt": "2026-08-07T14:30:35+03:00",
+  "edited": false,
+  "title": null,
+  "text": "⚠️У зв'язку з аварійним відключенням у мережі 110 кВ тимчасово відсутня електроенергія у споживачів центральної частини міста в районі Високого Замку. Енергетики працюють над відновленням електропостачання.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "lviv",
+    "name": "Львівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "emergency",
+  "tricky"
+ ],
+ "note": "\"аварійне відключення в електромережах 110кВ … частково знеструмлені споживачі в центральній частині Львова\": a local network fault (damage), not a grid-ordered emergency outage → other. TEXT_SYSTEM only states the \"аварійні alone = local damage\" rule for DTEK; a literal reading would give kind emergency start with area.",
+ "uncertain": true
+}

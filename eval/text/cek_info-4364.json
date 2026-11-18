@@ -1,0 +1,79 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4364",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-12T10:59:37+02:00",
+  "edited": true,
+  "title": null,
+  "text": "Шановні споживачі! Повідомляємо про зміни в ГПВ 12 ЛИСТОПАДА, за розпорядженням диспетчерського центру НЕК \"Укренерго\" з 10:40 додатково застосовуються черги 2.1 та 2.2 ‼️",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:40",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "2.1",
+      "intervals": null
+     },
+     {
+      "queue": "2.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "edit",
+  "tricky"
+ ],
+ "note": "\"з 10:40 додатково застосовуються черги 2.1 та 2.2\": change from 10:40, queues named without an end time → intervals null; additive true for \"додатково\" (the field is documented for start only). Edited, single statement → addedInEdit false. [p2: gpv start = schedule for a day, new or updated; change = correction to some queues] [resolved by p2 gpv start/change rule]",
+ "uncertain": false
+}
