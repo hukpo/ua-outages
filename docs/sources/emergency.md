@@ -82,10 +82,12 @@ EmergencyShutdowns` is active. YASNO not showing it ends nothing by itself (`upd
   starts "Графік аварійних відключень", minus mislabelled
   "ГПВ ч 5,2" and a neighbour's "ГАО Кіровоград Обленерго". Running rows = active; their queue
   from "ГАВ черга 3" / "ГАВ 3 черга".
-- **@Ukrenergo**: only for Zakarpattia, Volyn, Rivne and Chernivtsi (merged with its own channel
-  by time), by oblast name in the same sentence, in any form ("Волинській області", "на Волині",
-  "на Закарпатті", "Рівненщині"); "аварійні відключення продовжують діяти лише у Харківській
-  області" ends it for the others; "можуть бути застосовані" is nothing.
+- **@Ukrenergo**: for Zakarpattia, Volyn, Rivne, Chernivtsi and Sumy (merged with their own
+  channels by time). Its national posts are read by the text processor once for all five, each
+  event naming the oblasts it is about ("Волинській області", "на Закарпатті", "Рівненщині");
+  "аварійні відключення продовжують діяти лише у Харківській області" cancels it for the
+  others; "можуть бути застосовані" is nothing. A post the processor reads as unclear makes the
+  state unknown and never extends an episode.
 
 Not used: Poltava's `dynamic-unloading-info.php` (start times only, end is a 23:59 placeholder,
 misses re-applications: the channel is better), Mykolaiv `outage-queue/by-type/1` `enabled`
@@ -98,4 +100,5 @@ misses re-applications: the channel is better), Mykolaiv `outage-queue/by-type/1
   21 identical district channels.
 - Chernivtsi deleted its channel history; the 2026 wording is UNVERIFIED.
 - Sumy, Cherkasy and Khmelnytskyi never post a cancel; Kharkiv rarely. Their end is the TTL.
-- Zakarpattia, Volyn and Rivne have no operator channel that announces ГАВ.
+- Volyn and Rivne have no operator channel that announces ГАВ; Zakarpattia's own channel
+  (`zakarpatenergyofficial`) rarely does, so Ukrenergo stands in.
