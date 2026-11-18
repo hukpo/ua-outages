@@ -39,6 +39,12 @@ export interface OpenAIProcessorOptions {
   reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
   /** Default 16000 */
   maxOutputTokens?: number
+  /**
+   * `service_tier`, default `flex`: the same model at half the price, answering slower. When
+   * flex has no capacity (429), the call is made again on the standard tier, so a schedule is
+   * never left unread for want of it. `auto` for standard processing only
+   */
+  serviceTier?: 'flex' | 'auto' | 'default' | 'priority'
 }
 
 export interface OpenAIImageProcessorOptions extends OpenAIProcessorOptions {
@@ -69,19 +75,31 @@ async function ask(
   url: string,
   call: CallOptions,
 ): Promise<ProcessorResult> {
-  let res: OpenAI.Responses.Response
-  try {
-    res = await o.client.responses.create(
+  // the instructions and schema come first and never change: OpenAI caches that prefix itself
+  const create = (tier: NonNullable<OpenAIProcessorOptions['serviceTier']>) =>
+    o.client.responses.create(
       {
         model: o.model,
         instructions: system,
         input: [{ role: 'user', content }],
         max_output_tokens: o.maxOutputTokens ?? 16000,
         text: { format: { type: 'json_schema', name, schema, strict: true } },
+        service_tier: tier,
         ...(o.reasoningEffort ? { reasoning: { effort: o.reasoningEffort } } : {}),
       },
-      { signal: call.signal },
+      // flex answers slower: 15 min before giving up, as the docs advise
+      { signal: call.signal, ...(tier === 'flex' ? { timeout: 15 * 60_000 } : {}) },
     )
+  const tier = o.serviceTier ?? 'flex'
+  let res: OpenAI.Responses.Response
+  try {
+    try {
+      res = await create(tier)
+    } catch (e) {
+      // flex out of capacity (429, not billed): the standard tier, once
+      if (tier !== 'flex' || (e as { status?: unknown })?.status !== 429 || call.signal?.aborted) throw e
+      res = await create('auto')
+    }
   } catch (e) {
     throw vendorError(VENDOR, e, call.signal)
   }
@@ -97,7 +115,12 @@ async function ask(
   return {
     value: parseJson(VENDOR, res.output_text, url),
     usage: res.usage
-      ? { inputTokens: res.usage.input_tokens, outputTokens: res.usage.output_tokens }
+      ? {
+          inputTokens: res.usage.input_tokens,
+          cachedInputTokens: res.usage.input_tokens_details?.cached_tokens ?? 0,
+          outputTokens: res.usage.output_tokens,
+          ...(res.service_tier ? { tier: res.service_tier } : {}),
+        }
       : undefined,
   }
 }

@@ -57,18 +57,29 @@ function anthropic(reply: Partial<Anthropic.Message> | Error) {
   return { client, requests }
 }
 
-function openai(reply: Partial<OpenAI.Responses.Response> | Error) {
+function openai(
+  reply:
+    | Partial<OpenAI.Responses.Response>
+    | Error
+    | ((req: OpenAI.Responses.ResponseCreateParams) => Error | null),
+) {
   const requests: OpenAI.Responses.ResponseCreateParams[] = []
   const client = {
     responses: {
       create: async (req: OpenAI.Responses.ResponseCreateParams) => {
         requests.push(req)
         if (reply instanceof Error) throw reply
+        if (typeof reply === 'function') {
+          const e = reply(req)
+          if (e) throw e
+          reply = {}
+        }
         return {
           status: 'completed',
           output: [{ type: 'message', content: [{ type: 'output_text', text: JSON.stringify(answer) }] }],
           output_text: JSON.stringify(answer),
-          usage: { input_tokens: 12, output_tokens: 6 },
+          usage: { input_tokens: 12, input_tokens_details: { cached_tokens: 8 }, output_tokens: 6 },
+          service_tier: req.service_tier,
           ...reply,
         }
       },
@@ -83,7 +94,10 @@ describe('ua-outages/anthropic', () => {
     const p = anthropicTextProcessor({ client })
     expect(p.id).toBe(`anthropic:claude-haiku-5-5:default:${PROMPT_VERSION}`)
     const r = await p.analyzePost(post, {})
-    expect(r).toEqual({ value: answer, usage: { inputTokens: 1010, outputTokens: 5 } })
+    expect(r).toEqual({
+      value: answer,
+      usage: { inputTokens: 1010, cachedInputTokens: 1000, outputTokens: 5 },
+    })
     const req = requests[0]!
     expect(req.model).toBe('claude-haiku-5-5')
     expect(req.output_config).toEqual({ format: { type: 'json_schema', schema: TEXT_SCHEMA } })
@@ -143,7 +157,7 @@ describe('ua-outages/openai', () => {
     expect(p.id).toBe(`openai:gpt-6-luna:low:${PROMPT_VERSION}`)
     expect(await p.analyzePost(post, {})).toEqual({
       value: answer,
-      usage: { inputTokens: 12, outputTokens: 6 },
+      usage: { inputTokens: 12, cachedInputTokens: 8, outputTokens: 6, tier: 'flex' },
     })
     const req = requests[0]!
     expect(req).toMatchObject({
@@ -151,7 +165,22 @@ describe('ua-outages/openai', () => {
       instructions: TEXT_SYSTEM,
       text: { format: { type: 'json_schema', name: 'post_analysis', schema: TEXT_SCHEMA, strict: true } },
       reasoning: { effort: 'low' },
+      service_tier: 'flex',
     })
+  })
+
+  it('runs on flex, at half the price, and falls back to standard when flex has no capacity', async () => {
+    const busy = Object.assign(new Error('Resource Unavailable'), { status: 429 })
+    const { client, requests } = openai((req) => (req.service_tier === 'flex' ? busy : null))
+    const r = await openaiTextProcessor({ client, model: 'm' }).analyzePost(post, {})
+    expect(requests.map((q) => q.service_tier)).toEqual(['flex', 'auto'])
+    expect(r.usage?.tier).toBe('auto')
+    // standard only: no fallback needed, and a 429 there is an error
+    const std = openai(busy)
+    await expect(
+      openaiTextProcessor({ client: std.client, model: 'm', serviceTier: 'auto' }).analyzePost(post, {}),
+    ).rejects.toMatchObject({ code: 'http' })
+    expect(std.requests).toHaveLength(1)
   })
 
   it('sends the picture as a data URL', async () => {

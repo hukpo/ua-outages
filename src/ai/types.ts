@@ -142,8 +142,13 @@ export interface ImageReading {
 }
 
 export interface ProcessorUsage {
+  /** All input tokens, cached ones included */
   inputTokens: number
+  /** Of `inputTokens`, those read from the vendor's prompt cache (billed at a fraction) */
+  cachedInputTokens?: number
   outputTokens: number
+  /** The vendor's service tier the call ran on, when it says (OpenAI: `flex`, `default`) */
+  tier?: string
 }
 
 export interface ProcessorResult<T = unknown> {

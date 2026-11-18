@@ -92,6 +92,7 @@ async function ask(
         res.usage.input_tokens +
         (res.usage.cache_read_input_tokens ?? 0) +
         (res.usage.cache_creation_input_tokens ?? 0),
+      cachedInputTokens: res.usage.cache_read_input_tokens ?? 0,
       outputTokens: res.usage.output_tokens,
     },
   }
