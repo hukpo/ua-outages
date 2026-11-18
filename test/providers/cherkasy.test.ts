@@ -479,7 +479,7 @@ describe('Cherkasyoblenergo', () => {
     expect(p!.text).not.toMatch(/<|&nbsp;/)
   })
 
-  it('picks the posts since the start of yesterday, newest first, at most twelve', () => {
+  it('picks the posts since the start of yesterday, newest first, at most twenty', () => {
     const search = JSON.parse(fixture('cherkasy/posts-search-gpv-2026-11-17T0056.json'))
     // since 14.11 00:00: the post for 14.11 went out on 13.11 23:28
     expect(recentPosts(search, new Date('2026-11-15T21:00:00+02:00'))).toEqual([
@@ -490,15 +490,15 @@ describe('Cherkasyoblenergo', () => {
     expect(recentPosts(search, new Date('2026-11-17T12:00:00+02:00'))).toEqual([])
     const many = {
       data: {
-        content: Array.from({ length: 20 }, (_, i) => ({
+        content: Array.from({ length: 24 }, (_, i) => ({
           slug: `p${i}`,
           // no publishedAt: the creation time
           createdAt: `2026-11-17T${String(i).padStart(2, '0')}:00:00`,
         })),
       },
     }
-    expect(recentPosts(many, new Date('2026-11-17T21:00:00+02:00'))).toEqual(
-      Array.from({ length: 12 }, (_, i) => `p${19 - i}`),
+    expect(recentPosts(many, new Date('2026-11-17T23:30:00+02:00'))).toEqual(
+      Array.from({ length: 20 }, (_, i) => `p${23 - i}`),
     )
   })
 

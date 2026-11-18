@@ -35,7 +35,7 @@ const SEARCH_URL = `${API}/search?${new URLSearchParams({ q: 'ГПВ', lang: 'uk
 const CHANNEL = 'pat_cherkasyoblenergo'
 
 /** Posts fetched per call at most: a day has had 5 versions, plus tomorrow's and notices */
-const MAX_POSTS = 12
+const MAX_POSTS = 20
 
 const POSTS = { groups: STANDARD_GROUPS, updates: 'layer' } as const
 

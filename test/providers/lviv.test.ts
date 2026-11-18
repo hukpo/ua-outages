@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ImageProcessor, PostInput, TextProcessor } from '../../src/ai/types.js'
+import type { ImageProcessor, PostEvent, PostInput, TextProcessor } from '../../src/ai/types.js'
 import { OutageClient } from '../../src/client.js'
 import { assessFreshness } from '../../src/freshness.js'
 import type { FetchLike } from '../../src/http.js'
@@ -353,5 +353,27 @@ describe('lvivTemplate: only the template', () => {
     expect(lvivTemplate(`${notice} Оновлення: з 15:00 ГПВ знову діють.`)).toBeNull()
     expect(lvivTemplate(notice.replace('18.11.2026', '31.02.2026'))).toBeNull()
     expect(lvivTemplate(`${notice}\nІнформація станом на 18:56 99.99.2026`)).toBeNull()
+  })
+})
+
+describe('Lviv prose off the template', () => {
+  it('a text that changes part of a day, or names no day, is parse: there is no day under it here', async () => {
+    const prose = '<p>Оновлено з 19:00: Група 1.1. Без світла з 19:00 до 23:00.</p>'
+    const answer = (e: Partial<PostEvent>) =>
+      fakeText(() => [
+        ev({
+          kind: 'gpv',
+          action: 'start',
+          regions: ['lviv'],
+          date: '2026-10-17',
+          schedule: [{ queue: '1.1', intervals: [{ from: '19:00', to: '23:00', kind: 'off' }] }],
+          ...e,
+        }),
+      ])
+    for (const e of [{ at: '19:00' }, { action: 'change' as const }, { date: null, dateNamed: false }])
+      await expect(
+        client(menuWithToday({ rawHtml: prose }), { textProcessor: answer(e) }).client.getSchedules('lviv'),
+        JSON.stringify(e),
+      ).rejects.toMatchObject({ code: 'parse' })
   })
 })

@@ -50,6 +50,8 @@ export interface CekDay {
   url: string
   /** Off slots per group; null when a change that can't be applied exactly made them unknown */
   groups: Record<GroupId, MinuteSlot[] | null>
+  /** The day's hourly schedule was called off: newer than another source's list, it wins */
+  cancelled?: boolean
 }
 
 /**
@@ -77,14 +79,20 @@ export async function cekDays(
   const analyzed = all.map((a) =>
     a.analysis ? { ...a, analysis: { ...a.analysis, events: a.analysis.events.filter((e) => !e.area) } } : a,
   )
-  const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer' } as const
+  const opts = { omitted: 'none', groups: CEK_GROUPS, updates: 'layer', layerFrom: 'stated' } as const
   const days = daysOf(textPublications(analyzed, region, now, opts), opts)
   const out = new Map<string, CekDay>()
   for (const [date, day] of days) {
     const groups: Record<GroupId, MinuteSlot[] | null> = {}
+    // a group no list named: none in a whole day's list, not known when there was none
     for (const g of CEK_GROUPS)
-      groups[g] = day.cancelled ? null : (day.groups[g] ?? (day.groups[g] === null ? null : []))
-    out.set(date, { at: day.at, url: analyzed[day.post]!.input.url, groups })
+      groups[g] = day.cancelled ? null : (day.groups[g] ?? (day.groups[g] === null || !day.based ? null : []))
+    out.set(date, {
+      at: day.at,
+      url: analyzed[day.post]!.input.url,
+      groups,
+      ...(day.cancelled ? { cancelled: true } : {}),
+    })
   }
   // back to the hourly schedule after an emergency: the list stands again as of that post
   for (const { input, analysis } of analyzed) {
@@ -111,7 +119,11 @@ export function cekDaysToSource(days: ReadonlyMap<string, CekDay>, now: Date): S
       const slots = day.groups[g]
       schedules[g] = slots ? makeDay(date, slots) : { date, status: 'unknown', intervals: [] }
     }
-    out[date] = { schedules, publishedAt: toKyivIso(new Date(day.at)) }
+    out[date] = {
+      schedules,
+      publishedAt: toKyivIso(new Date(day.at)),
+      ...(day.cancelled ? { cancelled: true } : {}),
+    }
     if (!newest || day.at > newest.at) newest = day
   }
   return { days: out, groups: [...CEK_GROUPS], ...(newest ? { url: newest.url } : {}) }

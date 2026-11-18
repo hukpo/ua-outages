@@ -37,6 +37,11 @@ export interface PostsOptions {
    * the morning's outages are gone from the text); see `layerPublications`.
    */
   updates?: 'replace' | 'layer'
+  /**
+   * With `updates: 'layer'`: a list that states no time of its own is the whole day ('stated'),
+   * not the hours from its post on (default 'post'). ЦЕК re-lists the whole day, past hours too
+   */
+  layerFrom?: 'post' | 'stated'
 }
 
 /** One publication about one day */
@@ -81,9 +86,15 @@ export function layerPublications(
 ): {
   groups: Record<string, MinuteSlot[] | null>
   cancelled: boolean
+  /**
+   * A whole day was published, which the later publications change: without one, a group
+   * nothing named is not known, and one only a correction or a window named is not known either
+   */
+  based: boolean
 } {
   let cur: Record<string, MinuteSlot[] | null> = {}
   let cancelled = false
+  let based = false
   for (const pub of pubs) {
     if (pub.cancelled) {
       cur = {}
@@ -95,7 +106,8 @@ export function layerPublications(
       const next = { ...cur }
       for (const [g, slots] of Object.entries(pub.groups)) {
         const prev = cur[g]
-        next[g] = slots === null || prev === null ? null : [...(prev ?? []), ...slots]
+        // added to what? without the day it adds to, the group's day is not known
+        next[g] = slots === null || prev === null || !based ? null : [...(prev ?? []), ...slots]
       }
       cur = next
       continue
@@ -104,6 +116,15 @@ export function layerPublications(
     if ((pub.from <= 0 && to >= 1440) || cancelled) {
       cur = { ...pub.groups }
       cancelled = false
+      based = pub.from <= 0 && to >= 1440
+      continue
+    }
+    if (!based) {
+      // the rest of a day from `from` on: its groups are known from then; a window with an end
+      // leaves the hours after it unknown
+      const next = { ...cur }
+      for (const [g, slots] of Object.entries(pub.groups)) next[g] = to >= 1440 ? slots : null
+      cur = next
       continue
     }
     const next: Record<string, MinuteSlot[] | null> = {}
@@ -125,7 +146,7 @@ export function layerPublications(
     }
     cur = next
   }
-  return { groups: cur, cancelled }
+  return { groups: cur, cancelled, based }
 }
 
 /** What the posts say about one date */
@@ -138,6 +159,8 @@ export interface PostDay {
   post: number
   /** The newest post cancels the day's schedule */
   cancelled: boolean
+  /** A whole day was published (see `layerPublications`): otherwise an unnamed group is not known */
+  based: boolean
 }
 
 /**
@@ -214,6 +237,14 @@ export interface DatedPublication {
   at: number
   post: number
   pub: Publication
+  /** Among the same or no time, the higher is newer: a Telegram message id, minus a page's index */
+  seq?: number
+}
+
+/** Order among posts of the same time: a Telegram message's id; a page's lower index is newer */
+const seqOf = (input: Analyzed['input'], index: number) => {
+  const id = input.source.kind === 'telegram' ? Number(input.url.split('/').pop()) : NaN
+  return Number.isFinite(id) ? id : -index
 }
 
 /** The `gpv` events of analysed posts → publications, yesterday and later */
@@ -242,9 +273,17 @@ export function textPublications(
         date,
         at,
         post,
+        seq: seqOf(input, post),
         pub: {
           groups,
-          from: opts.updates === 'layer' ? (ev.at ? clockMinutes(ev.at) : during) : 0,
+          from:
+            opts.updates === 'layer'
+              ? ev.at
+                ? clockMinutes(ev.at)
+                : opts.layerFrom === 'stated'
+                  ? 0
+                  : during
+              : 0,
           // a list for a window of the day ("з 10:00 до 16:00") leaves the hours after it alone
           ...(opts.updates === 'layer' && ev.at && ev.until ? { to: clockMinutes(ev.until, true) } : {}),
           ...(cancelled ? { cancelled } : {}),
@@ -253,6 +292,26 @@ export function textPublications(
       })
     }
   })
+  // "ГПВ скасовано до окремого розпорядження": the days already published after it are off too,
+  // until a newer list brings one back
+  for (const { input, analysis } of analyzed) {
+    if (!analysis) continue
+    for (const ev of gpvEvents(analysis, region)) {
+      if (ev.action !== 'cancel' || !ev.untilFurtherNotice) continue
+      const at = Date.parse(input.publishedAt)
+      const ref = new Date(at || now.getTime())
+      const day = ev.date ?? kyivDate(ref)
+      const post = analyzed.findIndex((a) => a.input === input)
+      for (const date of new Set(out.map((p) => p.date)))
+        if (date > day)
+          out.push({
+            date,
+            at: opts.timeless ? NaN : at,
+            post,
+            pub: { groups: {}, from: 0, cancelled: true },
+          })
+    }
+  }
   return out
 }
 
@@ -269,7 +328,9 @@ export function daysOf(pubs: readonly DatedPublication[], opts: PostsOptions = {
     const list = byDate
       .get(date)!
       .sort((a, b) =>
-        Number.isFinite(a.at) && Number.isFinite(b.at) && a.at !== b.at ? a.at - b.at : b.post - a.post,
+        Number.isFinite(a.at) && Number.isFinite(b.at) && a.at !== b.at
+          ? a.at - b.at
+          : (a.seq ?? -a.post) - (b.seq ?? -b.post),
       )
     const newest = list.at(-1)!
     const day = layerPublications(
@@ -337,8 +398,10 @@ function dayOf(date: string, day: PostDay, groups: readonly GroupId[], opts: Pos
     // named in the post without times or a "power on" statement, or a cancelled day: not known
     if (slots === null || day.cancelled) return { date, status: 'unknown' as const, intervals: [] }
     // a group missing from that day's post: no outages if the operator lists only the
-    // groups that have them, otherwise we just don't know
-    return opts.omitted === 'none' ? makeDay(date, []) : { date, status: 'unknown' as const, intervals: [] }
+    // groups that have them (in a whole day it published), otherwise we just don't know
+    return opts.omitted === 'none' && day.based
+      ? makeDay(date, [])
+      : { date, status: 'unknown' as const, intervals: [] }
   })
 }
 

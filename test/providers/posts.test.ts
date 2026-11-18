@@ -133,7 +133,7 @@ describe('updates that list only the hours ahead', () => {
       { from: 0, groups: { '1.1': [off(10, 14)] } },
       { from: 600, groups: {}, cancelled: true },
     ])
-    expect(cancelled).toEqual({ groups: {}, cancelled: true })
+    expect(cancelled).toMatchObject({ groups: {}, cancelled: true })
   })
 
   it('adds a correction to the groups it names and keeps the rest', () => {
@@ -149,7 +149,20 @@ describe('updates that list only the hours ahead', () => {
         { from: 0, groups: {}, cancelled: true },
         { from: 0, add: true, groups: { '1.1': [off(6, 8)] } },
       ]),
-    ).toEqual({ groups: {}, cancelled: true })
+    ).toMatchObject({ groups: {}, cancelled: true })
+  })
+
+  it('without a whole day to build on, a correction or a window leaves its groups not known', () => {
+    // ЦЕК 4378 alone: "+ 3.1, 3.2" with nothing before it
+    const add = layerPublications([{ from: 0, add: true, groups: { '3.1': [off(16, 18)] } }], 'none')
+    expect(add).toMatchObject({ groups: { '3.1': null }, based: false })
+    // a window "з 16:39 до 22:00" with no day before it: the hours after 22:00 aren't known
+    const window = layerPublications([{ from: 999, to: 1320, groups: { '1.1': [off(19, 22)] } }], 'none')
+    expect(window).toMatchObject({ groups: { '1.1': null }, based: false })
+    // the rest of the day from 17:00: known from then
+    const rest = layerPublications([{ from: 1020, groups: { '1.1': [off(18, 20)] } }], 'none')
+    expect(rest).toMatchObject({ groups: { '1.1': [off(18, 20)] }, based: false })
+    expect(layerPublications([{ from: 0, groups: { '1.1': [] } }]).based).toBe(true)
   })
 
   it('layers by post time: a post at 17:26 about today replaces only what is ahead', () => {
@@ -415,5 +428,52 @@ describe('statedTime', () => {
     expect(
       statedTime(analysis([gpv('2026-11-05', { '1.1': '08:00-10:00' })]), 'kharkiv', '2026-11-05', now),
     ).toBeNull()
+  })
+})
+
+describe('review fixes: cancellations until further notice, ties', () => {
+  it('"ГПВ скасовано до окремого розпорядження" also withdraws a list already out for tomorrow', () => {
+    const now = new Date('2026-11-18T15:00:00+02:00')
+    const s = schedule(
+      'kharkiv',
+      [
+        post('2026-11-18T08:00:00+02:00', [gpv('2026-11-19', { '1.1': '08:00-12:00' })]),
+        post('2026-11-18T14:00:00+02:00', [
+          ev({ kind: 'gpv', action: 'cancel', regions: ['kharkiv'], untilFurtherNotice: true }),
+        ]),
+      ],
+      now,
+    )
+    const tomorrow = s.schedules['1.1']!.find((d) => d.date === '2026-11-19')
+    expect(tomorrow?.status).toBe('unknown')
+  })
+
+  it('two Telegram posts in the same second: the later message wins', () => {
+    const tg = (id: number, events: PostEvent[]): Analyzed => ({
+      input: {
+        url: `https://t.me/kharkivenergy/${id}`,
+        source: { kind: 'telegram', channel: 'kharkivenergy' },
+        publishedAt: '2026-11-18T10:00:00+02:00',
+        edited: false,
+        title: null,
+        text: String(id),
+        replyTo: null,
+        photoCount: 0,
+        regions: [],
+      },
+      analysis: { events, photosAreSchedules: false, statedAt: null },
+      error: null,
+    })
+    const now = new Date('2026-11-18T11:00:00+02:00')
+    // oldest first, as a channel is read: the list, then its cancellation
+    const s = schedule(
+      'kharkiv',
+      [
+        tg(100, [gpv('2026-11-19', { '1.1': '08:00-12:00' })]),
+        tg(101, [ev({ kind: 'gpv', action: 'cancel', regions: ['kharkiv'], date: '2026-11-19' })]),
+      ],
+      now,
+    )
+    expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-19')?.status).toBe('unknown')
   })
 })

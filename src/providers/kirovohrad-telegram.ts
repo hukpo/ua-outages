@@ -79,6 +79,8 @@ export async function gpvVersions(
   const sorted = [...posts].sort((a, b) => a.id - b.id)
   const analyzed = await analyzeAll(ctx, region, channelInputs(sorted, region))
   const out: GpvVersion[] = []
+  /** New versions whose hours aren't in their text */
+  const blind: { date: string; postedAt: number; url: string }[] = []
   for (const { input, analysis, error } of analyzed) {
     const postedAt = Date.parse(input.publishedAt)
     if (!analysis) {
@@ -106,8 +108,26 @@ export async function gpvVersions(
         out.push({ ...base, cancelled: true, untilFurtherOrder: ev.untilFurtherNotice, slots: {} })
         continue
       }
-      // hours only in a picture: not a list this channel posts
-      if (!ev.schedule.length) continue
+      // a new version whose hours aren't in its text (a picture): it must not leave the version
+      // before it standing, unless a list with hours for its day follows (checked below)
+      if (!ev.schedule.length) {
+        if (postedAt >= recent) blind.push({ date, postedAt, url: input.url })
+        continue
+      }
+      // the dispatcher calls whole lists "Зміни … до графіка" too: one naming every group is the
+      // day; a correction of some groups only can't be applied by a reader of whole lists
+      if (ev.action === 'change' && KIROVOHRAD_GROUPS.some((g) => !ev.schedule.some((q) => q.queue === g))) {
+        if (postedAt >= recent)
+          throw new OutageError(
+            'parse',
+            `${input.url}: a correction of some groups, which a list reader can't apply`,
+            {
+              region,
+              url: input.url,
+            },
+          )
+        continue
+      }
       const slots: Record<GroupId, MinuteSlot[]> = {}
       for (const q of ev.schedule) {
         if (!q.intervals) {
@@ -123,6 +143,24 @@ export async function gpvVersions(
       out.push({ ...base, cancelled: false, slots })
     }
   }
+  // a version without hours ("на 06.11 діятиме графік", hours in a picture) must not leave an
+  // older list standing for its day: fine when a list with hours follows it, or when there was
+  // none before it (the day is then simply not known)
+  const today = kyivDate(now)
+  for (const b of blind)
+    if (
+      b.date >= today &&
+      out.some((v) => v.date === b.date && Date.parse(v.postedAt) < b.postedAt) &&
+      !out.some((v) => v.date === b.date && Date.parse(v.postedAt) > b.postedAt)
+    )
+      throw new OutageError(
+        'parse',
+        `${b.url}: the newest version for ${b.date} has its hours outside its text`,
+        {
+          region,
+          url: b.url,
+        },
+      )
   return out
 }
 

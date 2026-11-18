@@ -197,6 +197,18 @@ export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise
           },
         )
       for (const ev of events) {
+        // the prose of a slot is the day's whole list: a correction, or hours from a time on, has
+        // no day under it here to change
+        if (ev.action === 'change' || ev.at || ev.until)
+          throw new OutageError(
+            'parse',
+            `Lviv ${item.name}: the text changes part of a day, which can't be applied`,
+            {
+              region,
+            },
+          )
+        if (!ev.dateNamed)
+          throw new OutageError('parse', `Lviv ${item.name}: the text names no day`, { region })
         const day = ev.date ?? kyivDate(now)
         const updatedAt = statedTime(analysis, region, day, now)
         const groups: Record<GroupId, DaySchedule> = {}
@@ -215,7 +227,10 @@ export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise
   const dates = [...days.keys()].sort()
   // every slot empty: nothing published; the twelve groups stay listed as unknown
   if (!dates.length) return unpublished(region, STANDARD_GROUPS, now)
-  const groups = [...new Set(dates.flatMap((d) => Object.keys(days.get(d)!.groups)))].sort(compareGroups)
+  // every group, also those a day leaves out: not known for that day, never just missing
+  const groups = [
+    ...new Set([...STANDARD_GROUPS, ...dates.flatMap((d) => Object.keys(days.get(d)!.groups))]),
+  ].sort(compareGroups)
   const schedules: Record<GroupId, DaySchedule[]> = {}
   for (const g of groups)
     schedules[g] = dates.map((d) => days.get(d)!.groups[g] ?? { date: d, status: 'unknown', intervals: [] })
