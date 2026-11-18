@@ -141,12 +141,27 @@ async function codex(
       writeFileSync(file, image.bytes)
       args.push(`--image=${file}`)
     }
-    args.push(`${system}\n\n${prompt}`)
-    await run('codex', args, signal)
-    return { value: JSON.parse(readFileSync(outFile, 'utf8')) }
+    args.push('--json', `${system}\n\n${prompt}`)
+    const usage = codexUsage(await run('codex', args, signal))
+    return { value: JSON.parse(readFileSync(outFile, 'utf8')), ...(usage ? { usage } : {}) }
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+}
+
+/**
+ * Codex wraps the prompt in its own agent instructions (~20k input tokens for "Reply OK"):
+ * CODEX_BASELINE_TOKENS, measured that way, is taken off so the count is about the prompt alone.
+ * Output tokens include the model's reasoning.
+ */
+function codexUsage(jsonl: string): { inputTokens: number; outputTokens: number } | undefined {
+  for (const line of jsonl.split('\n').reverse()) {
+    if (!line.includes('"turn.completed"')) continue
+    const u = JSON.parse(line).usage as { input_tokens: number; output_tokens: number }
+    const base = Number(process.env.CODEX_BASELINE_TOKENS ?? 0)
+    return { inputTokens: Math.max(0, u.input_tokens - base), outputTokens: u.output_tokens }
+  }
+  return undefined
 }
 
 export function codexCliText(model = 'gpt-6.1-terra', effort?: string): TextProcessor {

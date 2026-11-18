@@ -20,6 +20,7 @@ all 76.
 
 - Claude models misread Zakarpattia's 48-cell colour grids at Telegram's 800×210 (Haiku 1/8, Sonnet 3/8, Opus 2/8); the GPT models read them (Astra 8/8, Terra 7/8).
 - On the full 784 posts, Haiku went from 554 (prompt p4, scored strictly) to 627 after the scoring compared only what the SDK uses; prompts p5–p7 fixed the patterns behind most remaining misses.
+- GPT-6.1 Terra's tokens via `codex exec --json` (Codex's own ~20k-token wrapper taken off with `CODEX_BASELINE_TOKENS`; output includes reasoning): per post ~1.7k in / ~250 out (≈ $0.003 at $1 / $5 per 1M), per picture at 1600 px ~1.8k in / ~400 out (≈ $0.004).
 - Haiku's tokens per post, via the CLI: ~1.9k in / ~1.4k out (mostly thinking); per picture ~1.6k in / ~1.7k out.
 
 The answers behind the last runs are in `test/fixtures/ai/` and replayed offline by `test/ai/replay.test.ts`.
