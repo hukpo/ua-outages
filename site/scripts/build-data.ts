@@ -19,6 +19,7 @@ import { OutageClient, kyivDate } from '../../src/index.js'
 import type { RegionId, RegionInfo } from '../../src/index.js'
 import { addDays, kyivInstant } from '../../src/time.js'
 import { mapLimit } from '../../src/util.js'
+import { processorOptions } from '../../scripts/processors.js'
 import {
   RELAY_BRANCH,
   collect,
@@ -156,7 +157,8 @@ async function relayed(): Promise<Relay | null> {
   }
 }
 
-const client = new OutageClient({ cacheTtlMs: 0, timeoutMs: 25_000, retries: 2 })
+const ai = await processorOptions()
+const client = new OutageClient({ cacheTtlMs: 0, timeoutMs: 25_000, retries: 2, ...ai.options })
 const now = new Date()
 const today = kyivDate(now)
 cpSync(join(ROOT, 'site/public'), OUT, { recursive: true })
@@ -231,3 +233,4 @@ console.log(
     `${count((r) => r.stale)} stale, ${count((r) => !r.ok)} failed of ${regions.length}; ` +
     `${Object.keys(history.days).length} days in the archive → _site/`,
 )
+ai.done()

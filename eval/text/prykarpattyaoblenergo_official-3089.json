@@ -1,0 +1,87 @@
+{
+ "input": {
+  "url": "https://t.me/prykarpattyaoblenergo_official/3089",
+  "source": {
+   "kind": "telegram",
+   "channel": "prykarpattyaoblenergo_official"
+  },
+  "publishedAt": "2025-10-16T21:54:09+03:00",
+  "edited": false,
+  "title": null,
+  "text": "За вказівкою Укренерго, оновлення щодо графіків аварійних вимкнень на 22:00 📌\n\n✔️Електропостачання буде відновлено для черг 1 та 10;\n✔️Вимкненими до окремої вказівки будуть черги 3 та 4.",
+  "replyTo": null,
+  "photoCount": 2,
+  "regions": [
+   {
+    "id": "ivano-frankivsk",
+    "name": "Івано-Франківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "change",
+    "regions": [
+     "ivano-frankivsk"
+    ],
+    "area": null,
+    "date": null,
+    "at": "22:00",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "3",
+     "4"
+    ],
+    "queuesRestored": [
+     "1",
+     "10"
+    ],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "album"
+ ],
+ "note": "\"оновлення щодо ГАВ на 22:00: відновлено для черг 1 та 10; вимкненими … черги 3 та 4\". Photos: ГАВ settlement tables (no hours) → false.",
+ "uncertain": false
+}

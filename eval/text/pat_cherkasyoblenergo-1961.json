@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/pat_cherkasyoblenergo/1961",
+  "source": {
+   "kind": "telegram",
+   "channel": "pat_cherkasyoblenergo"
+  },
+  "publishedAt": "2026-11-05T10:46:04+02:00",
+  "edited": false,
+  "title": null,
+  "text": "Через наслідки попередніх масованих ракетно-дронових атак 5 листопада з 10:35 по Черкаській області застосовані графіки аварійних відключень (ГАВ) за командою НЕК \"Укренерго\".\n\nТакож продовжують діяти графіки погодинних відключень (ГПВ).\n\nПросимо з розумінням поставитися до вжитих заходів, спрямованих на збереження енергосистеми України.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "cherkasy",
+    "name": "Черкаська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "cherkasy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:35",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav"
+ ],
+ "note": "\"5 листопада з 10:35 … застосовані ГАВ\"; \"продовжують діяти ГПВ\".",
+ "uncertain": false
+}

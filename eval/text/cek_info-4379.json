@@ -1,0 +1,78 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4379",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-13T01:29:34+02:00",
+  "edited": false,
+  "title": null,
+  "text": "Шановні споживачі! Повідомляємо про зміни в ГПВ 13 ЛИСТОПАДА, за розпорядженням диспетчерського центру НЕК \"Укренерго\" з 02:30 додатково застосовуються відлючення черги 6.1, 6.2 ‼️",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "change",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": null,
+    "date": null,
+    "at": "02:30",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "6.1",
+      "intervals": null
+     },
+     {
+      "queue": "6.2",
+      "intervals": null
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "tricky"
+ ],
+ "note": "\"з 02:30 додатково … черги 6.1, 6.2\": no end time → intervals null. [p2: gpv start = schedule for a day, new or updated; change = correction to some queues]",
+ "uncertain": false
+}

@@ -29,6 +29,11 @@ export interface TelegramPost {
    * videos and link previews aren't included.
    */
   photos: string[]
+  /**
+   * The post this one replies to, as the preview quotes it above the text (its link and the
+   * quoted text; the quote may be shortened). Null when it isn't a reply.
+   */
+  replyTo: { url: string | null; text: string } | null
 }
 
 export interface PreviewOptions {
@@ -73,10 +78,26 @@ export function parseTelegramPreview(html: string, opts: PreviewOptions = {}): T
       text,
       edited: /\bedited\b/.test(meta.replace(/<[^>]+>/g, ' ')),
       photos,
+      replyTo: replyOf(block),
     })
   }
   // the page is oldest first already; keep that order whatever happens to the markup
   return posts.sort((a, b) => a.id - b.id)
+}
+
+/** The quoted post above a reply: `<a class="tgme_widget_message_reply" href="…">…js-message_reply_text…</a>` */
+function replyOf(block: string): TelegramPost['replyTo'] {
+  const open = /<a\b[^>]*\bclass="tgme_widget_message_reply\b[^>]*>/.exec(block)
+  if (!open) return null
+  const href = /\bhref="([^"]+)"/.exec(open[0])?.[1] ?? null
+  const rest = block.slice(open.index + open[0].length)
+  const quoted = /<div class="tgme_widget_message_text js-message_reply_text"[^>]*>([\s\S]*?)<\/div>/.exec(
+    rest.slice(0, rest.indexOf('</a>') + 1 || undefined),
+  )
+  return {
+    url: href ? href.replace(/&amp;/g, '&').replace(/\?.*$/, '') : null,
+    text: quoted ? htmlToText(quoted[1]!) : '',
+  }
 }
 
 /** Picture links of a post, in page order; `&amp;` in the attribute decoded. */

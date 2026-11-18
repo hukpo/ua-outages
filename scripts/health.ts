@@ -14,13 +14,15 @@
  */
 import { OutageClient } from '../src/index.js'
 import type { Freshness, RegionId } from '../src/index.js'
+import { processorOptions } from './processors.js'
 
 const args = process.argv.slice(2)
 const skipAt = args.indexOf('--skip')
 const skip = new Set(skipAt === -1 ? [] : (args[skipAt + 1] ?? '').split(','))
 const named = args.filter((a, i) => !a.startsWith('--') && (skipAt === -1 || i !== skipAt + 1)) as RegionId[]
 const strict = args.includes('--strict')
-const client = new OutageClient()
+const ai = await processorOptions()
+const client = new OutageClient(ai.options)
 const all = named.length ? named : client.regions().map((r) => r.id)
 const report = await client.healthCheck({
   regions: all.filter((r) => !skip.has(r)),
@@ -84,4 +86,5 @@ else {
         : '\nAll sources work.',
   )
 }
+ai.done()
 process.exit(broken ? 1 : report.ok ? 0 : 2)

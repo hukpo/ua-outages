@@ -1,0 +1,272 @@
+{
+ "input": {
+  "url": "https://t.me/oe_cv_ua/4011",
+  "source": {
+   "kind": "telegram",
+   "channel": "oe_cv_ua"
+  },
+  "publishedAt": "2026-11-12T20:53:20+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚡️ Орієнтовний графік заживлення для груп споживачів • 12.11.2026\n\n💡 Група 1\n00:00 - 13:00\n15:30 - 19:00\nз 21:30\n\n💡 Група 2\n00:00 - 13:00\n15:30 - 19:00\nз 21:30\n\n💡 Група 3\n00:00 - 14:00\n16:30 - 20:00\nз 22:30\n\n💡 Група 4\n00:00 - 14:00\n16:30 - 20:00\nз 22:30\n\n💡 Група 5\n00:00 - 07:00\n09:30 - 15:00\n17:30 - 22:00\n\n💡 Група 6\n00:00 - 07:00\n09:30 - 15:00\n17:30 - 22:00\n\n💡 Група 7\n00:00 - 09:00\n11:30 - 16:00\nз 18:30\n\n💡 Група 8\n00:00 - 09:00\n11:30 - 16:00\nз 18:30\n\n💡 Група 9\n00:00 - 11:00\n13:30 - 17:00\nз 19:30\n\n💡 Група 10\n00:00 - 11:00\n13:30 - 17:00\nз 19:30\n\n💡 Група 11\n00:00 - 12:00\n14:30 - 18:00\nз 20:30\n\n💡 Група 12\n00:00 - 12:00\n14:30 - 18:00\nз 20:30\n\n☝️Дізнатись номер своєї групи можна за пошуком - https://is.gd/jvxPFP\n❗️ У години пікового навантаження на енергосистему: 09.00-11.00 та 18.00-20.00 просимо економно споживати електроенергію.\n❗️ Передати показники лічильника через Телеграм Чат-БОТ - https://t.me/oblcv_bot\n❗️ Передати показники лічильника в Особистому кабінеті - https://is.gd/D1p5YB",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "chernivtsi",
+    "name": "Чернівецька область",
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10",
+     "11",
+     "12"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": [
+     {
+      "queue": "1",
+      "intervals": [
+       {
+        "from": "13:00",
+        "to": "15:30",
+        "kind": "off"
+       },
+       {
+        "from": "19:00",
+        "to": "21:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "2",
+      "intervals": [
+       {
+        "from": "13:00",
+        "to": "15:30",
+        "kind": "off"
+       },
+       {
+        "from": "19:00",
+        "to": "21:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "3",
+      "intervals": [
+       {
+        "from": "14:00",
+        "to": "16:30",
+        "kind": "off"
+       },
+       {
+        "from": "20:00",
+        "to": "22:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "4",
+      "intervals": [
+       {
+        "from": "14:00",
+        "to": "16:30",
+        "kind": "off"
+       },
+       {
+        "from": "20:00",
+        "to": "22:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "5",
+      "intervals": [
+       {
+        "from": "07:00",
+        "to": "09:30",
+        "kind": "off"
+       },
+       {
+        "from": "15:00",
+        "to": "17:30",
+        "kind": "off"
+       },
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "6",
+      "intervals": [
+       {
+        "from": "07:00",
+        "to": "09:30",
+        "kind": "off"
+       },
+       {
+        "from": "15:00",
+        "to": "17:30",
+        "kind": "off"
+       },
+       {
+        "from": "22:00",
+        "to": "24:00",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "7",
+      "intervals": [
+       {
+        "from": "09:00",
+        "to": "11:30",
+        "kind": "off"
+       },
+       {
+        "from": "16:00",
+        "to": "18:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "8",
+      "intervals": [
+       {
+        "from": "09:00",
+        "to": "11:30",
+        "kind": "off"
+       },
+       {
+        "from": "16:00",
+        "to": "18:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "9",
+      "intervals": [
+       {
+        "from": "11:00",
+        "to": "13:30",
+        "kind": "off"
+       },
+       {
+        "from": "17:00",
+        "to": "19:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "10",
+      "intervals": [
+       {
+        "from": "11:00",
+        "to": "13:30",
+        "kind": "off"
+       },
+       {
+        "from": "17:00",
+        "to": "19:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "11",
+      "intervals": [
+       {
+        "from": "12:00",
+        "to": "14:30",
+        "kind": "off"
+       },
+       {
+        "from": "18:00",
+        "to": "20:30",
+        "kind": "off"
+       }
+      ]
+     },
+     {
+      "queue": "12",
+      "intervals": [
+       {
+        "from": "12:00",
+        "to": "14:30",
+        "kind": "off"
+       },
+       {
+        "from": "18:00",
+        "to": "20:30",
+        "kind": "off"
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "gpv-schedule",
+  "tricky"
+ ],
+ "note": "\"Орієнтовний графік заживлення\" lists hours WITH power per group; labels are the complement within 00:00–24:00 (\"з 22:30\" = on until 24:00; \"Електропостачання без обмежень\" → []). Peak-hour line \"09.00-11.00 та 18.00-20.00\" is an appeal, not a schedule. The post does not call itself an update → start.",
+ "uncertain": false
+}

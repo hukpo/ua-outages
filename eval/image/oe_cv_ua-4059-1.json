@@ -1,0 +1,154 @@
+{
+ "input": {
+  "url": "https://t.me/oe_cv_ua/4059",
+  "caption": "⚡ Орієнтовний графік заживлення на 18.11.2026\n━━━━━━━━━━━━━━━━━━━━━\n\n🔍 Дізнатись номер своєї групи\n\n⚠️ У години пікового навантаження на енергосистему\n(09:00-11:00 та 18:00-20:00) просимо ощадливо\nспоживати електроенергію!\n\n━━━━━━━━━━━━━━━━━━━━━\n📲 Передати показники — Чат-БОТ\n💻 Передати показники — Особистий кабінет",
+  "publishedAt": "2026-11-17T19:22:52+02:00",
+  "region": {
+   "id": "chernivtsi",
+   "name": "Чернівецька область",
+   "queues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12"
+   ],
+   "emergencyQueues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  "file": "eval/image/files/oe_cv_ua-4059-1.jpg"
+ },
+ "expected": {
+  "isSchedule": true,
+  "kind": "gpv",
+  "date": "2026-11-18",
+  "statedAt": "19:22",
+  "schedule": [
+   {
+    "queue": "7",
+    "intervals": [
+     {
+      "from": "10:00",
+      "to": "12:30",
+      "kind": "off"
+     },
+     {
+      "from": "18:00",
+      "to": "20:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "8",
+    "intervals": [
+     {
+      "from": "10:00",
+      "to": "12:30",
+      "kind": "off"
+     },
+     {
+      "from": "18:00",
+      "to": "20:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "9",
+    "intervals": [
+     {
+      "from": "08:00",
+      "to": "10:30",
+      "kind": "off"
+     },
+     {
+      "from": "16:00",
+      "to": "18:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "10",
+    "intervals": [
+     {
+      "from": "08:00",
+      "to": "10:30",
+      "kind": "off"
+     },
+     {
+      "from": "16:00",
+      "to": "18:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "11",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "08:30",
+      "kind": "off"
+     },
+     {
+      "from": "16:00",
+      "to": "18:30",
+      "kind": "off"
+     },
+     {
+      "from": "22:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "12",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "08:30",
+      "kind": "off"
+     },
+     {
+      "from": "16:00",
+      "to": "18:30",
+      "kind": "off"
+     },
+     {
+      "from": "22:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   }
+  ]
+ },
+ "tags": [
+  "telegram",
+  "album",
+  "gpv",
+  "tricky"
+ ],
+ "note": "Chernivtsi \"Орієнтовний графік заживлення\" lists hours WITH power (ON 00:00–14:00, 16:30–20:00, з 22:30): expected = the hours without power in between. \"Станом на 19:22 17.11.2026\" for 18.11. The album splits the 12 groups 6+6: expected lists only the groups on this picture, though IMAGE_SYSTEM asks for every queue of the region (prompt gap) (groups 7–12); picture 2 of 2",
+ "uncertain": true
+}

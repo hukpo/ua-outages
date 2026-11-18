@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { PostAnalysis, PostEvent, PostInput, TextProcessor } from '../../src/ai/types.js'
 import { OutageClient } from '../../src/client.js'
-import { stampTimes, zaporizhzhiaProvider } from '../../src/providers/zaporizhzhia.js'
+import { articlesOf, stampTimes, zaporizhzhiaProvider } from '../../src/providers/zaporizhzhia.js'
 import {
   addSheet,
   groupLabel,
@@ -11,7 +12,7 @@ import {
   type ZoeDirectory,
 } from '../../src/providers/zaporizhzhia-addresses.js'
 import type { DaySchedule } from '../../src/types.js'
-import { fixture, mockFetch, type Route } from '../helpers.js'
+import { ev, fakeText, fixture, intervalsOf, mockFetch, type Route } from '../helpers.js'
 
 const NOW = new Date('2026-11-16T12:00:00+02:00')
 const F = 'zaporizhzhia/addresses'
@@ -209,14 +210,58 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
     match: TG,
     body: fixture('zaporizhzhia/telegram-Zaporizhzhyaoblenergo_news-3598-3621.trimmed.html'),
   }
+  const DOWN = (match: string): Route => ({ match, status: 500, body: '' })
   // the night the research measured: "(оновлено 00:13)" for 17.11 was on the site at 00:25
   const NIGHT = new Date('2026-11-17T00:25:00+02:00')
-  const schedules = (routes: Route[], now = NIGHT) =>
+
+  /** What a correct model answers for each schedule post, transcribed in answers.json */
+  type Answer = { date: string; statedAt: string | null; hours: Record<string, string> }
+  const ANSWERS = JSON.parse(fixture('zaporizhzhia/answers.json')) as {
+    site: Record<string, Answer>
+    telegram: Record<string, Answer>
+  }
+  const gpv = (a: Answer): Partial<PostAnalysis> => ({
+    statedAt: a.statedAt,
+    events: [
+      ev({
+        kind: 'gpv',
+        action: 'start',
+        regions: ['zaporizhzhia'],
+        date: a.date,
+        schedule: Object.entries(a.hours).map(([queue, h]) => ({ queue, intervals: intervalsOf(h) })),
+      }),
+    ],
+  })
+  const emergency = (action: 'start' | 'cancel', gpvApplies: boolean | null) => [
+    ev({ kind: 'gav', action, regions: ['zaporizhzhia'], gpvApplies }),
+    ev({ kind: 'sgav', action, regions: ['zaporizhzhia'], gpvApplies }),
+  ]
+  const answer = (input: PostInput): Partial<PostAnalysis> | PostEvent[] => {
+    const id = /t\.me\/\w+\/(\d+)$/.exec(input.url)?.[1]
+    if (id) {
+      if (ANSWERS.telegram[id]) return gpv(ANSWERS.telegram[id])
+      // "запроваджено ГАВ та СГАВ … можливі вимкнення поза доведеним ГПВ"
+      if (['3610', '3616', '3619'].includes(id)) return emergency('start', true)
+      // "ГАВ та СГАВ – деактивовано. Продовжують діяти ГПВ"
+      if (id === '3613') return emergency('cancel', true)
+      // restored supply (3601), an appeal (3603)
+      if (['3601', '3603'].includes(id)) return []
+      throw new Error(`no answer for ${input.url}`)
+    }
+    const title = input.title?.trim() ?? ''
+    if (ANSWERS.site[title]) return gpv(ANSWERS.site[title])
+    // the page's side widgets: complaints, the anti-corruption line
+    if (!title) return []
+    throw new Error(`no answer for "${title}"`)
+  }
+
+  const schedules = (routes: Route[], now = NIGHT, text: TextProcessor | null = fakeText(answer)) =>
     new OutageClient({
       fetch: mockFetch(routes).fetch,
       now: () => now,
       cacheTtlMs: 0,
       providers: [zaporizhzhiaProvider()],
+      ...(text ? { textProcessor: text } : {}),
     }).getSchedules('zaporizhzhia')
 
   it('reports the "(оновлено HH:MM)" of the current article as updatedAt', async () => {
@@ -237,6 +282,24 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
     expect(s.sources!.some((x) => x.disagrees)).toBe(false)
   })
 
+  it("reads the page once a day: articles are analysed against today's noon", async () => {
+    const text = fakeText(answer)
+    const c = new OutageClient({
+      fetch: mockFetch([{ match: SITE, body: PAGE }, CHANNEL]).fetch,
+      now: () => NIGHT,
+      cacheTtlMs: 0,
+      providers: [zaporizhzhiaProvider()],
+      textProcessor: text,
+    })
+    await c.getSchedules('zaporizhzhia')
+    const site = text.calls.filter((x) => x.source.kind === 'site')
+    expect(site).toHaveLength(articlesOf(PAGE).length)
+    expect(new Set(site.map((x) => x.publishedAt))).toEqual(new Set(['2026-11-17T12:00:00+02:00']))
+    const n = text.calls.length
+    await c.getSchedules('zaporizhzhia')
+    expect(text.calls).toHaveLength(n)
+  })
+
   it('dates each stamp by its place on the page: the same evening or the day itself', () => {
     const titles = [...PAGE.matchAll(/<h2>([^<]*)<\/h2>/g)].map((m) => m[1]!)
     const articles = titles.map((t) => ({
@@ -254,8 +317,32 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
     expect(stampTimes([{ date: '2026-11-17', stamp: '00:40' }], NIGHT)).toEqual(['2026-11-16T00:40:00+02:00'])
   })
 
-  it('falls back to Telegram when the site is down, reading the block format', async () => {
-    const s = await schedules([{ match: SITE, status: 500, body: '' }, CHANNEL])
+  it('reads a group left out of an article as no outages, not unknown', async () => {
+    // the 18:21 correction for 14.11 lists only six groups; 1.1 had 23:30–24:00 before it
+    const s = await schedules(
+      [{ match: SITE, body: fixture('zaporizhzhia/outage-page-2026-11-14.html') }, DOWN(TG)],
+      new Date('2026-11-14T23:30:00+02:00'),
+    )
+    expect(s.groups).toHaveLength(12)
+    const nov14 = (g: string) => s.schedules[g]!.find((d) => d.date === '2026-11-14')!
+    expect(nov14('1.1')).toMatchObject({ status: 'scheduled', intervals: [] })
+    expect(hhmm(nov14('3.1'))).toEqual(['00:00-01:00', '15:30-19:00'])
+    // and on 15.11, where 2.2 isn't listed
+    const nov15 = s.schedules['2.2']!.find((d) => d.date === '2026-11-15')!
+    expect(nov15).toMatchObject({ status: 'scheduled', intervals: [] })
+    expect(
+      Object.values(s.schedules)
+        .flat()
+        .some((d) => d.status === 'unknown'),
+    ).toBe(false)
+  })
+
+  it('rejects a page without posts', () => {
+    expect(() => articlesOf('<html></html>')).toThrow(/no posts/)
+  })
+
+  it('falls back to Telegram when the site is down', async () => {
+    const s = await schedules([DOWN(SITE), CHANNEL])
     expect(s.sources![0]).toMatchObject({ id: 'site', ok: false, error: { code: 'http' } })
     expect(s.sources![1]).toMatchObject({ ok: true, dates: ['2026-11-17'] })
     expect(s.updatedAt).toBe('2026-11-16T23:35:49+02:00')
@@ -263,17 +350,12 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
     // post 3621: "⚡ Черга 1.2 / з 00:00 до 01:30 / з 10:00 до 15:00 / з 19:00 до 24:00"
     expect(hhmm(s.schedules['1.2']![0]!)).toEqual(['00:00-01:30', '10:00-15:00', '19:00-00:00'])
     expect(hhmm(s.schedules['2.2']![0]!)).toEqual(['18:00-22:30'])
-    // the sentence about ГОП "з 00:00 до 24:00" after the last block adds nothing to 6.2
-    expect(hhmm(s.schedules['6.2']![0]!)).toEqual(['01:00-06:00', '10:00-15:00', '19:00-00:00'])
   })
 
-  it('reads every schedule post of the channel, both formats, and skips ГАВ notices and pictures', async () => {
-    // 16.11 17:00, the site down: 3602 (lines, "завтра, 16 листопада"), 3604 (blocks,
-    // "на 16.11.2026"), 3606–3615 (lines); 3610, 3613, 3616 are ГАВ/СГАВ on and off
-    const s = await schedules(
-      [{ match: SITE, status: 500, body: '' }, CHANNEL],
-      new Date('2026-11-16T17:00:00+02:00'),
-    )
+  it('reads every schedule post of the channel and skips ГАВ notices', async () => {
+    // 16.11 17:00, the site down: 3602, 3604, 3606–3615 are 16.11; 3610, 3613, 3616 are ГАВ/СГАВ
+    // on and off
+    const s = await schedules([DOWN(SITE), CHANNEL], new Date('2026-11-16T17:00:00+02:00'))
     const nov16 = (g: string) => s.schedules[g]!.find((d) => d.date === '2026-11-16')!
     // the 16:33 post, equal to the site's "(оновлено 16:27)"
     expect(hhmm(nov16('1.1'))).toEqual(['02:30-06:00', '11:30-16:30', '20:30-00:00'])
@@ -294,22 +376,68 @@ describe('Zaporizhzhiaoblenergo: site and Telegram', () => {
     expect(s.sources!.some((x) => x.disagrees)).toBe(false)
     // alone, the site has that day without a time
     const alone = await schedules(
-      [
-        { match: SITE, body: before },
-        { match: TG, status: 500, body: '' },
-      ],
+      [{ match: SITE, body: before }, DOWN(TG)],
       new Date('2026-11-16T23:40:00+02:00'),
     )
     expect(alone.sources![0]).toMatchObject({ dates: ['2026-11-15', '2026-11-16', '2026-11-17'] })
     expect(alone.updatedAt).toBe('2026-11-16T16:27:00+02:00')
   })
 
+  it('fails the site when its top article is misread, and falls back to Telegram', async () => {
+    // the 00:13 version answered with "25:00": it may be the current schedule
+    const text = fakeText((input) =>
+      input.title?.includes('(оновлено 00:13)')
+        ? [
+            ev({
+              kind: 'gpv',
+              action: 'start',
+              regions: ['zaporizhzhia'],
+              schedule: [{ queue: '1.1', intervals: intervalsOf('23:00-25:00') }],
+            }),
+          ]
+        : answer(input),
+    )
+    const s = await schedules([{ match: SITE, body: PAGE }, CHANNEL], NIGHT, text)
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: false, error: { code: 'parse' } })
+    // the channel's 23:35 post for 17.11 stands in
+    expect(s.sources![1]).toMatchObject({ ok: true, dates: ['2026-11-17'] })
+    expect(hhmm(s.schedules['1.2']!.at(-1)!)).toEqual(['00:00-01:30', '10:00-15:00', '19:00-00:00'])
+  })
+
+  it('keeps the site when only an article below the current one is misread', async () => {
+    const text = fakeText((input) =>
+      input.title?.includes('(оновлено 12:33)')
+        ? [
+            ev({
+              kind: 'gpv',
+              action: 'start',
+              regions: ['zaporizhzhia'],
+              schedule: [{ queue: '9.9', intervals: [] }],
+            }),
+          ]
+        : answer(input),
+    )
+    const s = await schedules([{ match: SITE, body: PAGE }, CHANNEL], NIGHT, text)
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: ['2026-11-16', '2026-11-17'] })
+  })
+
+  // the articles are read against today's noon: three quiet days on, the top article's date is
+  // still a date, not a misread
+  it('reads a page of days gone by as days gone by, not as misreads', async () => {
+    const s = await schedules([{ match: SITE, body: PAGE }, DOWN(TG)], new Date('2026-11-20T12:00:00+02:00'))
+    expect(s.sources![0]).toMatchObject({ id: 'site', ok: true, dates: [] })
+  })
+
+  it('needs a text processor', async () => {
+    await expect(schedules([{ match: SITE, body: PAGE }, CHANNEL], NIGHT, null)).rejects.toMatchObject({
+      code: 'config',
+    })
+  })
+
   it('fails with the site error when both are down', async () => {
-    await expect(
-      schedules([
-        { match: SITE, status: 500, body: '' },
-        { match: TG, status: 500, body: '' },
-      ]),
-    ).rejects.toMatchObject({ code: 'http', message: expect.stringContaining('zoe.com.ua') })
+    await expect(schedules([DOWN(SITE), DOWN(TG)])).rejects.toMatchObject({
+      code: 'http',
+      message: expect.stringContaining('zoe.com.ua'),
+    })
   })
 })

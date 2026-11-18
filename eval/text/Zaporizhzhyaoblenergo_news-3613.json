@@ -1,0 +1,103 @@
+{
+ "input": {
+  "url": "https://t.me/Zaporizhzhyaoblenergo_news/3613",
+  "source": {
+   "kind": "telegram",
+   "channel": "Zaporizhzhyaoblenergo_news"
+  },
+  "publishedAt": "2026-11-16T09:17:52+02:00",
+  "edited": false,
+  "title": null,
+  "text": "‼️УВАГА\nПо Запорізькій області графіки аварійних відключень (ГАВ) та спеціальні графіки аварійних відключень (СГАВ) - деактивовано.\nПродовжують діяти графіки погодинних відключень електроенергії.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "zaporizhzhia",
+    "name": "Запорізька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav",
+  "sgav",
+  "cancel",
+  "tricky"
+ ],
+ "note": "«ГАВ та СГАВ - деактивовано. Продовжують діяти ГПВ»: \"деактивовано\" is a cancel word not listed in TEXT_SYSTEM.",
+ "uncertain": false
+}

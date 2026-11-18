@@ -1,8 +1,11 @@
+import { toSlots } from '../ai/map.js'
+import { analyzeAll, channelInputs, failIfNewestUnread } from '../ai/posts.js'
+import type { PostEvent } from '../ai/types.js'
 import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
-import { cellsToIntervals, compareGroups, makeDay, type MinuteSlot } from '../schedule.js'
+import { cellsToIntervals, compareGroups, makeDay } from '../schedule.js'
 import { matchScore, normalizeHouse, normalizeSettlement, normalizeStreet, streetType } from '../text.js'
-import { addDays, kyivDate, parseClock } from '../time.js'
+import { addDays, kyivDate } from '../time.js'
 import type {
   City,
   DaySchedule,
@@ -13,6 +16,7 @@ import type {
   ProviderInfo,
   Street,
 } from '../types.js'
+import { gpvEvents } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 import { mapLimit } from '../util.js'
@@ -27,8 +31,9 @@ import { mapLimit } from '../util.js'
  *   time of the newest post about a date is when that date last changed. That is the change
  *   time given to the site's days, unless that post states the day in words and the page shows
  *   something else: then the page is behind it and has no time at all. Until 15.11.2026 the
- *   posts carried the schedule as text, since then as pictures: text is read as a second copy
- *   of the day, pictures only as the clock (a page behind a picture post can't be told).
+ *   posts carried the schedule as text, since then as pictures: text (read by the client's text
+ *   processor) is a second copy of the day, pictures only the clock (a page behind a picture
+ *   post can't be told).
  *
  * Groups are numbered 1–12 (not 1.1–6.2) and kept as the operator names them.
  *
@@ -137,7 +142,7 @@ export function chernivtsiProvider(): Provider {
         region,
         since: new Date(ctx.now().getTime() - CHANNEL_LOOKBACK_MS),
         maxPages: CHANNEL_PAGES,
-      }).then((read) => parseChannelPosts(read.posts))
+      }).then((read) => parseChannelPosts(ctx, read.posts))
       // both are awaited by both readers; a failure is reported there, not as an unhandled one
       site.catch(() => {})
       channel.catch(() => {})
@@ -282,104 +287,55 @@ export interface ChannelDays {
   text: Map<string, Record<GroupId, DaySchedule>>
 }
 
-const HEADER = /^[^\p{L}\d]*Орієнтовний графік заживлення[^\n]*?(\d{2})\.(\d{2})\.(\d{4})\s*$/mu
-const ALL_ON = /^[^\p{L}\d]*На (\d{2})\.(\d{2})\.(\d{4})\s*\n\s*Електропостачання без обмежень для всіх груп/u
-
 /**
- * Posts (oldest first) → the change clock and the text days. A post is about the date in its
- * first line ("⚡ Орієнтовний графік заживлення на 17.11.2026", "✨ На 13.11.2026 /
- * Електропостачання без обмежень для всіх груп споживачів!") when that date is the post's own
- * day or the next one; the channel has misdated a post before, and such a post is skipped.
+ * Posts (oldest first) → the change clock and the text days, read by the client's text
+ * processor. A post is about the day its `gpv` event names when that is the post's own day or the
+ * next one; the channel has misdated a post before, and such a post is skipped. The text is
+ * "графік заживлення", the hours WITH power; the processor gives the hours without. "На 13.11 /
+ * Електропостачання без обмежень для всіх груп" is a day with no outages for anyone. A post
+ * whose hours are only in its picture moves the clock and outdates the text of the day.
  *
  * Telegram shows when a post was made, not when it was edited, so an edited post keeps its
  * first time. Exported for tests.
  */
-export function parseChannelPosts(posts: readonly TelegramPost[]): ChannelDays {
+export async function parseChannelPosts(
+  ctx: ProviderContext,
+  posts: readonly TelegramPost[],
+): Promise<ChannelDays> {
   const clock = new Map<string, string>()
   const text = new Map<string, Record<GroupId, DaySchedule>>()
-  for (const post of [...posts].sort((a, b) => a.id - b.id)) {
-    const allOn = ALL_ON.exec(post.text)
-    const m = allOn ?? HEADER.exec(post.text.split('\n', 1)[0]!)
-    if (!m) continue
-    const date = `${m[3]}-${m[2]}-${m[1]}`
-    const posted = kyivDate(new Date(post.at))
-    if (date !== posted && date !== addDays(posted, 1)) continue
-    clock.set(date, post.at)
-    // only the newest post about a date counts: a picture after a text post outdates the text
-    const days = allOn
-      ? Object.fromEntries(GROUPS.map((g) => [g, { date, status: 'no-outages' as const, intervals: [] }]))
-      : parsePowerOnText(post.text, date)
-    if (days) text.set(date, days)
-    else text.delete(date)
+  const sorted = [...posts].sort((a, b) => a.id - b.id)
+  const analyzed = await analyzeAll(ctx, INFO.id, channelInputs(sorted, INFO.id))
+  // a post that can't be read may be the newest version of a day: its clock and text are unknown
+  failIfNewestUnread(analyzed, (a) => gpvEvents(a, INFO.id).length > 0)
+  for (const { input, analysis } of analyzed) {
+    if (!analysis) continue
+    const posted = kyivDate(new Date(input.publishedAt))
+    for (const ev of gpvEvents(analysis, INFO.id)) {
+      const date = ev.date ?? posted
+      if (date !== posted && date !== addDays(posted, 1)) continue
+      clock.set(date, input.publishedAt)
+      // only the newest post about a date counts: a picture after a text post outdates the text
+      const days =
+        ev.action === 'cancel' ? noOutages(date) : ev.schedule.length ? textDay(ev.schedule, date) : null
+      if (days) text.set(date, days)
+      else text.delete(date)
+    }
   }
   return { clock, text }
 }
 
-/**
- * The text format of the channel: per group the windows WITH power ("графік заживлення"), the
- * inverse of outages:
- *
- * ```
- * 💡 Група 1
- * 00:00 - 17:00
- * 19:30 - 23:00
- *
- * 💡 Група 3
- * 00:00 - 19:00
- * з 21:30
- *
- * 💡 Група 4
- * Електропостачання без обмежень
- * ```
- *
- * "з 21:30" runs to the end of the day. Everything outside the windows is `off`: the half hour
- * the site shows as "можливо заживлені" before the power is back lies inside the text's gap.
- * Null when the post has no group blocks (a picture's caption) or any block has a line this
- * doesn't know, windows out of order, or a group twice: unread rather than misread.
- * Exported for tests.
- */
-export function parsePowerOnText(text: string, date: string): Record<GroupId, DaySchedule> | null {
-  const on = new Map<GroupId, [number, number][]>()
-  let current: [number, number][] | null = null
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    const group = /^[^\p{L}\d]*Група\s+(\d{1,2})$/u.exec(line)?.[1]
-    if (group) {
-      const g = String(Number(group))
-      if (!GROUPS.includes(g) || on.has(g)) return null
-      on.set(g, (current = []))
-      continue
-    }
-    if (!current) continue
-    // a blank line ends the group's block
-    if (!line) {
-      current = null
-      continue
-    }
-    const range = /^(\d{1,2}:\d{2})\s*[-–—]\s*(\d{1,2}:\d{2})$/.exec(line)
-    const from = /^з\s+(\d{1,2}:\d{2})$/.exec(line)
-    const start = parseClock(range?.[1] ?? from?.[1] ?? '')
-    const end = range ? parseClock(range[2]!) : 1440
-    if (/^Електропостачання без обмежень$/.test(line)) {
-      if (current.length) return null
-      current.push([0, 1440])
-    } else if (start !== null && end !== null && start < end && start >= (current.at(-1)?.[1] ?? 0)) {
-      current.push([start, end])
-    } else return null
-  }
-  if (!on.size || [...on.values()].some((w) => !w.length)) return null
+const noOutages = (date: string): Record<GroupId, DaySchedule> =>
+  Object.fromEntries(GROUPS.map((g) => [g, { date, status: 'no-outages' as const, intervals: [] }]))
 
+/** A day as text → per group; null when a group is listed without hours (unread rather than misread) */
+function textDay(schedule: PostEvent['schedule'], date: string): Record<GroupId, DaySchedule> | null {
   const days: Record<GroupId, DaySchedule> = {}
   let anyOutage = false
-  for (const [g, windows] of on) {
-    const off: MinuteSlot[] = []
-    let at = 0
-    for (const [start, end] of [...windows, [1440, 1440] as [number, number]]) {
-      if (start > at) off.push({ start: at, end: start, kind: 'off' })
-      at = end
-    }
-    if (off.length) anyOutage = true
-    days[g] = makeDay(date, off)
+  for (const q of schedule) {
+    if (!q.intervals) return null
+    if (q.intervals.length) anyOutage = true
+    days[q.queue] = makeDay(date, toSlots(q.intervals))
   }
   // like the page: nobody has an outage that day
   if (!anyOutage) for (const d of Object.values(days)) d.status = 'no-outages'

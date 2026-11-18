@@ -1,13 +1,16 @@
+import { STANDARD_GROUPS } from '../schedule.js'
+import { siteInput } from '../ai/posts.js'
+import type { PostInput } from '../ai/types.js'
+import { htmlToText } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
-import { STANDARD_GROUPS } from '../image/table.js'
-import type { ProviderInfo, RegionSchedule } from '../types.js'
-import { daysToSource, postsToDays, postsToSchedule, readChannelPosts, type SchedulePost } from './posts.js'
+import type { ProviderInfo } from '../types.js'
+import { daysToSource, readChannelPosts, readSchedulePosts } from './posts.js'
 import type { Provider, ProviderContext } from './provider.js'
 import { mergeSources, type SourceRead } from './sources.js'
 
 /**
  * Kharkivoblenergo publishes each day's schedule as a news post, and the same text in its
- * Telegram channel a few minutes earlier. The site's Drupal JSON:API is open, so posts are read
+ * Telegram channel a few minutes earlier; both are read by the client's text processor. The site's Drupal JSON:API is open, so posts are read
  * as JSON instead of scraping pages. Both are read: the site post has been hours late (or absent
  * past midnight) while the channel had the day. The address lookup on the site needs a captcha,
  * so there is no address search here.
@@ -75,27 +78,31 @@ async function readSite(ctx: ProviderContext): Promise<SourceRead> {
         region: INFO.id,
         headers: { Accept: 'application/vnd.api+json' },
       })
-      return daysToSource(postsToDays(kharkivPosts(res), ctx.now(), POSTS), POSTS)
+      const { days } = await readSchedulePosts(ctx, INFO.id, kharkivPosts(res), POSTS)
+      return daysToSource(days, POSTS)
     } catch (e) {
       ctx.signal?.throwIfAborted()
+      // nothing to read the posts with: another host won't change that
+      if (e instanceof OutageError && e.code === 'config') throw e
       first ??= e
     }
   }
   throw first
 }
 
-/** The JSON:API answer → posts; `changed` is the time of the last edit. Exported for tests. */
-export function kharkivPosts(res: JsonApi): SchedulePost[] {
+/** The JSON:API answer → posts for the text processor; `changed` is the time of the last edit. Exported for tests. */
+export function kharkivPosts(res: JsonApi): PostInput[] {
   if (!Array.isArray(res?.data))
     throw new OutageError('parse', 'Kharkiv JSON:API: no "data" list', { region: INFO.id })
-  return res.data.map((n) => ({
-    title: n.attributes?.title ?? '',
-    body: n.attributes?.body?.value ?? '',
-    publishedAt: n.attributes?.changed ?? n.attributes?.created ?? '',
-  }))
-}
-
-/** The site's posts alone → schedule. Exported for tests. */
-export function parseKharkiv(res: JsonApi, now: Date): RegionSchedule {
-  return postsToSchedule(INFO.id, kharkivPosts(res), now, POSTS)
+  return res.data.map((n) =>
+    siteInput(
+      {
+        site: INFO.website,
+        title: n.attributes?.title ?? '',
+        text: htmlToText(n.attributes?.body?.value ?? ''),
+        publishedAt: n.attributes?.changed ?? n.attributes?.created ?? '',
+      },
+      INFO.id,
+    ),
+  )
 }

@@ -1,0 +1,81 @@
+{
+ "input": {
+  "url": "https://t.me/kharkivenergy/2325",
+  "source": {
+   "kind": "telegram",
+   "channel": "kharkivenergy"
+  },
+  "publishedAt": "2026-11-07T06:42:00+02:00",
+  "edited": true,
+  "title": null,
+  "text": "‼️Шановні споживачі!\n\nУ зв’язку зі складною ситуацією в енергосистемі, спричиненою російськими обстрілами, наразі застосовуються аварійні відключення електроенергії.\n\nПросимо вас з усією відповідальністю поставитися до споживання електроенергії.\n\n💡Будь ласка, за можливості обмежте використання потужних побутових електроприладів та ощадливо користуйтеся електроенергією.\n\nКожен відповідальний крок допомагає стабілізувати роботу енергосистеми та зменшити навантаження на мережі.\n\n🙏Дякуємо за розуміння, свідомість та підтримку! Бережіть себе та своїх близьких!",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "kharkiv",
+    "name": "Харківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "start",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "emergency",
+  "edit"
+ ],
+ "note": "\"наразі застосовуються аварійні відключення\" names neither ГАВ nor СГАВ.",
+ "uncertain": false
+}

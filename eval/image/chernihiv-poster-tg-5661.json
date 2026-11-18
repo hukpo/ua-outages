@@ -1,0 +1,278 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5661",
+  "caption": null,
+  "publishedAt": "2026-11-05T20:22:59+02:00",
+  "region": {
+   "id": "chernihiv",
+   "name": "Чернігівська область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  "file": "test/fixtures/chernihiv/posters/tg-5661.jpg"
+ },
+ "expected": {
+  "isSchedule": true,
+  "kind": "gpv",
+  "date": "2026-11-06",
+  "statedAt": null,
+  "schedule": [
+   {
+    "queue": "1.1",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "06:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "1.2",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.1",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.2",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.1",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "08:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "23:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.2",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "08:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "23:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.1",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.2",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.1",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "06:00",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.2",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "06:00",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.1",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     },
+     {
+      "from": "23:30",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.2",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     },
+     {
+      "from": "23:30",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   }
+  ]
+ },
+ "tags": [
+  "gpv",
+  "fixture",
+  "telegram"
+ ],
+ "note": "from test/fixtures/chernihiv/posters/labels.json (hand-read cards; empty card = \"відключень не прогнозується\"); caption unknown (null)",
+ "uncertain": false
+}

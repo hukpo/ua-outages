@@ -1,0 +1,57 @@
+{
+ "input": {
+  "url": "https://t.me/lvivoblenergo/3021",
+  "source": {
+   "kind": "telegram",
+   "channel": "lvivoblenergo"
+  },
+  "publishedAt": "2026-11-13T15:55:55+02:00",
+  "edited": false,
+  "title": null,
+  "text": "\"Львівобленерго\" стане учасником \"ELENERGY\" — саміту і виставки електрообладнання та енергетичних рішень для підприємств, комерційної інфраструктури й громад, що відбудеться 18-19 листопада у Львові: https://elenergy.com.ua/",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "lviv",
+    "name": "Львівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "negative"
+ ],
+ "note": "Irrelevant (meter readings / obituary / expo).",
+ "uncertain": false
+}

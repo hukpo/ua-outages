@@ -1,3 +1,6 @@
+import { SCHEDULE_REQUIRES } from './ai/regions.js'
+import { AiRuntime } from './ai/runtime.js'
+import type { ImageProcessor, ProcessedEvent, ProcessorCache, TextProcessor } from './ai/types.js'
 import { OutageError, type OutageErrorCode } from './errors.js'
 import { assessFreshness } from './freshness.js'
 import { Http, type HttpOptions } from './http.js'
@@ -43,6 +46,25 @@ export interface OutageClientOptions extends HttpOptions {
   unofficialSources?: boolean
   /** Default of `ScheduleOptions.staleIfError` for every `getSchedules` / `getSchedule` call. Off by default */
   staleIfError?: StaleIfError
+  /**
+   * Reads operators' posts (Telegram, site news): schedules written as text and ГАВ/СГАВ
+   * announcements. Without it, regions that publish that way answer `OutageError('config')`
+   * (schedules) or `state: 'unknown'` (emergencies); see `RegionInfo.capabilities.requires`.
+   * `ua-outages/anthropic` and `ua-outages/openai` have ready ones.
+   */
+  textProcessor?: TextProcessor
+  /** Reads schedule pictures (posters, tables). Without it, regions that publish only pictures answer `OutageError('config')` */
+  imageProcessor?: ImageProcessor
+  /**
+   * Where processor answers are kept, keyed by a hash of the processor and the whole input
+   * (post text, picture bytes): each post and picture is parsed once, again only when edited.
+   * Default: ~5000 in memory. Pass a persistent store so a restart doesn't parse again.
+   */
+  processorCache?: ProcessorCache
+  /** Called for every post or picture handled (cached or not): tokens used, picture sizes, errors */
+  onProcessed?: (e: ProcessedEvent) => void
+  /** Processor calls in flight at once, default 4 */
+  processorConcurrency?: number
 }
 
 /** `true`, or how old the last good result may be (default 6 h) */
@@ -114,7 +136,17 @@ export class OutageClient {
   >()
 
   constructor(opts: OutageClientOptions = {}) {
-    this.ctx = { http: new Http(opts), now: opts.now ?? (() => new Date()) }
+    this.ctx = {
+      http: new Http(opts),
+      now: opts.now ?? (() => new Date()),
+      ai: new AiRuntime({
+        textProcessor: opts.textProcessor,
+        imageProcessor: opts.imageProcessor,
+        processorCache: opts.processorCache,
+        onProcessed: opts.onProcessed,
+        processorConcurrency: opts.processorConcurrency,
+      }),
+    }
     this.cacheTtlMs = opts.cacheTtlMs ?? 5 * 60_000
     this.staleIfError = opts.staleIfError ?? false
     this.providers = new Map(
@@ -142,6 +174,9 @@ export class OutageClient {
         streetSearch: !!(p.searchStreets && p.searchHouses && p.groupOf),
         emergency: !!p.getEmergency,
         houseOutage: !!(p.houseOutages ?? p).outageOf,
+        ...((p.info.capabilities.requires ?? SCHEDULE_REQUIRES[p.info.id])
+          ? { requires: [...(p.info.capabilities.requires ?? SCHEDULE_REQUIRES[p.info.id]!)] }
+          : {}),
       },
     }
   }

@@ -1,0 +1,59 @@
+{
+ "input": {
+  "url": "https://t.me/oe_cv_ua/3940",
+  "source": {
+   "kind": "telegram",
+   "channel": "oe_cv_ua"
+  },
+  "publishedAt": "2026-10-26T21:01:59+02:00",
+  "edited": false,
+  "title": null,
+  "text": "Шановні абоненти!\n\nВ електричних мережах виявлено пошкодження, яке може призвести до значних аварійних відключень електроенергії. Аварійні бригади працюють у посиленому режимі для якнайшвидшого усунення пошкодження та забезпечення стабільного електропостачання. Дякуємо за розуміння!",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "chernivtsi",
+    "name": "Чернівецька область",
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10",
+     "11",
+     "12"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "explainer",
+  "tricky"
+ ],
+ "note": "Warning: damage \"може призвести до значних аварійних відключень\" — possible, never a start.",
+ "uncertain": false
+}

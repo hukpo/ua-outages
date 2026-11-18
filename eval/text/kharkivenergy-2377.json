@@ -1,0 +1,79 @@
+{
+ "input": {
+  "url": "https://t.me/kharkivenergy/2377",
+  "source": {
+   "kind": "telegram",
+   "channel": "kharkivenergy"
+  },
+  "publishedAt": "2026-11-17T06:22:12+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚡ УВАГА! НА ХАРКІВЩИНІ ЗАСТОСОВАНО ГРАФІКИ АВАРІЙНИХ ВІДКЛЮЧЕНЬ ЕЛЕКТРОЕНЕРГІЇ!\n\nУ зв’язку з вимушеними обмеженнями електропостачання просимо мешканців поставитися до ситуації з розумінням та відповідальністю.\n\nЗакликаємо всіх ощадливо використовувати електроенергію та за можливості зменшити споживання електроприладів.\n\nДякуємо за розуміння, терпіння та свідоме ставлення! 💙💛",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "kharkiv",
+    "name": "Харківська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "kharkiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav"
+ ],
+ "note": "«НА ХАРКІВЩИНІ ЗАСТОСОВАНО ГРАФІКИ АВАРІЙНИХ ВІДКЛЮЧЕНЬ» → gav start, no queues. The banner photo says «ОДНОЧАСНО ДІЮТЬ ГРАФІКИ ПОГОДИННИХ ВІДКЛЮЧЕНЬ» (image only) → gpvApplies null.",
+ "uncertain": false
+}

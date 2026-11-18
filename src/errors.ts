@@ -15,6 +15,12 @@ export type OutageErrorCode =
   | 'unsupported'
   /** Address search found nothing (or nothing unambiguous) */
   | 'not-found'
+  /**
+   * The region reads posts or pictures and no `textProcessor` / `imageProcessor` is configured
+   * (see `OutageClientOptions`). A processor's answer that fails validation is `parse`; one
+   * that couldn't be had (the AI API down, rate limits) is `network` or `http`.
+   */
+  | 'config'
 
 export class OutageError extends Error {
   override readonly name = 'OutageError'

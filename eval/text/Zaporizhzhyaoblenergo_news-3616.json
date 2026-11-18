@@ -1,0 +1,101 @@
+{
+ "input": {
+  "url": "https://t.me/Zaporizhzhyaoblenergo_news/3616",
+  "source": {
+   "kind": "telegram",
+   "channel": "Zaporizhzhyaoblenergo_news"
+  },
+  "publishedAt": "2026-11-16T16:36:16+02:00",
+  "edited": false,
+  "title": null,
+  "text": "‼️УВАГА!\nПо Запорізькій області запроваджено графіки аварійних відключень (ГАВ) та спеціальні графіки аварійних відключень (СГАВ). У зв'язку із цим за частиною адрес можливі вимкнення електропостачання поза доведеним ГПВ.\nПричина запровадження додаткових обмежень - пошкодження електрообладнання внаслідок атак окупаційних військ рф на енергетичну інфраструктуру.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "zaporizhzhia",
+    "name": "Запорізька область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "sgav",
+    "action": "start",
+    "regions": [
+     "zaporizhzhia"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav",
+  "sgav"
+ ],
+ "note": "«запроваджено ГАВ та СГАВ … можливі вимкнення поза доведеним ГПВ»: two starts, no queues. gpvApplies left null: the text implies ГПВ stays but does not say it.",
+ "uncertain": false
+}

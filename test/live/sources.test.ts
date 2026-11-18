@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { OutageClient } from '../../src/index.js'
+import { processorsFromEnv } from '../../scripts/processors.js'
 
 /**
  * Hits every real source. Run with `npm run test:live`. A `blocked` result is tolerated
  * (bot protection depends on the network you run from); a `parse` error is not.
  */
-const client = new OutageClient({ cacheTtlMs: 0 })
+const client = new OutageClient({ cacheTtlMs: 0, ...(await processorsFromEnv()) })
 
 describe('live sources', () => {
   for (const region of client.regions()) {

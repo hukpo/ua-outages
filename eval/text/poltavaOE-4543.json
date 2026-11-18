@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/poltavaOE/4543",
+  "source": {
+   "kind": "telegram",
+   "channel": "poltavaOE"
+  },
+  "publishedAt": "2026-11-14T18:50:21+02:00",
+  "edited": false,
+  "title": null,
+  "text": "У зв'язку зі складною ситуацією в енергосистемі України, в Полтавській області 15 листопада 2026 року\nз 08:00 по 16:00 застосовується ГПВ в обсязі 1,5 черга.\nз 16:00 по 22:00 застосовується ГПВ в обсязі 2 черги.\nз 22:00 по 23:59 застосовується ГПВ в обсязі 1,5 черги.\n\nОзнайомитися з графіком можна за посиланням: https://www.poe.pl.ua/disconnection/power-outages/",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "poltava",
+    "name": "Полтавська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "poltava"
+    ],
+    "area": null,
+    "date": "2026-11-15",
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "tricky"
+ ],
+ "note": "gpv by volume per time span (\"з 08:00 по 22:00 … в обсязі 4 черги\"): no queue hours in the text, schedule []; photo is a card",
+ "uncertain": false
+}

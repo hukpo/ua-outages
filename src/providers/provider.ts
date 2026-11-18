@@ -1,3 +1,4 @@
+import { AiRuntime } from '../ai/runtime.js'
 import type { Http } from '../http.js'
 import type {
   AddressQuery,
@@ -25,7 +26,17 @@ export interface ProviderContext {
   signal?: AbortSignal
   /** The caller asked for fresh data: skip caches shared between regions (e.g. channel pages) */
   fresh?: boolean
+  /**
+   * The client's text and image processors behind their cache (see `aiOf`). Absent in a context
+   * built by hand: then nothing can be read with AI and such sources answer `config`.
+   */
+  ai?: AiRuntime
 }
+
+const NO_AI = new AiRuntime()
+
+/** The context's AI runtime, or one without processors */
+export const aiOf = (ctx: ProviderContext): AiRuntime => ctx.ai ?? NO_AI
 
 /**
  * One grid operator area. Only `info` and `getSchedules` are required; address search

@@ -1,10 +1,11 @@
+import { toSlots } from '../ai/map.js'
+import { postRegion } from '../ai/regions.js'
+import type { ImageReading } from '../ai/types.js'
 import { OutageError } from '../errors.js'
-import { decodePng } from '../image/png.js'
-import { NoTableError, readScheduleTable, STANDARD_GROUPS, type TableLayout } from '../image/table.js'
-import { cellsToIntervals, compareGroups } from '../schedule.js'
+import { compareGroups, makeDay } from '../schedule.js'
 import { toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionId, RegionSchedule } from '../types.js'
-import type { ProviderContext } from './provider.js'
+import { aiOf, type ProviderContext } from './provider.js'
 
 /** Images published for one schedule date, newest first. */
 export interface DatedImages {
@@ -18,58 +19,56 @@ export interface DatedDay {
   publishedAt: string | null
 }
 
+/** A checked reading → every queue's day on `date` */
+export function readingToDay(reading: ImageReading, date: string): Record<GroupId, DaySchedule> {
+  const schedules: Record<GroupId, DaySchedule> = {}
+  for (const q of reading.schedule) schedules[q.queue] = makeDay(date, toSlots(q.intervals))
+  return schedules
+}
+
 /**
- * Reads operators' table images, one day per date. For each date the newest image decides.
- * Operators also post text announcements as images under the same date: an image with no table
- * in it at all is skipped for the next older one. An image that can't be decoded, or whose
- * table can't be read, is a `parse` error for the whole read: it may be the version in force,
- * and an older picture of the same date in its place would be a superseded schedule shown as
- * current. A date where no image has a table is a `parse` error too, so a changed template shows
- * up in the health check. The result is what `SourceRead.days` takes.
+ * Reads operators' schedule pictures with the client's image processor, one day per date. For
+ * each date the newest picture decides. Operators also post announcements as pictures under the
+ * same date: a picture that isn't a schedule is skipped for the next older one. A picture that
+ * can't be read, or that names another date, is a `parse` error for the whole read: it may be
+ * the version in force, and an older picture of the same date in its place would be a
+ * superseded schedule shown as current. A date where no picture is a schedule is a `parse`
+ * error too. Each distinct picture is read once (cached by its bytes). The result is what
+ * `SourceRead.days` takes.
  */
 export async function readDatedImages(
   ctx: ProviderContext,
   region: RegionId,
   dates: readonly DatedImages[],
   url: (path: string) => string,
-  layout: TableLayout,
 ): Promise<Record<string, DatedDay>> {
+  const ai = aiOf(ctx)
+  ai.requireImage(region)
+  const info = postRegion(region)
   const days: Record<string, DatedDay> = {}
   for (const { date, images } of dates) {
-    let lastError = ''
     for (const img of images) {
       ctx.signal?.throwIfAborted()
+      const at = toKyivIso(img.at)
       const bytes = await ctx.http.bytes(url(img.path), { region })
-      let cells
-      try {
-        cells = readScheduleTable(decodePng(bytes), layout)
-      } catch (e) {
-        if (e instanceof OutageError) throw e
-        const message = `${img.path}: ${(e as Error).message}`
-        if (!(e instanceof NoTableError))
-          throw new OutageError('parse', `cannot read the newest schedule image for ${date} (${message})`, {
-            region,
-            url: url(img.path),
-            cause: e,
-          })
-        lastError = message
-        continue
-      }
-      const schedules: Record<GroupId, DaySchedule> = {}
-      cells.forEach((row, i) => {
-        schedules[STANDARD_GROUPS[i]!] = { date, status: 'scheduled', intervals: cellsToIntervals(date, row) }
-      })
-      days[date] = { schedules, publishedAt: toKyivIso(img.at) }
+      const reading = await ai.readImage(
+        region,
+        { url: url(img.path), bytes, caption: null, publishedAt: at, region: info },
+        ctx.signal,
+      )
+      if (!reading.isSchedule) continue
+      if (reading.date && reading.date !== date)
+        throw new OutageError('parse', `${img.path}: the picture listed for ${date} says ${reading.date}`, {
+          region,
+          url: url(img.path),
+        })
+      days[date] = { schedules: readingToDay(reading, date), publishedAt: at }
       break
     }
     if (!days[date] && images.length)
-      throw new OutageError(
-        'parse',
-        `no readable schedule table among ${images.length} image(s) for ${date} (${lastError})`,
-        {
-          region,
-        },
-      )
+      throw new OutageError('parse', `none of the ${images.length} picture(s) for ${date} is a schedule`, {
+        region,
+      })
   }
   return days
 }
@@ -80,9 +79,8 @@ export async function scheduleFromImages(
   region: RegionId,
   dates: readonly DatedImages[],
   url: (path: string) => string,
-  layout: TableLayout,
 ): Promise<RegionSchedule> {
-  const days = await readDatedImages(ctx, region, dates, url, layout)
+  const days = await readDatedImages(ctx, region, dates, url)
   const schedules: Record<string, DaySchedule[]> = {}
   let updated = 0
   for (const day of Object.values(days)) {

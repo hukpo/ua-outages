@@ -1,0 +1,82 @@
+{
+ "input": {
+  "url": "https://t.me/mk_energy_ua/21455",
+  "source": {
+   "kind": "telegram",
+   "channel": "mk_energy_ua"
+  },
+  "publishedAt": "2026-10-01T16:29:43+03:00",
+  "edited": false,
+  "title": null,
+  "text": "З 1 жовтня набрали чинності оновлені графіки відключень (ГПВ, ГАВ та СГАВ). Ближчі півроку діятиме документ, актуальний для осінньо-зимового періоду. Такий сезонний розподіл враховує різний рівень споживання відповідно до пір року, сприяє балансуванню енергосистеми та уникненню аварійних відключень споживачів.\n\nУВАГА! Прив'язка в графіку для вашої адреси могла змінитися! Перевірити можна за посиланням off.energy.mk.ua\n\nСтаном на ранок 1 жовтня 2026 року графіки погодинних відключень (ГПВ) в Миколаївській області НЕ застосовуються.\n\nТа через регулярні ворожі обстріли, що посилилися напередодні опалювального сезону, ситуація в енергосистемі зберігається складною. Закликаємо ощадливо користуватися електроенергію, особливо в пікові години. За можливості перенесіть користування потужними електроприладами на денний час - з 10:00 до 16:00.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "mykolaiv",
+    "name": "Миколаївська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "cancel",
+    "regions": [
+     "mykolaiv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gpv",
+  "cancel",
+  "tricky"
+ ],
+ "note": "\"оновлені графіки (ГПВ, ГАВ та СГАВ)\" took effect 1 Oct (explainer), and \"Станом на ранок 1 жовтня 2026 року ГПВ в Миколаївській області НЕ застосовуються\" → gpv cancel (status, no HH:MM so statedAt null). Unsure whether a status \"не застосовуються\" without a prior schedule should be a cancel.",
+ "uncertain": true
+}

@@ -1,0 +1,47 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4361",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-11T19:15:02+02:00",
+  "edited": false,
+  "title": null,
+  "text": "",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "negative",
+  "tricky"
+ ],
+ "note": "Photo-only post (text \"\"): a screenshot of an Ukrenergo text post about tomorrow's ГПВ \"у частині областей\". Not a schedule table; text processor sees no text → no events.",
+ "uncertain": false
+}

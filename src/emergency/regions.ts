@@ -1,10 +1,13 @@
 import { toKyivIso } from '../time.js'
 import type { EmergencyStatus, RegionId } from '../types.js'
-import type { ProviderContext } from '../providers/provider.js'
+import { aiOf, type ProviderContext } from '../providers/provider.js'
 import { abortable } from '../util.js'
-import { classifyPostAll, classifyUkrenergo, districtArea, type Dialect } from './classify.js'
+import { toAnnouncements } from '../ai/map.js'
+import { analyzeAll, channelInputs } from '../ai/posts.js'
+import { postRegion } from '../ai/regions.js'
+import { OutageError } from '../errors.js'
 import { mykolaivFeed, mykolaivFeedStatus, yasnoEmergency, type YasnoEmergency } from './sources.js'
-import { foldEvents, type EmergencyEvent } from './status.js'
+import { foldEvents, type Announcement, type EmergencyEvent } from './status.js'
 import { readChannelWindow, type ChannelRead, type TelegramPost } from './telegram.js'
 
 /**
@@ -20,20 +23,14 @@ export interface EmergencyConfig {
   channels?: ChannelConfig[]
   yasno?: { regionId: number; dsoId: number }
   mykolaivFeed?: boolean
-  /**
-   * The oblast's names in Ukrenergo posts, as pattern stems ("Волинськ|Волин": "Волинській
-   * області", "на Волині"), for the national fallback. Case-sensitive: "Рівн" alone is "рівня"
-   */
-  ukrenergo?: string
+  /** Also read the national @Ukrenergo channel (for operators that announce nothing themselves) */
+  ukrenergo?: boolean
   /** An apply without a later word ends after this long, default 12 h */
   ttlHours?: number
 }
 
 export interface ChannelConfig {
   handle: string
-  dialect?: Dialect
-  /** Shared channels: is a post about this region? */
-  about?: (text: string) => boolean
 }
 
 /** How far back announcements are read */
@@ -42,148 +39,40 @@ export const DEFAULT_TTL_HOURS = 12
 
 const UKRENERGO = 'Ukrenergo'
 
-// --- DTEK's group-wide channel: "Київ: …", "Київщина, Бучанський район: …", "Дніпро: …" ---
+const channel = (handle: string): ChannelConfig => ({ handle })
 
-interface DtekArea {
-  /** The prefix names this region */
-  own: RegExp
-  /** Prefix parts that mean the whole region */
-  whole: string[]
-}
-
-const DTEK_AREAS: Record<'kyiv' | 'kyiv-region' | 'dnipro' | 'odesa' | 'donetsk', DtekArea> = {
-  kyiv: { own: /Київ(?![\p{L}])|Києв|Києві|столиц/u, whole: ['київ', 'місто київ', 'столиця'] },
-  'kyiv-region': {
-    own: /Київщин|Київськ/u,
-    whole: ['київщина', 'київська область', 'київська', 'київської області'],
-  },
-  // the city and the oblast, not Kyiv's "Дніпровський район" or "Дніпровська набережна"
-  dnipro: {
-    own: /Дніпро(?![\p{L}])|Дніпр[аіу](?![\p{L}])|Дніпропетров|Дніпровщин/u,
-    whole: ['дніпропетровщина', 'дніпропетровська область', 'дніпропетровська'],
-  },
-  odesa: { own: /Одес|Одещин/u, whole: ['одещина', 'одеська область', 'одеська'] },
-  donetsk: { own: /Донеч|Донецьк/u, whole: ['донеччина', 'донецька область', 'донецька'] },
-}
-
-/** "‼️Київ та Київська область: …" → "Київ та Київська область"; null without a prefix. Exported for tests. */
-export function dtekHead(text: string): string | null {
-  const line = text.trim().split('\n')[0] ?? ''
-  const m = /^[^\p{L}]*([^:]{2,160}):/u.exec(line)
-  return m ? m[1]!.trim() : null
-}
-
-/** "Київ, Київська та Дніпропетровська область" → its parts; commas in parentheses stay. Exported for tests. */
-export function headParts(head: string): string[] {
-  const out: string[] = []
-  let depth = 0
-  let cur = ''
-  for (let i = 0; i < head.length; i++) {
-    const ch = head[i]!
-    if (ch === '(') depth++
-    else if (ch === ')') depth = Math.max(0, depth - 1)
-    const sep = depth === 0 && (ch === ',' || head.startsWith(' та ', i))
-    if (sep) {
-      out.push(cur)
-      cur = ''
-      if (ch === ' ') i += 3
-    } else cur += ch
-  }
-  out.push(cur)
-  return out.map((p) => p.trim()).filter(Boolean)
-}
-
-const normal = (p: string) => p.toLowerCase().replace(/\s+/g, ' ').trim()
-
-function dtekChannel(region: keyof typeof DTEK_AREAS): ChannelConfig {
-  const me = DTEK_AREAS[region]
-  const others = Object.entries(DTEK_AREAS)
-    .filter(([id]) => id !== region)
-    .map(([, a]) => a.own)
-  /** A part of the prefix is about this region: it names it and no other DTEK region */
-  const ownPart = (p: string) => me.own.test(p) && !others.some((o) => o.test(p))
-  return {
-    handle: 'dtek_ua',
-    about: (text) => {
-      const head = dtekHead(text)
-      return !!head && headParts(head).some(ownPart)
-    },
-    dialect: {
-      dtek: true,
-      area(text, sentence) {
-        const head = dtekHead(text)
-        if (!head) return null
-        // "Київщина, Бучанський район" → "Бучанський район"; "Київ, Київська та Дніпропетровська
-        // область" → nothing narrower than Kyiv
-        const parts = headParts(head)
-        const mine = parts
-          .filter((p) => ownPart(p) || !others.concat(me.own).some((o) => o.test(p)))
-          .filter((p) => !me.whole.includes(normal(p)))
-        if (mine.length) return mine.join(', ')
-        // the place after the verb: "застосовані екстрені відключення в місті Дніпрі, прилеглих
-        // до обласного центру районах та в частині Павлоградського району"
-        const rest = sentence.slice(sentence.indexOf(':') + 1)
-        const after = new RegExp(
-          `екстрен\\S*\\s+відключ\\S*\\s+(?:у|в)\\s+(?!зв'язку|разі|результаті)(.+?)\\s*$`,
-          'iu',
-        ).exec(rest)
-        if (after) return after[1]!.replace(/[.!‼️\s]+$/u, '')
-        return districtArea(rest)
-      },
-    },
-  }
-}
-
-/** ЦЕК: "Шановні споживачі м. ДНІПРО‼️", "Шановні мешканці м. ПАВЛОГРАД" → "м. Дніпро". Exported for tests. */
-export function cekArea(text: string): string | null {
-  const m = /(?:споживачі|мешканці|жителі)\s+м\.\s*([\p{Lu}'ʼ’-]{2,})/u.exec(text)
-  if (!m) return null
-  const name = m[1]!.toLowerCase().replace(/(^|[-'ʼ’])\p{Ll}/gu, (c) => c.toUpperCase())
-  return `м. ${name}`
-}
-
-/** Generic area: districts, or "industry only" when households aren't affected. */
-function operatorArea(text: string, sentence: string): string | null {
-  if (/для\s+промислових\s+споживачів|не\s+стосуються\s+побутових/iu.test(text)) return 'промислові споживачі'
-  return districtArea(sentence)
-}
-
-/** Oblenergo channels: ГАВ has ten queues, "в повному обсязі" is all ten */
-const oblenergo = (handle: string, home: RegExp): ChannelConfig => ({
-  handle,
-  dialect: { fullVolume: 10, area: operatorArea, home },
-})
-
+/**
+ * Which posts are about which region is the text processor's answer (`PostEvent.regions`): a
+ * channel's posts are analysed once for every region it serves (`CHANNEL_REGIONS`).
+ */
 export const EMERGENCY_REGIONS: Partial<Record<RegionId, EmergencyConfig>> = {
-  kyiv: { channels: [dtekChannel('kyiv')], yasno: { regionId: 25, dsoId: 902 } },
-  'kyiv-region': { channels: [dtekChannel('kyiv-region')] },
-  dnipro: { channels: [dtekChannel('dnipro')], yasno: { regionId: 3, dsoId: 301 } },
+  kyiv: { channels: [channel('dtek_ua')], yasno: { regionId: 25, dsoId: 902 } },
+  'kyiv-region': { channels: [channel('dtek_ua')] },
+  dnipro: { channels: [channel('dtek_ua')], yasno: { regionId: 3, dsoId: 301 } },
   // YASNO 3/303 never showed EmergencyShutdowns, not even during ЦЕК's own (15.11 13:39–15:27)
-  'dnipro-cek': { channels: [{ handle: 'cek_info', dialect: { area: (text) => cekArea(text) } }] },
-  odesa: { channels: [dtekChannel('odesa')] },
-  donetsk: { channels: [dtekChannel('donetsk')] },
-  zaporizhzhia: { channels: [oblenergo('Zaporizhzhyaoblenergo_news', /Запорі/u)] },
-  kharkiv: { channels: [oblenergo('kharkivenergy', /Харків/u)] },
-  lviv: { channels: [oblenergo('lvivoblenergo', /Льв/u)] },
-  'ivano-frankivsk': { channels: [oblenergo('prykarpattyaoblenergo_official', /Івано-Франків|Прикарпат/u)] },
-  ternopil: { channels: [oblenergo('ternopiloblenerho', /Тернопіл/u)] },
-  khmelnytskyi: { channels: [oblenergo('khmelnytskoblenergo', /Хмельни/u)] },
-  chernihiv: { channels: [oblenergo('chernigivoblenergo', /Черніг|Чернг/u)] },
-  zhytomyr: { channels: [oblenergo('ztoe_ua', /Житомир/u)] },
-  cherkasy: { channels: [oblenergo('pat_cherkasyoblenergo', /Черкас/u)] },
+  'dnipro-cek': { channels: [channel('cek_info')] },
+  odesa: { channels: [channel('dtek_ua')] },
+  donetsk: { channels: [channel('dtek_ua')] },
+  zaporizhzhia: { channels: [channel('Zaporizhzhyaoblenergo_news')] },
+  kharkiv: { channels: [channel('kharkivenergy')] },
+  lviv: { channels: [channel('lvivoblenergo')] },
+  'ivano-frankivsk': { channels: [channel('prykarpattyaoblenergo_official')] },
+  ternopil: { channels: [channel('ternopiloblenerho')] },
+  khmelnytskyi: { channels: [channel('khmelnytskoblenergo')] },
+  chernihiv: { channels: [channel('chernigivoblenergo')] },
+  zhytomyr: { channels: [channel('ztoe_ua')] },
+  cherkasy: { channels: [channel('pat_cherkasyoblenergo')] },
   // no main channel: 21 district channels post the same text; the city one stands for all
-  kirovohrad: { channels: [oblenergo('SvitloKropyvnytskyiMisto', /Кіровоград|Кропивни/u)] },
+  kirovohrad: { channels: [channel('SvitloKropyvnytskyiMisto')] },
   // never posts a cancel; the same Ukrenergo commands last minutes to ~4 h in Poltava next door
-  sumy: { channels: [oblenergo('SumyEnergo', /Сум/u)], ttlHours: 6 },
-  poltava: { channels: [oblenergo('poltavaOE', /Полтав/u)] },
-  mykolaiv: { mykolaivFeed: true, channels: [oblenergo('mk_energy_ua', /Миколаїв/u)] },
-  chernivtsi: {
-    channels: [oblenergo('oe_cv_ua', /Чернівець|Чернівц|Буковин/u)],
-    ukrenergo: 'Чернівецьк|Чернівеччин|Буковин',
-  },
-  zakarpattia: { ukrenergo: 'Закарпат' },
-  volyn: { ukrenergo: 'Волинськ|Волин(?:і|ь|щин)' },
-  rivne: { ukrenergo: 'Рівненськ|Рівненщин' },
+  sumy: { channels: [channel('SumyEnergo')], ttlHours: 6 },
+  poltava: { channels: [channel('poltavaOE')] },
+  mykolaiv: { mykolaivFeed: true, channels: [channel('mk_energy_ua')] },
+  chernivtsi: { channels: [channel('oe_cv_ua')], ukrenergo: true },
+  // the operator's channel announces ГАВ too; the national one stays as the fallback
+  zakarpattia: { channels: [channel('zakarpatenergyofficial')], ukrenergo: true },
+  volyn: { ukrenergo: true },
+  rivne: { ukrenergo: true },
 }
 
 /**
@@ -294,26 +183,46 @@ export class EmergencyHub {
   }
 }
 
-/** Telegram posts → events this region cares about, oldest first. Exported for tests. */
-export function channelEvents(posts: readonly TelegramPost[], channel: ChannelConfig): EmergencyEvent[] {
+/**
+ * Telegram posts → the events about `region`, oldest first. A post whose answer failed
+ * validation is an "unclear" event: while it is the newest word the status is `unknown`, never a
+ * guess. Exported for tests.
+ */
+export async function channelEvents(
+  ctx: ProviderContext,
+  region: RegionId,
+  posts: readonly TelegramPost[],
+): Promise<EmergencyEvent[]> {
+  const info = postRegion(region)
   const events: EmergencyEvent[] = []
-  for (const p of posts) {
-    if (channel.about && !channel.about(p.text)) continue
-    for (const a of classifyPostAll(p.text, new Date(p.at), channel.dialect))
-      events.push({ announcement: a, text: p.text, url: p.url, posted: p.at })
+  for (const { input, analysis } of await analyzeAll(ctx, region, channelInputs(posts, region))) {
+    const post = { text: input.text, url: input.url, posted: input.publishedAt }
+    if (!analysis) {
+      events.push({ ...post, announcement: unclear(input.publishedAt) })
+      continue
+    }
+    for (const a of toAnnouncements(analysis.events, region, info, input.publishedAt))
+      events.push({ ...post, announcement: a })
   }
   return events
 }
 
-/** National posts → events about one oblast. Exported for tests. */
-export function ukrenergoEvents(posts: readonly TelegramPost[], stem: string): EmergencyEvent[] {
-  const events: EmergencyEvent[] = []
-  for (const p of posts) {
-    const a = classifyUkrenergo(p.text, new Date(p.at), stem)
-    if (a) events.push({ announcement: a, text: p.text, url: p.url, posted: p.at })
-  }
-  return events
-}
+const unclear = (at: string): Announcement => ({
+  action: 'unclear',
+  kind: 'emergency',
+  at,
+  timed: false,
+  queues: null,
+  restored: null,
+  count: null,
+  all: false,
+  add: false,
+  again: false,
+  partial: false,
+  scheduleApplies: null,
+  area: null,
+  edited: false,
+})
 
 export interface EmergencyRequest {
   ctx: ProviderContext
@@ -344,6 +253,8 @@ export async function getEmergency(
   /** A channel read that didn't reach back the TTL: an apply it missed may still be in force */
   let short = false
   const channelPosts = async (handle: string) => {
+    // nothing to read the posts with: not worth fetching them
+    aiOf(ctx).requireText(region)
     const read = await hub.posts(ctx, region, handle, fresh)
     if (Date.parse(read.from) > now.getTime() - ttlHours * 3600_000) short = true
     return read.posts
@@ -362,7 +273,7 @@ export async function getEmergency(
     cfg.channels?.length
       ? attempt(async () => {
           const lists = await Promise.all(
-            cfg.channels!.map(async (c) => channelEvents(await channelPosts(c.handle), c)),
+            cfg.channels!.map(async (c) => channelEvents(ctx, region, await channelPosts(c.handle))),
           )
           return lists.flat().sort((a, b) => Date.parse(a.posted) - Date.parse(b.posted))
         })
@@ -383,12 +294,23 @@ export async function getEmergency(
         )
       : undefined,
     cfg.ukrenergo
-      ? attempt(async () => ukrenergoEvents(await channelPosts(UKRENERGO), cfg.ukrenergo!))
+      ? attempt(async () => channelEvents(ctx, region, await channelPosts(UKRENERGO)))
       : undefined,
   ])
 
   const sourcesAnswered = [telegram, yasno, feed, national].some((x) => x !== undefined)
-  if (!sourcesAnswered) throw errors[0]
+  if (!sourcesAnswered) {
+    // the posts can't be read without a text processor: not known, rather than an error
+    const config = errors.find((e) => e instanceof OutageError && e.code === 'config') as
+      OutageError | undefined
+    if (config && errors.every((e) => e instanceof OutageError && e.code === 'config'))
+      return {
+        ...foldEvents([], { region, now, ttlHours, source: 'telegram' }),
+        state: 'unknown',
+        message: { text: config.message, url: null, at: toKyivIso(now) },
+      }
+    throw errors[0]
+  }
 
   const fetchedAt = toKyivIso(now)
   const fold = (events: EmergencyEvent[], source: EmergencyStatus['source']) =>

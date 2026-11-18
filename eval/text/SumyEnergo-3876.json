@@ -1,0 +1,86 @@
+{
+ "input": {
+  "url": "https://t.me/SumyEnergo/3876",
+  "source": {
+   "kind": "telegram",
+   "channel": "SumyEnergo"
+  },
+  "publishedAt": "2026-11-09T10:30:58+02:00",
+  "edited": false,
+  "title": null,
+  "text": "О 10:28 додатково введено ГАВ для 6-10 черг.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "sumy",
+    "name": "Сумська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "sumy"
+    ],
+    "area": null,
+    "date": null,
+    "at": "10:28",
+    "until": null,
+    "allQueues": false,
+    "queues": [
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": true,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav"
+ ],
+ "note": "\"додатково введено ГАВ для 6-10 черг\".",
+ "uncertain": false
+}

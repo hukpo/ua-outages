@@ -66,7 +66,8 @@ The schedule is a picture: a table of 12 rows (1-1 … 6-2) × 48 half-hours, th
 without power filled with the queue's colour, white otherwise; title "Прогнозовані години
 включення/відключення електроенергії на 17.10.2026р.". No legend: that colour means "off"
 follows from the pictures (17.10.2026 first version: one two-hour block per sub-queue of queues
-1–3). Reader: `src/image/queue-table.ts`.
+1–3). Read by the client's image processor (`src/providers/picture-posts.ts`); up to 0.4.8 by
+colour in `src/image/queue-table.ts`.
 
 | Source                             | What                                                                                                                                                                                                           | Date of a picture           | `publishedAt` |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------- |

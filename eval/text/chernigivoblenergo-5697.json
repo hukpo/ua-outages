@@ -1,0 +1,57 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5697",
+  "source": {
+   "kind": "telegram",
+   "channel": "chernigivoblenergo"
+  },
+  "publishedAt": "2026-11-12T08:02:50+02:00",
+  "edited": false,
+  "title": null,
+  "text": "День фахівця з безпеки 💪 . Вітаємо усіх причетних 🥳 , а в першу чергу, звісно ж, своїх колег, які забезпечують захист, стабільність і порядок на підприємстві 🤝 .",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "chernihiv",
+    "name": "Чернігівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "tricky"
+ ],
+ "note": "greeting; keyword hit is \"в першу чергу\"",
+ "uncertain": false
+}

@@ -1,0 +1,82 @@
+{
+ "input": {
+  "url": "https://t.me/ztoe_ua/1882",
+  "source": {
+   "kind": "telegram",
+   "channel": "ztoe_ua"
+  },
+  "publishedAt": "2026-11-06T10:44:13+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚡️ Аварійні відключення на Житомирщині скасовано.\n\n📊 Перевірте ваш графік:\nhttps://www.ztoe.com.ua/unhooking-search.php",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "zhytomyr",
+    "name": "Житомирська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "cancel",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "emergency",
+  "cancel",
+  "tricky"
+ ],
+ "note": "\"Аварійні відключення на Житомирщині скасовано\" — names neither ГАВ nor СГАВ → emergency, though it ends the ГАВ of 1881 eighteen minutes earlier.",
+ "uncertain": false
+}

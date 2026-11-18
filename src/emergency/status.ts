@@ -1,7 +1,46 @@
 import { toKyivIso } from '../time.js'
 import type { EmergencyStatus, RegionId } from '../types.js'
-import type { Announcement, EmergencyKind } from './classify.js'
 import { sortQueues } from './queues.js'
+
+export type EmergencyKind = 'gav' | 'sgav' | 'emergency'
+
+export interface Announcement {
+  /**
+   * apply: in force (new, more queues, or "тривають"); cancel: lifted (all, or the queues named);
+   * update: the set of switched-off queues changed ("заміна черг"); unclear: the headline names
+   * an emergency schedule, but what happened can't be read
+   */
+  action: 'apply' | 'cancel' | 'update' | 'unclear'
+  kind: EmergencyKind
+  /** When it took effect: the time in the text, else the post time. ISO, Kyiv offset */
+  at: string
+  /** `at` came from the text */
+  timed: boolean
+  /** apply: queues switched off; cancel: queues switched back on; update: queues switched off now */
+  queues: string[] | null
+  /** update, apply: queues switched back on ("(1-5 ввімкнені)", "замість 1 та 2 черг …") */
+  restored: string[] | null
+  /** "10 черг" without numbers; with numbers, how many */
+  count: number | null
+  /** "в повному обсязі": every queue */
+  all: boolean
+  /** apply: adds to what is in force ("додатково", "ще") instead of replacing it */
+  add: boolean
+  /**
+   * apply: "знову введені ГАВ (для 6-10 черг)": the queues named are in force again, so whatever
+   * ran before was lifted in between (Sumy never posts that)
+   */
+  again: boolean
+  /** cancel of some queues only ("скасовано 5 черг ГАВ (з 6 по 10)") */
+  partial: boolean
+  /** ГПВ applies alongside: true; suspended: false; not said: null */
+  scheduleApplies: boolean | null
+  area: string | null
+  /** A cancellation written into an earlier apply post ("UPD: … скасовано"); its time is unknown */
+  edited: boolean
+  /** apply: said to last at least until then ("до кінця доби"); ISO, Kyiv offset */
+  until?: string | null
+}
 
 /** One classified announcement with the post it came from. */
 export interface EmergencyEvent {

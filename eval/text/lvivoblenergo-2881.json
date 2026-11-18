@@ -1,0 +1,103 @@
+{
+ "input": {
+  "url": "https://t.me/lvivoblenergo/2881",
+  "source": {
+   "kind": "telegram",
+   "channel": "lvivoblenergo"
+  },
+  "publishedAt": "2026-02-08T18:12:24+02:00",
+  "edited": true,
+  "title": null,
+  "text": "UPD. За розпорядженням НЕК \"Укренерго\" графіки аварійних відключень скасовані, діють погодинні відключення.\n\nЗа розпорядженням НЕК \"Укренерго\" у Львові та області введені десять черг графіків аварійних відключень⚠️\n\nДізнатись свою чергу аварійних чи погодинних відключень можна:\nна сайті «Львівобленерго» у розділі «Чому немає світла»: https://poweron.loe.lviv.ua/\nУ чат-ботах:\n* «Львівобленерго» у Viber (для побутових споживачів): https://www.viber.com/loebot\n* «Львівобленерго» у Telegram (для побутових споживачів): https://t.me/loeserviceBot\n* «Львівобленерго Бізнес» у Viber (для юридичних споживачів): www.viber.com/loebiznesbot\n* «Львівобленерго Бізнес» у Telegram (для юридичних споживачів): https://t.me/loebiznesbot\nу мобільному застосунку КомКом: https://loe.lviv.ua/page/komkom-app",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "lviv",
+    "name": "Львівська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "lviv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": 10,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   },
+   {
+    "kind": "gav",
+    "action": "cancel",
+    "regions": [
+     "lviv"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": true,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "gav",
+  "cancel",
+  "edit"
+ ],
+ "note": "Prepended \"UPD. … ГАВ скасовані, діють погодинні відключення\" over the original \"введені десять черг ГАВ\".",
+ "uncertain": false
+}

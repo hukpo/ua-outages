@@ -1,0 +1,273 @@
+{
+ "input": {
+  "url": "https://t.me/chernigivoblenergo/5667",
+  "caption": "За вказівкою НЕК \"Укренерго\", 7 листопада в області діятиме Графік погодинних відключень (ГПВ) ☝️.\n\n⚠️ Якщо ситуація в енергосистемі змінюватиметься, графік коригуватиметься, тож просимо слідкувати 🙏 за нашими офіційними ресурсами.\n\n🤔 Нагадуємо, що перевірити інформацію щодо черг відключень ГПВ та свій особистий графік за номером особового рахунку можна:\n🔸 на офіційному сайті компанії – https://chernihivoblenergo.com.ua/blackouts\n🔸 у Viber-боті – https://chernihivoblenergo.com.ua/in_viber\n🔸 у Telegram-боті – tg://resolve?domain=ChernigivOEbot.\n\n🙏 Як і раніше, дуже просимо усіх бути максимально ощадливими! Особливо це стосується тих споживачів, які приєднані до ліній з критичною інфраструктурою.",
+  "publishedAt": "2026-11-06T20:52:42+02:00",
+  "region": {
+   "id": "chernihiv",
+   "name": "Чернігівська область",
+   "queues": [
+    "1.1",
+    "1.2",
+    "2.1",
+    "2.2",
+    "3.1",
+    "3.2",
+    "4.1",
+    "4.2",
+    "5.1",
+    "5.2",
+    "6.1",
+    "6.2"
+   ],
+   "emergencyQueues": [
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "10"
+   ]
+  },
+  "file": "test/fixtures/chernihiv/posters/tg-5667.jpg"
+ },
+ "expected": {
+  "isSchedule": true,
+  "kind": "gpv",
+  "date": "2026-11-07",
+  "statedAt": null,
+  "schedule": [
+   {
+    "queue": "1.1",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "1.2",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.1",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "2.2",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "06:00",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.1",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     },
+     {
+      "from": "23:30",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "3.2",
+    "intervals": [
+     {
+      "from": "02:30",
+      "to": "09:30",
+      "kind": "off"
+     },
+     {
+      "from": "13:00",
+      "to": "20:00",
+      "kind": "off"
+     },
+     {
+      "from": "23:30",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.1",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "23:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "4.2",
+    "intervals": [
+     {
+      "from": "06:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "23:30",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.1",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "08:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "5.2",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "08:00",
+      "to": "13:00",
+      "kind": "off"
+     },
+     {
+      "from": "16:30",
+      "to": "22:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.1",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   },
+   {
+    "queue": "6.2",
+    "intervals": [
+     {
+      "from": "00:00",
+      "to": "02:30",
+      "kind": "off"
+     },
+     {
+      "from": "09:30",
+      "to": "16:30",
+      "kind": "off"
+     },
+     {
+      "from": "20:00",
+      "to": "24:00",
+      "kind": "off"
+     }
+    ]
+   }
+  ]
+ },
+ "tags": [
+  "gpv",
+  "fixture",
+  "telegram"
+ ],
+ "note": "from test/fixtures/chernihiv/posters/labels.json (hand-read cards; empty card = \"відключень не прогнозується\")",
+ "uncertain": false
+}

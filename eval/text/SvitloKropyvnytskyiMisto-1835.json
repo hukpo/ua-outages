@@ -1,0 +1,80 @@
+{
+ "input": {
+  "url": "https://t.me/SvitloKropyvnytskyiMisto/1835",
+  "source": {
+   "kind": "telegram",
+   "channel": "SvitloKropyvnytskyiMisto"
+  },
+  "publishedAt": "2026-11-17T14:25:59+02:00",
+  "edited": false,
+  "title": null,
+  "text": "В 14:05 скасовано СГАВ.",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "kirovohrad",
+    "name": "Кіровоградська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "sgav",
+    "action": "cancel",
+    "regions": [
+     "kirovohrad"
+    ],
+    "area": null,
+    "date": null,
+    "at": "14:05",
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "sgav",
+  "cancel"
+ ],
+ "note": "\"В 14:05 скасовано СГАВ\".",
+ "uncertain": false
+}

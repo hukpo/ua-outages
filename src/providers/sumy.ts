@@ -1,4 +1,5 @@
 import { emergencyQueues } from '../emergency/queues.js'
+import { readChannelWindow } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
 import { compareGroups, makeDay, normalizeGroup, slotsToIntervals, type MinuteSlot } from '../schedule.js'
 import { normalizeSettlement, normalizeStreet } from '../text.js'
@@ -16,7 +17,9 @@ import type {
 import { mapLimit } from '../util.js'
 import { parseUaDateTime } from './gpv.js'
 import { STANDARD_GROUPS } from './poweron.js'
-import type { Provider, ProviderContext } from './provider.js'
+import { aiOf, type Provider, type ProviderContext } from './provider.js'
+import { readPicturePosts } from './picture-posts.js'
+import { daysToSource } from './posts.js'
 import { mergeSources, type SourceRead } from './sources.js'
 
 /**
@@ -45,6 +48,40 @@ const INFO: ProviderInfo = {
 }
 
 const API = 'https://www.soe.com.ua/next-api/shutdowns'
+/**
+ * The operator's channel posts each day's schedule the evening before as a picture ("Завтра,
+ * 18-11-2026, діятимуть графіки …", a table of the twelve subqueues' off hours, 18:49–22:49),
+ * and changes the same way. The site's grid has today only: the channel is where tomorrow is.
+ */
+const CHANNEL = 'SumyEnergo'
+const POSTS = { groups: STANDARD_GROUPS, updates: 'layer' } as const
+
+/** The channel's schedule pictures since yesterday noon: today and tomorrow */
+async function readChannel(ctx: ProviderContext): Promise<SourceRead> {
+  // nothing to read the pictures with: not worth fetching them
+  aiOf(ctx).requireImage(INFO.id)
+  const now = ctx.now()
+  const today = kyivDate(now)
+  const since = kyivInstant(addDays(today, -1), 12 * 60)
+  const { posts, from } = await readChannelWindow(ctx, CHANNEL, {
+    region: INFO.id,
+    since,
+    withPhotoOnly: true,
+  })
+  // without yesterday evening's picture today would be only its corrections
+  if (Date.parse(from) > since.getTime())
+    throw new OutageError(
+      'parse',
+      `Telegram @${CHANNEL}: the posts since ${toKyivIso(since)} couldn't all be read`,
+      {
+        region: INFO.id,
+        url: `https://t.me/s/${CHANNEL}`,
+      },
+    )
+  const { days, url } = await readPicturePosts(ctx, INFO.id, posts, POSTS)
+  for (const date of [...days.keys()]) if (date < today) days.delete(date)
+  return { ...daysToSource(days, POSTS), ...(url ? { url } : {}) }
+}
 const HEADERS = {
   Referer: 'https://www.soe.com.ua/consumers/shutdowns',
   // what the site itself sends; not checked today
@@ -201,6 +238,7 @@ export function sumyProvider(): Provider {
               return needAll ? cabinetToRead(cabinet.value) : { days: {}, groups: [PROBE_GROUP] }
             },
           },
+          { id: `telegram:@${CHANNEL}`, url: `https://t.me/s/${CHANNEL}`, read: readChannel },
         ],
         { groups: STANDARD_GROUPS },
       )

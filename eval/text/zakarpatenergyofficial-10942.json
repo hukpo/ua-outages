@@ -1,0 +1,46 @@
+{
+ "input": {
+  "url": "https://t.me/zakarpatenergyofficial/10942",
+  "source": {
+   "kind": "telegram",
+   "channel": "zakarpatenergyofficial"
+  },
+  "publishedAt": "2026-11-05T08:51:02+02:00",
+  "edited": false,
+  "title": null,
+  "text": "Нагадуємо: найоперативніша інформація про електроенергію, включення/відключення – у нашому Телеграм-каналі\n\n📌Слідкуйте, діліться з друзями та знайомими, щоб і вони мали актуальну інформацію!\n\nА ще - користуйтеся чат-ботом, щоб дізнатися про включення/відключення, отримати відповіді на запитання, повідомити про аварійну ситуацію чи занадто тривале безперервне обмеження електропостачання.\n\nЧат-боти:\nTelegram-бот\nViber-бот 👉 viber://pa?chatURI=zakarpatenergypower",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "zakarpattia",
+    "name": "Закарпатська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "explainer"
+ ],
+ "note": "Explainer / service promo mentioning відключення, графіки, черги generically: no event.",
+ "uncertain": false
+}

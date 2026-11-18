@@ -41,15 +41,14 @@ Sources per region are configured in `src/emergency/regions.ts` (`EMERGENCY_REGI
   page may be missed, so "nothing in force" from such a read is `unknown`. An edited post shows
   its latest text and "edited", without the edit time: when `previous` was that post in force,
   the "UPD … скасовано" end is the first reading that sees the edit, else the post time.
-- **Classifier** (`src/emergency/classify.ts`): per sentence, an emergency term plus an apply or
-  cancel verb; the first such sentence decides. Explainers ("Чому…?", "Нагадаємо…"), future or
-  negated cancels ("будуть скасовані після стабілізації", "не вдається скасувати") and reposted
-  national summaries (other oblasts named) don't count. DTEK's dialect drops "аварійні" (local
-  damage). National wording ("в окремих регіонах України", "у більшості регіонів", "у регіонах,
-  де…", "по всій країні") counts only when the sentence also names an oblast; "в усіх регіонах
-  (крім …)" includes the operator's. "Було застосовано" counts only with a time of the last day;
-  a purpose clause ("Щоб уникнути аварій, …") is set aside, not the whole sentence. Times of the
-  previous day ("О 23:55 скасовано" read at noon) are shifted by the Kyiv calendar day (DST).
+- **Reading** (since 0.5.0): each post goes to the client's text processor as one unit (its
+  text, the post it replies to, its photo count, the regions its channel covers) and comes back
+  as `PostEvent`s, validated and mapped to announcements (`src/ai/map.ts`). Up to 0.4.8 a regex
+  classifier did this per sentence (`src/emergency/classify.ts`, removed); the posts it was
+  tested on are in the eval set (`eval/text/`, tag `regression`), including the two it got
+  wrong in November 2026: Kropyvnytskyi 1834 «В 14:05 відміна дії графіку ГАВ» and Zaporizhzhia
+  3629, an explainer replying to the 3628 cancel. A post whose answer fails validation is an
+  "unclear" event: `unknown` while it is the newest word, never an end.
 - **Folding** (`src/emergency/status.ts`): ГАВ, СГАВ and unnamed emergency shutdowns are followed
   separately, one episode per area (null = whole region); a cancel for an area ends that area, a
   whole-region cancel ends all, and an area cancel with only a whole-region episode on (ЦЕК 09.11:

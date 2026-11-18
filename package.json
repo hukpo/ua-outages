@@ -1,6 +1,6 @@
 {
   "name": "ua-outages",
-  "version": "0.4.8",
+  "version": "0.5.0",
   "description": "TypeScript SDK for Ukrainian power outage schedules: find your outage group by address and get schedules straight from the grid operators.",
   "keywords": [
     "ukraine",
@@ -11,7 +11,10 @@
     "yasno",
     "dtek",
     "oblenergo",
-    "графік відключень"
+    "графік відключень",
+    "ai",
+    "claude",
+    "openai"
   ],
   "license": "MIT",
   "type": "module",
@@ -19,6 +22,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./anthropic": {
+      "types": "./dist/adapters/anthropic.d.ts",
+      "import": "./dist/adapters/anthropic.js"
+    },
+    "./openai": {
+      "types": "./dist/adapters/openai.d.ts",
+      "import": "./dist/adapters/openai.js"
     }
   },
   "main": "./dist/index.js",
@@ -43,14 +54,29 @@
     "prepack": "npm run build",
     "prepublishOnly": "npm run typecheck && npm test",
     "format": "prettier --write .",
-    "lint": "prettier --check ."
+    "lint": "prettier --check .",
+    "eval": "tsx scripts/eval.ts"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
     "@types/node": "^22.10.0",
+    "openai": "^7.59.0",
     "prettier": "^3.9.10",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=1.10.0",
+    "openai": ">=7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",

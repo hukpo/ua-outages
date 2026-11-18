@@ -198,3 +198,18 @@ describe('Telegram channel preview: photos', () => {
     expect(late.map((p) => p.id)).toEqual([3607])
   })
 })
+
+describe('replies', () => {
+  it('keeps the post a reply quotes, apart from its own text', () => {
+    const posts = parseTelegramPreview(fixture('telegram/Zaporizhzhyaoblenergo_news-3628-3630.trimmed.html'))
+    const [cancel, reply, next] = posts
+    expect(cancel!.replyTo).toBeNull()
+    expect(reply!.text).toMatch(/^УВАГА!\nСпеціальні графіки аварійних відключень/)
+    expect(reply!.text).not.toMatch(/скасовані у повному обсязі/)
+    expect(reply!.replyTo).toEqual({
+      url: 'https://t.me/Zaporizhzhyaoblenergo_news/3628',
+      text: expect.stringMatching(/^За вказівкою НЕК «Укренерго».*скасовані у повному обсязі/s),
+    })
+    expect(next!.replyTo).toBeNull()
+  })
+})

@@ -1,9 +1,14 @@
+import { toSlots } from '../ai/map.js'
+import { analyzeAll, siteInput } from '../ai/posts.js'
+import { postRegion } from '../ai/regions.js'
+import { htmlToText } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
-import { compareGroups, makeDay, normalizeGroup, unpublished } from '../schedule.js'
-import { toKyivIso } from '../time.js'
+import { compareGroups, makeDay, unpublished } from '../schedule.js'
+import { kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, ProviderInfo, RegionSchedule } from '../types.js'
 import { emergencyQueues } from '../emergency/queues.js'
-import { parseUaDateTime } from './gpv.js'
+import { readingToDay } from './image-schedule.js'
+import { gpvEvents, statedTime } from './posts.js'
 import {
   STANDARD_GROUPS,
   hydraList,
@@ -12,14 +17,14 @@ import {
   uncachedJson,
   type PowerOnBuilding,
 } from './poweron.js'
-import type { Provider, ProviderContext } from './provider.js'
-import { findUaDate, parseGroupLines } from './ua-text.js'
+import { aiOf, type Provider, type ProviderContext } from './provider.js'
 
 /**
  * Lvivoblenergo (poweron.loe.lviv.ua). Two hosts of the PowerOn platform:
  *
  * - `api.loe.lviv.ua` serves the schedule as a menu with "Today" and "Tomorrow" items whose
- *   `rawHtml` is prose: "Група 1.1. Електроенергії немає з 08:00 до 12:00." The response also
+ *   `rawHtml` is prose: "Група 1.1. Електроенергії немає з 08:00 до 12:00.", read by the
+ *   client's text processor (a slot with only a picture, by its image processor). The response also
  *   inlines the whole archive, so it is 2–3 MB; there is no smaller endpoint. Cloudflare caches
  *   it (`s-maxage=7200`), so it is requested with a cache-busting parameter (`uncachedJson`).
  * - `power-api.loe.lviv.ua` serves the address directory; its `pw_accounts` has one row per
@@ -69,7 +74,7 @@ export function lvivProvider(): Provider {
 
     async getSchedules(ctx) {
       // past Cloudflare, which otherwise serves this for up to two hours
-      return parseLvivMenu(await uncachedJson(ctx, SCHEDULE_URL, { region }), ctx.now())
+      return readLvivMenu(ctx, await uncachedJson(ctx, SCHEDULE_URL, { region }))
     },
 
     ...powerOnAddressSearch({
@@ -110,12 +115,14 @@ export function accountsToBuildings(rows: readonly Account[]): PowerOnBuilding[]
 }
 
 /**
- * The menu response (JSON-LD or a plain array) → schedules. A day is taken from the text
- * ("Графік погодинних відключень на 17.10.2026"), not from the slot name: "Today" sometimes
- * already holds tomorrow's schedule. Exported for tests.
+ * The menu response (JSON-LD or a plain array) → schedules. A day is the one its text names
+ * ("Графік погодинних відключень на 17.10.2026"), not the slot's name: "Today" sometimes
+ * already holds tomorrow's schedule. "… про відміну застосування ГПВ на 20.11.2024" is a day
+ * without outages. Exported for tests.
  */
-export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
+export async function readLvivMenu(ctx: ProviderContext, data: unknown): Promise<RegionSchedule> {
   const region = INFO.id
+  const now = ctx.now()
   const [menu] = hydraList<{ menuItems?: MenuItem[] }>(data, 'Lviv menus', region)
   const items = menu?.menuItems
   if (!Array.isArray(items))
@@ -130,44 +137,78 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
     const prev = days.get(date)
     if (!prev || time(updatedAt) >= time(prev.updatedAt)) days.set(date, { updatedAt, groups })
   }
+  // read against today's noon: stable through the day, so each text is analysed once a day
+  const reference = toKyivIso(kyivInstant(kyivDate(now), 12 * 60))
 
-  for (const item of slots) {
-    const html = item.rawHtml?.trim() ?? ''
-    const description = item.description?.trim() ?? ''
-    if (html) {
-      const text = html
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/\s+/g, ' ')
-      const date = /відключень\s+на\s+(\d{2}\.\d{2}\.\d{4})/i.exec(text)?.[1] ?? text
-      const day = findUaDate(date, now)
-      if (!day) throw new OutageError('parse', `Lviv ${item.name}: no date in the schedule text`, { region })
-      const parsed = parseGroupLines(html)
-      const groups: Record<GroupId, DaySchedule> = {}
-      for (const [raw, slots] of Object.entries(parsed)) {
-        const g = normalizeGroup(raw)
-        if (g) groups[g] = slots ? makeDay(day, slots) : { date: day, status: 'unknown', intervals: [] }
-      }
-      if (!Object.keys(groups).length)
-        throw new OutageError('parse', `Lviv ${item.name}: schedule text without groups (format changed?)`, {
+  const texts = slots.flatMap((item) => {
+    const text = htmlToText(item.rawHtml?.trim() || item.description?.trim() || '')
+    return text
+      ? [
+          {
+            item,
+            input: siteInput({ site: SCHEDULE_URL, title: null, text, publishedAt: reference }, region),
+          },
+        ]
+      : []
+  })
+  const analyzed = await analyzeAll(
+    ctx,
+    region,
+    texts.map((t) => t.input),
+  )
+  for (const [i, { item }] of texts.entries()) {
+    const { analysis, error } = analyzed[i]!
+    if (!analysis) throw error
+    const events = gpvEvents(analysis, region)
+    if (!events.length && item.rawHtml?.trim())
+      throw new OutageError(
+        'parse',
+        `Lviv ${item.name}: the schedule text says no schedule (format changed?)`,
+        {
           region,
-        })
-      keep(day, updatedAtOf(text), groups)
-    } else if (/відмін\S*\s+застосування\s+ГПВ/i.test(description)) {
-      // "Отримано вказівку НЕК «Укренерго» про відміну застосування ГПВ на 20.11.2024 …"
-      const day = findUaDate(description.replace(/^[\s\S]*?ГПВ\s+на/i, ''), now)
-      if (!day)
-        throw new OutageError('parse', `Lviv ${item.name}: cancellation notice without a date`, { region })
+        },
+      )
+    for (const ev of events) {
+      const day = ev.date ?? kyivDate(now)
+      const updatedAt = statedTime(analysis, region, day, now)
+      if (ev.action === 'cancel') {
+        keep(
+          day,
+          updatedAt,
+          Object.fromEntries(
+            STANDARD_GROUPS.map((g) => [g, { date: day, status: 'no-outages' as const, intervals: [] }]),
+          ),
+        )
+        continue
+      }
       const groups: Record<GroupId, DaySchedule> = {}
-      for (const g of STANDARD_GROUPS) groups[g] = { date: day, status: 'no-outages', intervals: [] }
-      keep(day, updatedAtOf(description), groups)
-    } else if (item.imageUrl?.trim()) {
-      // before 30.10.2025 LOE published only a picture; text parsing can't read that
-      throw new OutageError('parse', `Lviv ${item.name}: the schedule is published only as an image`, {
-        region,
-      })
+      for (const q of ev.schedule)
+        groups[q.queue] = q.intervals
+          ? makeDay(day, toSlots(q.intervals))
+          : { date: day, status: 'unknown', intervals: [] }
+      if (Object.keys(groups).length) keep(day, updatedAt, groups)
     }
-    // otherwise the slot is empty: nothing published
+  }
+  // a slot published only as a picture (before 30.10.2025 that was all there was)
+  for (const item of slots) {
+    const url = item.imageUrl?.trim()
+    if (!url || item.rawHtml?.trim()) continue
+    const bytes = await ctx.http.bytes(new URL(url, SCHEDULE_URL).href, { region })
+    const reading = await aiOf(ctx).readImage(
+      region,
+      {
+        url,
+        bytes,
+        caption: item.description?.trim() || null,
+        publishedAt: reference,
+        region: postRegion(region),
+      },
+      ctx.signal,
+    )
+    if (!reading.isSchedule) continue
+    if (!reading.date)
+      throw new OutageError('parse', `Lviv ${item.name}: a schedule picture with no date`, { region, url })
+    keep(reading.date, null, readingToDay(reading, reading.date))
   }
 
   const dates = [...days.keys()].sort()
@@ -188,9 +229,3 @@ export function parseLvivMenu(data: unknown, now: Date): RegionSchedule {
 }
 
 const time = (iso: string | null) => (iso ? Date.parse(iso) : 0)
-
-/** "Інформація станом на 18:56 17.10.2026" (Kyiv time) → ISO. */
-function updatedAtOf(text: string): string | null {
-  const m = /станом\s+на\s+(\d{1,2}:\d{2}\s+\d{2}\.\d{2}\.\d{4})/i.exec(text)
-  return m ? parseUaDateTime(m[1]) : null
-}

@@ -1,0 +1,81 @@
+{
+ "input": {
+  "url": "https://t.me/oe_cv_ua/4015",
+  "source": {
+   "kind": "telegram",
+   "channel": "oe_cv_ua"
+  },
+  "publishedAt": "2026-11-13T07:51:29+02:00",
+  "edited": false,
+  "title": null,
+  "text": "✨ На 13.11.2026\nЕлектропостачання без обмежень для всіх груп споживачів!\n\n☝️Дізнатись номер своєї групи можна за пошуком - https://is.gd/jvxPFP\n❗️ У години пікового навантаження на енергосистему: 09.00-11.00 та 18.00-20.00 просимо економно споживати електроенергію.\n❗️ Передати показники лічильника через Телеграм Чат-БОТ - https://t.me/oblcv_bot\n❗️ Передати показники лічильника в Особистому кабінеті - https://is.gd/D1p5YB",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "chernivtsi",
+    "name": "Чернівецька область",
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10",
+     "11",
+     "12"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "cancel",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "cancel",
+  "tricky"
+ ],
+ "note": "\"Електропостачання без обмежень для всіх груп споживачів!\" → gpv cancel (no outages for the day). No keyword matched; included on purpose.",
+ "uncertain": false
+}

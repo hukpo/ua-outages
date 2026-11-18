@@ -6,3 +6,4 @@ coverage
 research
 _site
 .taste-skill
+.processor-cache.json

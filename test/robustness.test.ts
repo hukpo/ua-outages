@@ -2,14 +2,15 @@ import { createServer, request as httpRequest, type Server } from 'node:http'
 import { createServer as createTcpServer, type AddressInfo } from 'node:net'
 import { deflateSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { postRegion } from '../src/ai/regions.js'
+import { AiRuntime } from '../src/ai/runtime.js'
+import type { ImageInput, ImageReading } from '../src/ai/types.js'
 import { OutageClient } from '../src/client.js'
 import { OutageError } from '../src/errors.js'
 import { DEFAULT_MAX_BODY_BYTES, Http, type FetchLike } from '../src/http.js'
 import { BodyTooLarge, httpsFetchWithCa } from '../src/https-fetch.js'
-import { bestWindow } from '../src/image/grid.js'
 import { decodeJpeg } from '../src/image/jpeg.js'
 import { decodePng, MAX_IMAGE_PIXELS, type RgbaImage } from '../src/image/png.js'
-import { readScheduleTable, type TableLayout } from '../src/image/table.js'
 import { MAX_PAGES, openPdf } from '../src/pdf/text.js'
 import { gpvCellsToSlots, parseGpvDays } from '../src/providers/gpv.js'
 import { readDatedImages } from '../src/providers/image-schedule.js'
@@ -24,7 +25,7 @@ import { addSheet, type ZoeDirectory } from '../src/providers/zaporizhzhia-addre
 import { zaporizhzhiaProvider } from '../src/providers/zaporizhzhia.js'
 import { zhytomyrProvider } from '../src/providers/zhytomyr.js'
 import type { ProviderInfo, Street } from '../src/types.js'
-import { expectUnpublished, fixture, fixtureBytes, mockFetch } from './helpers.js'
+import { expectUnpublished, fakeImage, fixture, fixtureBytes, intervalsOf, mockFetch } from './helpers.js'
 
 // Regressions for the robustness and parsing defects an independent review of 0.4.3 found.
 // The rule they share: input the SDK does not understand is an error or `unknown`, never a
@@ -227,34 +228,10 @@ describe('Railway: a cell that is not fully understood', () => {
 
 // --- pictures ---
 
-const WHITE: [number, number, number] = [255, 255, 255]
-const BLACK: [number, number, number] = [20, 20, 20]
-const GREY: [number, number, number] = [120, 120, 120]
-const LAYOUT: TableLayout = {
-  columns: 24,
-  rows: 12,
-  tables: 1,
-  halves: false,
-  palette: { on: WHITE, off: BLACK },
-}
-
-/** A table of `rows`×`cols` equal cells with thin grey lines; `off` cells are black. */
-function tableImage(rows: number, cols: number, off: [number, number][] = [], cell = 20): RgbaImage {
-  const margin = 45
-  const pitch = cell + 2
-  const width = margin * 2 + cols * pitch + 2
-  const height = margin * 2 + rows * pitch + 2
+/** A white picture with a black block: something that decodes */
+function picture(width = 300, height = 200): RgbaImage {
   const data = new Uint8Array(width * height * 4).fill(255)
-  const put = (x: number, y: number, c: [number, number, number]) => data.set(c, (y * width + x) * 4)
-  for (let y = margin; y < margin + rows * pitch + 2; y++)
-    for (let x = margin; x < margin + cols * pitch + 2; x++) {
-      const gx = (x - margin) % pitch
-      const gy = (y - margin) % pitch
-      if (gx < 2 || gy < 2) put(x, y, GREY)
-    }
-  for (const [r, c] of off)
-    for (let y = 0; y < cell; y++)
-      for (let x = 0; x < cell; x++) put(margin + c * pitch + 2 + x, margin + r * pitch + 2 + y, BLACK)
+  for (let y = 20; y < 60; y++) for (let x = 20; x < 60; x++) data.set([20, 20, 20], (y * width + x) * 4)
   return { width, height, data }
 }
 
@@ -295,53 +272,9 @@ function pngFile(width: number, height: number, colorType: number, idat: Uint8Ar
   )
 }
 
-describe('image tables: a run of equal cells longer than the table', () => {
-  const span = (start: number, size: number) => ({ start, end: start + size })
-  const run = (sizes: number[]) => {
-    let at = 0
-    return sizes.map((s) => {
-      const out = span(at, s)
-      at += s + 2
-      return out
-    })
-  }
-
-  it('reads a synthetic 12×24 table (the control for the cases below)', () => {
-    const cells = readScheduleTable(
-      tableImage(12, 24, [
-        [0, 3],
-        [11, 23],
-      ]),
-      LAYOUT,
-    )
-    expect(cells).toHaveLength(12)
-    expect(cells[0]!.map((c, i) => (c ? i : -1)).filter((i) => i >= 0)).toEqual([3])
-    expect(cells[11]!.map((c, i) => (c ? i : -1)).filter((i) => i >= 0)).toEqual([23])
-    expect(cells[1]!.every((c) => c === null)).toBe(true)
-  })
-
-  it('picks the most even window, and none when two are equally even', () => {
-    expect(bestWindow(run([40, 57, 57, 57]), 3)![0]!.start).toBe(42)
-    expect(bestWindow(run([57, 57, 57, 57]), 3)).toBeNull()
-    expect(bestWindow(run([57, 57, 57]), 3)).toHaveLength(3)
-    expect(bestWindow(run([57, 57]), 3)).toBeNull()
-  })
-
-  it('refuses a table whose header row is as tall as the group rows', () => {
-    // 13 equal rows: the first is the header, and the first 12 would shift every group by one
-    const img = tableImage(13, 24, [[1, 3]])
-    expect(() => readScheduleTable(img, LAYOUT)).toThrow(/ambiguous table: 13 equal rows/)
-  })
-
-  it('refuses a table whose label column is as wide as the time cells', () => {
-    const img = tableImage(12, 25, [[0, 4]])
-    expect(() => readScheduleTable(img, LAYOUT)).toThrow(/ambiguous table: 25 equal columns/)
-  })
-})
-
 describe('shared image reader: the newest picture of a date cannot be read', () => {
   const at = new Date('2026-11-15T10:00:00+02:00')
-  const good = encodePng(tableImage(12, 24, [[0, 3]]))
+  const good = encodePng(picture())
   const dates = [
     {
       date: '2026-11-15',
@@ -351,47 +284,89 @@ describe('shared image reader: the newest picture of a date cannot be read', () 
       ],
     },
   ]
-  const read = (newest: Uint8Array) => {
+  /** Every queue of Volyn, 1.1 off 08:00-10:00 */
+  const schedule = postRegion('volyn').queues.map((queue) => ({
+    queue,
+    intervals: queue === '1.1' ? intervalsOf('08:00-10:00') : [],
+  }))
+  const read = (
+    newest: Uint8Array,
+    answer: (input: ImageInput) => Partial<ImageReading> | undefined = () => ({
+      date: '2026-11-15',
+      schedule,
+    }),
+  ) => {
     const { fetch, calls } = mockFetch([
       { match: '/new.png', body: newest },
       { match: '/old.png', body: good },
     ])
-    const ctx: ProviderContext = { http: new Http({ fetch }), now: () => at }
-    return { calls, days: readDatedImages(ctx, 'volyn', dates, (p) => `https://example.ua${p}`, LAYOUT) }
+    const image = fakeImage(answer)
+    const ctx: ProviderContext = {
+      http: new Http({ fetch }),
+      now: () => at,
+      ai: new AiRuntime({ imageProcessor: image }),
+    }
+    return { calls, image, days: readDatedImages(ctx, 'volyn', dates, (p) => `https://example.ua${p}`) }
   }
+  const isNew = (input: ImageInput) => input.url.endsWith('/new.png')
 
   it('reads the newest when it can (the control)', async () => {
     const { days, calls } = read(good)
-    expect((await days)['2026-11-15']!.publishedAt).toBe('2026-11-15T10:00:00+02:00')
+    const day = (await days)['2026-11-15']!
+    expect(day.publishedAt).toBe('2026-11-15T10:00:00+02:00')
+    expect(day.schedules['1.1']!.intervals).toHaveLength(1)
     expect(calls).toHaveLength(1)
   })
 
   it('is a parse error when the newest does not decode, never the older picture', async () => {
-    const { days, calls } = read(good.subarray(0, 200))
+    const { days, calls, image } = read(good.subarray(0, 200))
     const err = await days.catch((e) => e)
     expect(err).toBeInstanceOf(OutageError)
     expect(err).toMatchObject({ code: 'parse', details: { url: 'https://example.ua/new.png' } })
-    expect(err.message).toMatch(/newest schedule image for 2026-11-15/)
     expect(calls.map((c) => c.url)).toEqual(['https://example.ua/new.png'])
+    expect(image.calls).toHaveLength(0)
   })
 
-  it('is a parse error when the newest has a table that cannot be read', async () => {
-    // a colour outside the palette, and a table of another shape
-    const odd = tableImage(12, 24)
-    for (let y = 50; y < 60; y++)
-      for (let x = 50; x < 60; x++) odd.data.set([255, 0, 0], (y * odd.width + x) * 4)
-    await expect(read(encodePng(odd)).days).rejects.toMatchObject({ code: 'parse' })
-    await expect(read(encodePng(tableImage(13, 24))).days).rejects.toMatchObject({ code: 'parse' })
+  it('is a parse error when the reading of the newest fails validation', async () => {
+    // an hour that doesn't exist, and a schedule without every queue
+    for (const bad of [
+      [{ queue: '1.1', intervals: intervalsOf('23:00-25:00') }, ...schedule.slice(1)],
+      schedule.slice(1),
+    ]) {
+      const { days, calls } = read(good, (input) =>
+        isNew(input) ? { date: '2026-11-15', schedule: bad } : { schedule },
+      )
+      await expect(days).rejects.toMatchObject({
+        code: 'parse',
+        details: { url: 'https://example.ua/new.png' },
+      })
+      expect(calls).toHaveLength(1)
+    }
   })
 
-  it('still skips a picture with no table at all (a text announcement) for the older one', async () => {
-    const blank: RgbaImage = { width: 300, height: 200, data: new Uint8Array(300 * 200 * 4).fill(255) }
-    const { days, calls } = read(encodePng(blank))
+  it('is a parse error when the newest names another date', async () => {
+    const { days } = read(good, (input) => (isNew(input) ? { date: '2026-11-16', schedule } : { schedule }))
+    await expect(days).rejects.toThrow(/listed for 2026-11-15 says 2026-11-16/)
+  })
+
+  it('still skips a picture that is not a schedule (a text announcement) for the older one', async () => {
+    // the real announcement Khmelnytskyi posted over its table
+    const { days, calls, image } = read(
+      fixtureBytes('khmelnytskyi/announcement-2026-10-17-1658.png'),
+      (input) => (isNew(input) ? undefined : { date: '2026-11-15', schedule }),
+    )
     expect((await days)['2026-11-15']!.publishedAt).toBe('2026-11-15T09:00:00+02:00')
     expect(calls).toHaveLength(2)
-    // the real announcement Khmelnytskyi posted over its table
-    const real = read(fixtureBytes('khmelnytskyi/announcement-2026-10-17-1658.png'))
-    expect((await real.days)['2026-11-15']!.publishedAt).toBe('2026-11-15T09:00:00+02:00')
+    expect(image.calls.map((c) => c.url)).toEqual([
+      'https://example.ua/new.png',
+      'https://example.ua/old.png',
+    ])
+  })
+
+  it('is a parse error when no picture of the date is a schedule', async () => {
+    await expect(read(good, () => undefined).days).rejects.toThrow(
+      /none of the 2 picture\(s\) for 2026-11-15/,
+    )
   })
 })
 

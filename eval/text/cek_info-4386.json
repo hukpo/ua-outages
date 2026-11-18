@@ -1,0 +1,70 @@
+{
+ "input": {
+  "url": "https://t.me/cek_info/4386",
+  "source": {
+   "kind": "telegram",
+   "channel": "cek_info"
+  },
+  "publishedAt": "2026-11-13T18:54:25+02:00",
+  "edited": false,
+  "title": null,
+  "text": "📢 Шановні споживачі м. ПАВЛОГРАД ‼️\n\nПовідомляємо про скасування ЕКСТРЕНИХ ВІДКЛЮЧЕНЬ ‼️ Повертаємося до вашого ГРАФІКА ПОГОДИННИХ ВІДКЛЮЧЕНЬ‼️",
+  "replyTo": null,
+  "photoCount": 0,
+  "regions": [
+   {
+    "id": "dnipro-cek",
+    "name": "Дніпропетровська область (ЦЕК: Дніпро, Павлоград, Вільногірськ та ін.)",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": []
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "emergency",
+    "action": "cancel",
+    "regions": [
+     "dnipro-cek"
+    ],
+    "area": "м. ПАВЛОГРАД",
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": true,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "regression",
+  "emergency",
+  "cancel"
+ ],
+ "note": "",
+ "uncertain": false
+}

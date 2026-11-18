@@ -102,34 +102,26 @@ Two channels of the operator, merged with `mergeSources` (`src/providers/sources
   - **Why `maybe` (0.4.4).** Until 0.4.3 such a group kept the poster's hours while the day's `publishedAt` moved to the change post: an old schedule with a new time, which also beat the site's copy of the same poster. A first fix made the group `unknown` until the next poster; on the saved posts that was 7 of 12 groups on 14.11 and 4 on 16.11, and a consumer then filled them from the OE_OUTAGE_DATA mirror. That mirror (checked 17.11 against all six such posts of 14–16.11) draws the outage on to the poster's next one as definite, with the start rounded up to the half hour (07:15 → 07:30, 10:10 → 10:30): an end nobody gave and 15–20 minutes of power that isn't there. `maybe` marks the stretch nobody gave an end for: off from the stated time, back at some moment of it or not before the poster's next outage. Only "the power is off from 07:15" is certain, so `maybe` is a little weaker than the truth at the start; there is no interval kind for "off, end unknown". The poster's later hours are kept as published. The post doesn't say they still hold; that rests on the operator's practice on the saved posts, where an outage that runs on gets its own "продовжується" (14.11 3/2) and a start ahead of the poster ran into the poster's outage. A start equal to the start of a poster outage changes nothing.
 - No cancellation wording has been seen; an unknown line changes nothing.
 
-### The poster reader (`src/image/cards.ts`)
+### The poster reader
 
-Baseline JPEG decoder (`src/image/jpeg.ts`), the twelve cards by colour, text lines by ink rows. No OCR and no splitting into glyphs: at 471 px the digits touch each other and the colons. A line is resampled to 24 px height and explained as a whole by a font model (`src/image/digit-model.ts`): a dynamic program lays "dd:dd-dd:dd" over it, picking every digit and position at once; each pixel is scored against the average picture of the character and its spread among the training samples. The model is built by `scripts/train-digits.ts` from the labelled posters in `test/fixtures/chernihiv/posters` (`labels.json`), one font per typography ("thin" until 05.11.2026, "bold" since).
+Since 0.5.0 the poster is read by the client's image processor (`src/providers/picture-posts.ts`,
+`src/ai/`), and the captions and changes in words by its text processor. Up to 0.4.8 the SDK read
+the digits itself, without OCR, by matching each time line against a font model trained on the
+labelled posters in `test/fixtures/chernihiv/posters` (`labels.json`); it read 34 of 36 exactly
+and refused 2, but broke with every new typography. Those labelled posters are now image cases of
+the eval set (`eval/image/`).
 
-Guards, any of which makes the poster a `parse` error:
-
-- twelve cards; every text line of every card is a time range or the card is "відключень не прогнозується" as a whole (the old reader skipped a line it couldn't split and lost an outage on 14.11);
-- the typography that explains all lines best reads the poster; one that explains them nearly as well must read the same;
-- per line: its cost, each character's cost, each digit's margin over the runner-up (`LIMITS`), and no other vertical cut of the line that fits nearly as well may read something else (a cut half a pixel off turns a 6 into a 5 or an 8);
-- times: hour ≤ 23, minutes 00/15/30/45 (only :00 and :30 occur on the 36 labelled posters), from < to with 00:00 as an end meaning 24:00, lines of a card ascending without overlap;
-- the header date ("DD.MM.YYYY", or "D.MM.YYYY" as on 1.11.2026) read the same way; the site poster must be dated today or tomorrow and no later than the day after its upload.
-
-Measured on the 36 labelled posters (`npx tsx scripts/train-digits.ts --check`; test/providers/chernihiv.test.ts asserts the same): none is read wrongly, the ones not read are refused.
-
-| Posters                                                                 | Read exactly | Refused                                           |
-| ----------------------------------------------------------------------- | ------------ | ------------------------------------------------- |
-| Telegram 471×800, current typography (06.11–17.11)                      | 12 of 12     | 0                                                 |
-| Telegram 471×800, earlier typography (26.10–05.11), incl. 2 "ОНОВЛЕНИЙ" | 11 of 12     | 1: a stray comma on the poster ("08:30 - 12:00,") |
-| Site 1200×2036                                                          | 3 of 3       | 0                                                 |
-| Downscaled 530×900                                                      | 1 of 1       | 0                                                 |
-| October layout, 533×800                                                 | 7 of 7       | 0                                                 |
-| October layout, 566×800 (digits 9 px tall)                              | 0 of 1       | 1: not confident                                  |
+What the SDK still checks on every answer: twelve queues, real times with `from < to`, a date in
+the header (or the caption's, never the post time alone) of the post's day or the next, the same
+day in the picture and the caption when both give one. The site file must be dated today or
+tomorrow and no later than the day after its upload. A correction in words is applied when it
+gives both ends of an outage; otherwise the queues it names are `unknown` until the next poster
+(the 0.4.4 `maybe` stretches below are gone).
 
 Other notes:
 
 - TLS: the site sends only its leaf certificate (no Sectigo DV R36 intermediate). Browsers and curl fill it in, Node fails with `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. The SDK ships that public intermediate (`src/certs.ts`) and adds it to Node's roots for this request only.
-- When the operator changes the font: label a few new posters in `labels.json` under a new typography name and rerun `scripts/train-digits.ts`. Until then the reader refuses them.
-- Format history: until early 2026 the site URL served a coloured table (12 subgroup columns × 48 half-hours), as a progressive JPEG. The card reader reports `parse` ("expected 12 cards") on it.
+- Format history: until early 2026 the site URL served a coloured table (12 subgroup columns × 48 half-hours), as a progressive JPEG (sent to the image processor as it is: the bundled decoder reads baseline JPEGs only).
 
 ### Failure modes
 

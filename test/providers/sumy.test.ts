@@ -10,7 +10,19 @@ import {
   sumyProvider,
 } from '../../src/providers/sumy.js'
 import type { DaySchedule } from '../../src/types.js'
-import { fixture, mockFetch, type Route, expectUnpublished } from '../helpers.js'
+import type { ImageProcessor, TextProcessor } from '../../src/ai/types.js'
+import {
+  ev,
+  expectUnpublished,
+  fakeImage,
+  fakeText,
+  fixture,
+  fixtureBytes,
+  pictureSchedule,
+  mockFetch,
+  type Route,
+} from '../helpers.js'
+import { previewPage } from '../emergency/preview.js'
 
 const NOW = new Date('2026-11-05T23:40:00+02:00')
 const API = 'https://www.soe.com.ua/next-api/shutdowns'
@@ -209,8 +221,10 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
     site?: string | null
     answers?: Record<string, unknown> | null
     now?: Date
+    /** The channel's page, and processors to read it with */
+    channel?: { page: string; text: TextProcessor; image: ImageProcessor; picture: Uint8Array }
   }
-  async function setup({ site = SITE_17, answers = ANSWERS, now = AT }: Setup = {}) {
+  async function setup({ site = SITE_17, answers = ANSWERS, now = AT, channel }: Setup = {}) {
     const siteBody = site === null ? null : await encrypt(site)
     const { fetch, calls } = mockFetch([
       { match: `${API}/schedules`, body: siteBody ?? 'down', status: siteBody === null ? 503 : 200 },
@@ -223,6 +237,12 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
         },
         status: answers ? 200 : 503,
       },
+      ...(channel
+        ? [
+            { match: 't.me/s/SumyEnergo', body: channel.page },
+            { match: 'cdn4.telesco.pe', body: channel.picture },
+          ]
+        : []),
     ])
     const client = new OutageClient({
       fetch,
@@ -230,6 +250,7 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
       cacheTtlMs: 0,
       retries: 0,
       providers: [sumyProvider()],
+      ...(channel ? { textProcessor: channel.text, imageProcessor: channel.image } : {}),
     })
     const asked = () =>
       calls
@@ -237,6 +258,44 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
         .map((c) => new URLSearchParams(String(c.init!.body)).get('cherga'))
     return { client, calls, asked }
   }
+
+  it("takes tomorrow from the channel's picture the evening before", async () => {
+    const now = new Date('2026-11-17T21:30:00+02:00')
+    const page = previewPage('SumyEnergo', [
+      {
+        id: 3931,
+        at: '2026-11-17T18:49:00Z',
+        text: 'Завтра, 18-11-2026, діятимуть графіки погодинних відключень відповідно до обсягів, доведених командою з НЕК "Укренерго".',
+        photos: ['https://cdn4.telesco.pe/file/sumy-18.jpg'],
+      },
+    ])
+    const text = fakeText(() => [ev({ kind: 'gpv', action: 'start', regions: ['sumy'], date: '2026-11-18' })])
+    const image = fakeImage(() => ({
+      date: '2026-11-18',
+      schedule: pictureSchedule({
+        '1.1': '00:00-02:00, 04:00-08:00, 10:00-12:00, 22:00-24:00',
+        '1.2': '02:00-06:00',
+      }),
+    }))
+    const picture = fixtureBytes('chernihiv/posters/2026-10-06-tg.jpg')
+    const s = await (
+      await setup({ now, channel: { page, text, image, picture } })
+    ).client.getSchedules('sumy')
+    expect(s.schedules['1.1']!.map((d) => d.date)).toEqual(['2026-11-17', '2026-11-18'])
+    expect(hhmm(s.schedules['1.1']![1]!)).toEqual([
+      '00:00-02:00',
+      '04:00-08:00',
+      '10:00-12:00',
+      '22:00-00:00',
+    ])
+    expect(s.sources!.find((x) => x.id === 'telegram:@SumyEnergo')).toMatchObject({
+      ok: true,
+      dates: ['2026-11-18'],
+      updatedAt: '2026-11-17T20:49:00+02:00',
+    })
+    // the caption says the photo is the schedule: read in full, no cheap check
+    expect(image.calls).toHaveLength(1)
+  })
 
   it('dates the site grid by E-Svitlo with one extra request', async () => {
     const { client, calls, asked } = await setup()
@@ -264,6 +323,15 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
         updatedAt: '2026-11-16T22:49:00+02:00',
       },
       { id: 'e-svitlo', url: 'https://sm.e-svitlo.com.ua/', ok: true, dates: [], updatedAt: null },
+      // no image processor: the channel's pictures aren't read, and not fetched
+      {
+        id: 'telegram:@SumyEnergo',
+        url: 'https://t.me/s/SumyEnergo',
+        ok: false,
+        dates: [],
+        updatedAt: null,
+        error: { code: 'config', message: expect.stringContaining('imageProcessor') },
+      },
     ])
   })
 
@@ -289,6 +357,7 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
     expect(s.sources!.map((x) => [x.id, x.ok, x.dates, x.updatedAt, x.disagrees])).toEqual([
       ['site', true, ['2026-11-17'], '2026-11-16T22:49:00+02:00', undefined],
       ['e-svitlo', true, ['2026-11-18'], '2026-11-17T21:05:00+02:00', undefined],
+      ['telegram:@SumyEnergo', false, [], null, undefined],
     ])
     expect(assessFreshness(s, { now, tomorrowExpectedAt: '21:00' })).toMatchObject({
       state: 'fresh',
@@ -364,6 +433,7 @@ describe('Sumyoblenergo: the site and E-Svitlo as two channels', () => {
       expect(s.sources).toMatchObject([
         { id: 'site', ok: true, dates: [] },
         { id: 'e-svitlo', ok: false },
+        { id: 'telegram:@SumyEnergo', ok: false, error: { code: 'config' } },
       ])
       expect(s.updatedAt).toBeNull()
     }

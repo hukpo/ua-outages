@@ -1,0 +1,79 @@
+{
+ "input": {
+  "url": "https://t.me/ztoe_ua/1892",
+  "source": {
+   "kind": "telegram",
+   "channel": "ztoe_ua"
+  },
+  "publishedAt": "2026-11-07T15:57:52+02:00",
+  "edited": false,
+  "title": null,
+  "text": "❗️ Увага! Аварійні відключення!\n🗓️ 7 листопада 2026\n\n📣 За розпорядженням Укренерго на Житомирщині запроваджено аварійні відключення електроенергії (ГАВ)\n\nНагадаємо: ГАВ діє до окремого розпорядження НЕК «Укренерго».\n\n📌З метою безпеки і захисту Ваших пристроїв вимкніть з розеток чутливе до стрибків напруги обладнання!",
+  "replyTo": null,
+  "photoCount": 1,
+  "regions": [
+   {
+    "id": "zhytomyr",
+    "name": "Житомирська область",
+    "queues": [
+     "1.1",
+     "1.2",
+     "2.1",
+     "2.2",
+     "3.1",
+     "3.2",
+     "4.1",
+     "4.2",
+     "5.1",
+     "5.2",
+     "6.1",
+     "6.2"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gav",
+    "action": "start",
+    "regions": [
+     "zhytomyr"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": false,
+  "statedAt": null
+ },
+ "tags": [
+  "gav"
+ ],
+ "note": "\"на Житомирщині запроваджено аварійні відключення електроенергії (ГАВ)\"; \"ГАВ діє до окремого розпорядження\" → until null",
+ "uncertain": false
+}

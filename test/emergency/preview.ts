@@ -8,6 +8,8 @@ export interface PreviewPost {
   at: string
   text: string
   edited?: boolean
+  /** Picture links, as the preview's photo wraps */
+  photos?: string[]
 }
 
 const escape = (s: string) =>
@@ -19,6 +21,7 @@ export function previewPage(channel: string, posts: readonly PreviewPost[]): str
       p,
     ) => `<div class="tgme_widget_message_wrap js-widget_message_wrap"><div class="tgme_widget_message text_not_supported_wrap js-widget_message" data-post="${channel}/${p.id}">
   <div class="tgme_widget_message_bubble">
+    ${(p.photos ?? []).map((u) => `<a class="tgme_widget_message_photo_wrap" href="https://t.me/${channel}/${p.id}" style="width:800px;background-image:url('${u}')"></a>`).join('')}
     <div class="tgme_widget_message_text js-message_text" dir="auto">${escape(p.text).replace(/\n/g, '<br/>')}</div>
     <div class="tgme_widget_message_footer compact js-message_footer">
       <div class="tgme_widget_message_info short js-message_info">

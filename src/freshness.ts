@@ -41,7 +41,7 @@ const STALE: ReadonlySet<FreshnessIssueCode> = new Set([
  * | `not-updated`       | published, but not today, and `updatedAt` older than `staleAfterHours`       | `stale`       |
  * | `last-good`         | `stale` is set: the last good result stands in for a failed fetch            | `stale`       |
  * | `fetched-long-ago`  | `fetchedAt` older than `fetchedStaleAfterMinutes` (not next to `last-good`)  | `stale`       |
- * | `source-failed`     | some `sources[].ok` is false                                                 | unchanged     |
+ * | `source-failed`     | some `sources[].ok` is false (not for `config`: no processor configured)     | unchanged     |
  * | `sources-disagree`  | some `sources[].disagrees` is true                                           | unchanged     |
  * | `tomorrow-missing`  | `tomorrowExpectedAt` given, Kyiv time past it, tomorrow not published        | unchanged     |
  * | `partial`           | today published for some groups, `unknown` (or absent) for others            | unchanged     |
@@ -119,7 +119,8 @@ export function assessFreshness(
   else if (!(fetchedMinutesAgo <= (opts.fetchedStaleAfterMinutes ?? 30)))
     add('fetched-long-ago', `Fetched ${fetchedMinutesAgo} min ago (${schedule.fetchedAt})`)
 
-  const failed = schedule.sources?.filter((s) => !s.ok) ?? []
+  // a source left unread because no processor is configured is a choice, not a failure
+  const failed = schedule.sources?.filter((s) => !s.ok && s.error?.code !== 'config') ?? []
   if (failed.length)
     add(
       'source-failed',

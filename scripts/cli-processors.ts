@@ -1,0 +1,165 @@
+/**
+ * Dev-only processors that run a model through a local CLI instead of an API key: `claude -p`
+ * (Claude Code) and `codex exec` (Codex). For the eval set (`npm run eval -- --backend
+ * claude-cli`), not shipped. Each call is a process, so they are slow; the answers go through
+ * the same validation as any processor's.
+ */
+import { spawn } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  IMAGE_CHECK_SCHEMA,
+  IMAGE_CHECK_SYSTEM,
+  IMAGE_SCHEMA,
+  IMAGE_SYSTEM,
+  PROMPT_VERSION,
+  TEXT_SCHEMA,
+  TEXT_SYSTEM,
+  imagePrompt,
+  textPrompt,
+} from '../src/ai/prompts.js'
+import type { ImageInput, ImageProcessor, ProcessorResult, TextProcessor } from '../src/ai/types.js'
+
+function run(cmd: string, args: string[], signal?: AbortSignal): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], signal })
+    let out = ''
+    let err = ''
+    child.stdout.on('data', (d) => (out += d))
+    child.stderr.on('data', (d) => (err += d))
+    child.on('error', reject)
+    child.on('close', (code) =>
+      code === 0
+        ? resolve(out)
+        : reject(new Error(`${cmd} exited ${code}: ${err.slice(-500) || out.slice(-500)}`)),
+    )
+  })
+}
+
+const scratch = () => mkdtempSync(join(tmpdir(), 'ua-outages-eval-'))
+const ext = (input: ImageInput) => (input.mediaType === 'image/png' ? 'png' : 'jpg')
+
+// --- Claude Code ---
+
+async function claude(
+  model: string,
+  system: string,
+  schema: object,
+  prompt: string,
+  signal?: AbortSignal,
+  image?: ImageInput,
+): Promise<ProcessorResult> {
+  const dir = image ? scratch() : null
+  try {
+    let text = prompt
+    const tools: string[] = ['--tools', '']
+    if (image && dir) {
+      const file = join(dir, `picture.${ext(image)}`)
+      writeFileSync(file, image.bytes)
+      text = `Look at the picture in ${file} (use the Read tool on it), then answer.\n\n${prompt}`
+      tools.splice(0, 2, '--tools', 'Read', '--allowedTools', 'Read', '--add-dir', dir)
+    }
+    const out = await run(
+      'claude',
+      [
+        '-p',
+        '--model',
+        model,
+        ...tools,
+        '--disable-slash-commands',
+        '--strict-mcp-config',
+        '--setting-sources',
+        '',
+        '--no-session-persistence',
+        '--system-prompt',
+        system,
+        '--output-format',
+        'json',
+        '--json-schema',
+        JSON.stringify(schema),
+        text,
+      ],
+      signal,
+    )
+    const res = JSON.parse(out) as {
+      structured_output?: unknown
+      result?: string
+      modelUsage?: Record<string, { inputTokens: number; outputTokens: number; cacheReadInputTokens: number }>
+    }
+    const usage = Object.values(res.modelUsage ?? {}).reduce(
+      (a, u) => ({
+        inputTokens: a.inputTokens + u.inputTokens,
+        outputTokens: a.outputTokens + u.outputTokens,
+      }),
+      { inputTokens: 0, outputTokens: 0 },
+    )
+    return { value: res.structured_output ?? JSON.parse(res.result ?? 'null'), usage }
+  } finally {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+export function claudeCliText(model = 'haiku'): TextProcessor {
+  return {
+    id: `claude-cli:${model}:${PROMPT_VERSION}`,
+    analyzePost: (input, o) => claude(model, TEXT_SYSTEM, TEXT_SCHEMA, textPrompt(input), o.signal),
+  }
+}
+
+export function claudeCliImage(model = 'haiku', maxLongEdge?: number): ImageProcessor {
+  return {
+    id: `claude-cli:${model}:${PROMPT_VERSION}`,
+    maxLongEdge,
+    readImage: (input, o) => claude(model, IMAGE_SYSTEM, IMAGE_SCHEMA, imagePrompt(input), o.signal, input),
+    isSchedule: (input, o) =>
+      claude(model, IMAGE_CHECK_SYSTEM, IMAGE_CHECK_SCHEMA, input.caption ?? 'No caption.', o.signal, input),
+  }
+}
+
+// --- Codex ---
+
+async function codex(
+  model: string,
+  system: string,
+  schema: object,
+  prompt: string,
+  signal?: AbortSignal,
+  image?: ImageInput,
+): Promise<ProcessorResult> {
+  const dir = scratch()
+  try {
+    const schemaFile = join(dir, 'schema.json')
+    const outFile = join(dir, 'out.json')
+    writeFileSync(schemaFile, JSON.stringify(schema))
+    const args = ['exec', '-m', model, '--skip-git-repo-check', '--ephemeral', '-s', 'read-only']
+    args.push('--output-schema', schemaFile, '-o', outFile)
+    if (image) {
+      const file = join(dir, `picture.${ext(image)}`)
+      writeFileSync(file, image.bytes)
+      args.push(`--image=${file}`)
+    }
+    args.push(`${system}\n\n${prompt}`)
+    await run('codex', args, signal)
+    return { value: JSON.parse(readFileSync(outFile, 'utf8')) }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+export function codexCliText(model = 'gpt-6.1-terra'): TextProcessor {
+  return {
+    id: `codex-cli:${model}:${PROMPT_VERSION}`,
+    analyzePost: (input, o) => codex(model, TEXT_SYSTEM, TEXT_SCHEMA, textPrompt(input), o.signal),
+  }
+}
+
+export function codexCliImage(model = 'gpt-6.1-terra', maxLongEdge?: number): ImageProcessor {
+  return {
+    id: `codex-cli:${model}:${PROMPT_VERSION}`,
+    maxLongEdge,
+    readImage: (input, o) => codex(model, IMAGE_SYSTEM, IMAGE_SCHEMA, imagePrompt(input), o.signal, input),
+    isSchedule: (input, o) =>
+      codex(model, IMAGE_CHECK_SYSTEM, IMAGE_CHECK_SCHEMA, input.caption ?? 'No caption.', o.signal, input),
+  }
+}

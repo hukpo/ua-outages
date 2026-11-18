@@ -1,0 +1,81 @@
+{
+ "input": {
+  "url": "https://t.me/oe_cv_ua/4032",
+  "source": {
+   "kind": "telegram",
+   "channel": "oe_cv_ua"
+  },
+  "publishedAt": "2026-11-16T00:57:00+02:00",
+  "edited": false,
+  "title": null,
+  "text": "⚡ Орієнтовний графік заживлення на 16.11.2026\n━━━━━━━━━━━━━━━━━━━━━\n\n🔍 Дізнатись номер своєї групи\n\n⚠️ У години пікового навантаження на енергосистему\n(09:00-11:00 та 18:00-20:00) просимо ощадливо\nспоживати електроенергію!\n\n━━━━━━━━━━━━━━━━━━━━━\n📲 Передати показники — Чат-БОТ\n💻 Передати показники — Особистий кабінет",
+  "replyTo": null,
+  "photoCount": 2,
+  "regions": [
+   {
+    "id": "chernivtsi",
+    "name": "Чернівецька область",
+    "queues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10",
+     "11",
+     "12"
+    ],
+    "emergencyQueues": [
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "9",
+     "10"
+    ]
+   }
+  ]
+ },
+ "expected": {
+  "events": [
+   {
+    "kind": "gpv",
+    "action": "start",
+    "regions": [
+     "chernivtsi"
+    ],
+    "area": null,
+    "date": null,
+    "at": null,
+    "until": null,
+    "allQueues": false,
+    "queues": [],
+    "queuesRestored": [],
+    "queueCount": null,
+    "additive": false,
+    "again": false,
+    "gpvApplies": null,
+    "addedInEdit": false,
+    "untilFurtherNotice": false,
+    "schedule": []
+   }
+  ],
+  "photosAreSchedules": true,
+  "statedAt": null
+ },
+ "tags": [
+  "gpv",
+  "album",
+  "tricky"
+ ],
+ "note": "\"Орієнтовний графік заживлення на <date>\": schedule only in the 2 photos (tables of power hours per group) → gpv start, schedule []. \"(09:00-11:00 та 18:00-20:00) просимо ощадливо споживати\" is an appeal, not hours.",
+ "uncertain": false
+}

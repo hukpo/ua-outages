@@ -1,14 +1,19 @@
+import { toSlots } from '../ai/map.js'
+import { analyzeAll, channelInputs } from '../ai/posts.js'
+import { clockMinutes } from '../ai/validate.js'
 import { readChannelWindow, type TelegramPost } from '../emergency/telegram.js'
 import { OutageError } from '../errors.js'
 import { makeDay, type MinuteSlot } from '../schedule.js'
 import { addDays, kyivDate, kyivInstant, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId } from '../types.js'
+import { gpvEvents } from './posts.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead } from './sources.js'
 
 /**
  * Kirovohradoblenergo's Telegram channels: the dispatcher's system posts the whole ГПВ list as
- * text the evening before, and again on every change.
+ * text the evening before, and again on every change; the posts are read by the client's text
+ * processor.
  *
  * ```
  * 17.11.2026 за розпорядженням НЕК "Укренерго" буде діяти наступний графік погодинних відключень (ГПВ):
@@ -54,119 +59,83 @@ export interface GpvVersion {
   slots: Record<GroupId, MinuteSlot[]>
 }
 
-const DATE = String.raw`(\d{2})\.(\d{2})\.(\d{4})`
-// the day a list is for: "[На ]17.11.2026 за розпорядженням …", and until 05.11.2026
-// "За розпорядженням НЕК "Укренерго" 05.11.2026 буде діяти …"
-const LIST_DATE = [
-  new RegExp(`^(?:На\\s+)?${DATE}\\s+за\\s+(?:розпорядженням|наказом)`, 'i'),
-  new RegExp(`Укренерго["”»]?\\s+${DATE}\\s+(?:буде\\s+діяти|внесено\\s+зміни)`, 'i'),
-]
-const STAMP = new RegExp(`(?:станом\\s+на|Зміни\\s+на)\\s+(\\d{1,2}):(\\d{2})\\s+${DATE}`, 'i')
-const CANCEL = new RegExp(
-  `^${DATE}\\s+за\\s+(?:наказом|розпорядженням)\\s+НЕК\\s+["“«]?Укренерго["”»]?\\s+ГПВ(?:\\s+та\\s+ГОП)?\\s+скасовано`,
-  'i',
-)
-// the dispatcher's system also posts an emptied list: "На 15.11.2026 за розпорядженням НЕК "Укренерго"
-// скасовано графік погодинних відключень (ГПВ) станом на 20:00 15.11.2026:" (seen in a district
-// channel, t.me/SvitloHolovanivskohoRayonu/1792)
-const CANCEL_DAY = new RegExp(
-  `^(?:На\\s+)?${DATE}\\s+за\\s+(?:наказом|розпорядженням)\\s+НЕК\\s+["“«]?Укренерго["”»]?\\s+скасовано\\s+графік\\S*\\s+погодинних\\s+відключень`,
-  'i',
-)
-const GROUP_LINE = /^Черга\s+(\d+)\.(\d+)\s*:\s*(.*)$/
-const RANGE = /^(\d{1,2})(?::(\d{2}))?\s*[-–]\s*(\d{1,2})(?::(\d{2}))?$/
-
-const iso = (m: RegExpExecArray, from: number) => `${m[from + 2]}-${m[from + 1]}-${m[from]}`
-
 /**
- * The ГПВ statements among a channel's posts, oldest first. Posts of another kind (СГАВ notices,
- * forecasts, ГОП orders) are skipped. A post that is a ГПВ list or cancellation and can't be read
- * exactly is a `parse` error when it is recent enough to matter (posted since yesterday): a list
+ * The ГПВ statements among a channel's posts, oldest first, read by the client's text processor.
+ * Posts of another kind (СГАВ notices, forecasts, ГОП orders) give none. A post that can't be
+ * read is a `parse` error when it is recent enough to matter (posted since yesterday): a list
  * read wrong, or skipped while an older one stands, would be shown as the schedule.
+ *
+ * Every list states the whole day, so a correction ("внесено зміни …") is a whole list too,
+ * whatever the processor calls it. The operator's change time ("станом на 15:45 15.11.2026") is
+ * the version's time when the post follows it within the hour.
  */
-export function parseGpvPosts(posts: readonly TelegramPost[], now: Date): GpvVersion[] {
+export async function gpvVersions(
+  ctx: ProviderContext,
+  posts: readonly TelegramPost[],
+): Promise<GpvVersion[]> {
+  const region = 'kirovohrad'
+  const now = ctx.now()
   const recent = kyivInstant(addDays(kyivDate(now), -1), 0).getTime()
+  const sorted = [...posts].sort((a, b) => a.id - b.id)
+  const analyzed = await analyzeAll(ctx, region, channelInputs(sorted, region))
   const out: GpvVersion[] = []
-  for (const p of [...posts].sort((a, b) => a.id - b.id)) {
-    const postedAt = Date.parse(p.at)
-    const fail = (what: string): never => {
-      throw new OutageError('parse', `Telegram @${p.channel}: ГПВ post ${p.id}: ${what}`, {
-        region: 'kirovohrad',
-        url: p.url,
-      })
+  for (const { input, analysis, error } of analyzed) {
+    const postedAt = Date.parse(input.publishedAt)
+    if (!analysis) {
+      if (postedAt >= recent) throw error
+      continue
     }
-    try {
-      const v = parsePost(p, postedAt, fail)
-      if (v) out.push(v)
-    } catch (e) {
-      if (postedAt >= recent) throw e
+    for (const ev of gpvEvents(analysis, region)) {
+      const date = ev.date ?? kyivDate(new Date(postedAt))
+      const posted = kyivDate(new Date(postedAt))
+      if (date < posted || date > addDays(posted, 2)) {
+        if (postedAt >= recent)
+          throw new OutageError('parse', `${input.url}: the date ${date} doesn't fit a post of ${posted}`, {
+            region,
+            url: input.url,
+          })
+        continue
+      }
+      const base = {
+        date,
+        at: stampOr(analysis.statedAt, date, input.publishedAt),
+        postedAt: input.publishedAt,
+        url: input.url,
+      }
+      if (ev.action === 'cancel') {
+        out.push({ ...base, cancelled: true, untilFurtherOrder: ev.untilFurtherNotice, slots: {} })
+        continue
+      }
+      // hours only in a picture: not a list this channel posts
+      if (!ev.schedule.length) continue
+      const slots: Record<GroupId, MinuteSlot[]> = {}
+      for (const q of ev.schedule) {
+        if (!q.intervals) {
+          if (postedAt >= recent)
+            throw new OutageError('parse', `${input.url}: group ${q.queue} is listed without hours`, {
+              region,
+              url: input.url,
+            })
+          continue
+        }
+        slots[q.queue] = toSlots(q.intervals)
+      }
+      out.push({ ...base, cancelled: false, slots })
     }
   }
   return out
 }
 
-function parsePost(p: TelegramPost, postedAt: number, fail: (what: string) => never): GpvVersion | null {
-  const text = p.text.trim()
-  const base = { postedAt: p.at, url: p.url }
-  const cancel = CANCEL.exec(text)
-  if (cancel) {
-    const date = iso(cancel, 1)
-    checkDate(date, postedAt, fail)
-    return { ...base, date, at: p.at, cancelled: true, untilFurtherOrder: true, slots: {} }
+/** "станом на 23:56" is the change itself, when the post follows within the hour */
+function stampOr(stated: string | null, date: string, postIso: string): string {
+  if (!stated) return postIso
+  const postedAt = Date.parse(postIso)
+  const m = clockMinutes(stated)
+  for (const day of [kyivDate(new Date(postedAt)), date, addDays(date, -1)]) {
+    const stamp = kyivInstant(day, m).getTime()
+    if (postedAt - stamp >= 0 && postedAt - stamp <= 3600_000) return toKyivIso(new Date(stamp))
   }
-  const cancelDay = CANCEL_DAY.exec(text)
-  if (cancelDay) {
-    const date = iso(cancelDay, 1)
-    checkDate(date, postedAt, fail)
-    return { ...base, date, at: stampOr(text, p.at, postedAt), cancelled: true, slots: {} }
-  }
-  const lines = text.split('\n').map((l) => l.trim())
-  const first = lines.findIndex((l) => /^Черга\s+\d/.test(l))
-  if (first === -1) {
-    // "16.11.26 у 19:00 скасовано СГАВ" is the emergency reader's; a ГПВ cancel in new words isn't
-    if (/скасовано/i.test(text) && /(?<![\p{L}])ГПВ(?![\p{L}])/u.test(text))
-      fail('a cancellation in an unknown wording')
-    return null
-  }
-  const head = lines.slice(0, first).join(' ')
-  if (!/погодинних\s+відключень/i.test(head)) return null
-  const m = LIST_DATE.map((re) => re.exec(head)).find(Boolean)
-  if (!m) return fail('no date in the heading')
-  const date = iso(m, 1)
-  checkDate(date, postedAt, fail)
-
-  const slots: Record<GroupId, MinuteSlot[]> = {}
-  for (const line of lines.slice(first)) {
-    if (!/^Черга(?![\p{L}])/u.test(line)) continue
-    const g = GROUP_LINE.exec(line)
-    const group = g ? `${Number(g[1])}.${Number(g[2])}` : ''
-    if (!g || !KIROVOHRAD_GROUPS.includes(group)) return fail(`unexpected line "${line}"`)
-    if (slots[group]) return fail(`group ${group} is listed twice`)
-    slots[group] = g[3]!.split(',').map((part): MinuteSlot => {
-      const r = RANGE.exec(part.trim())
-      const start = r ? Number(r[1]) * 60 + Number(r[2] ?? 0) : NaN
-      const end = r ? Number(r[3]) * 60 + Number(r[4] ?? 0) : NaN
-      if (!r || Number(r[2] ?? 0) > 59 || Number(r[4] ?? 0) > 59 || !(start < end) || end > 1440)
-        return fail(`unexpected hours "${part.trim()}" for group ${group}`)
-      return { start, end, kind: 'off' }
-    })
-  }
-
-  return { ...base, date, at: stampOr(head, p.at, postedAt), cancelled: false, slots }
-}
-
-/** "станом на 23:56 16.11.2026" is the change itself; the post follows within minutes */
-function stampOr(head: string, postIso: string, postedAt: number): string {
-  const s = STAMP.exec(head)
-  const stamp = s ? kyivInstant(iso(s, 3), Number(s[1]) * 60 + Number(s[2])).getTime() : NaN
-  return postedAt - stamp >= 0 && postedAt - stamp <= 3600_000 ? toKyivIso(new Date(stamp)) : postIso
-}
-
-/** A list is posted for the day it is posted on or the next one; anything else is a misread */
-function checkDate(date: string, postedAt: number, fail: (what: string) => never): void {
-  const posted = kyivDate(new Date(postedAt))
-  if (addDays(date, 0) !== date || date < posted || date > addDays(posted, 2))
-    fail(`the date ${date} doesn't fit a post of ${posted}`)
+  return postIso
 }
 
 /**
@@ -213,5 +182,5 @@ export async function readGpvChannel(ctx: ProviderContext): Promise<GpvVersion[]
     since,
     maxPages: 4,
   })
-  return parseGpvPosts(posts, now)
+  return gpvVersions(ctx, posts)
 }

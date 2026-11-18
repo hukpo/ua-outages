@@ -1,3 +1,6 @@
+import { analyzeAll, channelInputs, failIfNewestUnread, type Analyzed } from '../ai/posts.js'
+import { toSlots } from '../ai/map.js'
+import type { PostAnalysis, PostEvent, PostInput } from '../ai/types.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { readChannelWindow } from '../emergency/telegram.js'
 import { addDays, kyivDate, kyivInstant, kyivMinuteOfDay, toKyivIso } from '../time.js'
@@ -5,19 +8,14 @@ import type { DaySchedule, GroupId, RegionId, RegionSchedule } from '../types.js
 import type { ProviderContext } from './provider.js'
 import type { SourceRead } from './sources.js'
 import { OutageError } from '../errors.js'
-import { findUaDate, findUaDates, parseGroupPost } from './ua-text.js'
+import { clockMinutes } from '../ai/validate.js'
 
 /**
- * Operators that publish each day's schedule as a news post ("ГПВ на 6 листопада":
- * "1.1 00:00-03:00; 08:00-13:30"). Corrections arrive as newer posts for the same date.
+ * Operators that publish each day's schedule as a post ("ГПВ на 6 листопада":
+ * "1.1 00:00-03:00; 08:00-13:30"), in their channel or as site news. Corrections arrive as newer
+ * posts for the same date. The posts are read by the client's text processor (`PostInput` →
+ * `PostAnalysis`); this module only puts the answers together per day.
  */
-export interface SchedulePost {
-  title: string
-  /** HTML or text */
-  body: string
-  /** When the post was published or last edited, ISO */
-  publishedAt: string
-}
 
 export interface PostsOptions {
   /**
@@ -25,6 +23,12 @@ export interface PostsOptions {
    * 'none': the operator lists only the groups that have outages, so it has none that day.
    */
   omitted?: 'unknown' | 'none'
+  /**
+   * The posts have no time of their own (a site page): their `publishedAt` is only the date
+   * they were read against. The order given is the order of publication, newest first, and no
+   * post is taken to have gone out during the day it is about.
+   */
+  timeless?: boolean
   /** Groups the region always has; with `omitted: 'none'` they all get a day, listed or not */
   groups?: readonly string[]
   /**
@@ -33,13 +37,6 @@ export interface PostsOptions {
    * the morning's outages are gone from the text); see `layerPublications`.
    */
   updates?: 'replace' | 'layer'
-  /**
-   * With `updates: 'layer'`: the minute of `date` from which the post replaces what was
-   * published before, when its text says so ("оновлено з 15:00"); 0 = the whole day. Without
-   * it, or when it returns undefined: the post's `publishedAt` when that falls on the day the
-   * post is about, otherwise 0 (published the evening before: the whole day).
-   */
-  effectiveFrom?: (post: SchedulePost, date: string) => number | undefined
 }
 
 /** One publication about one day */
@@ -48,8 +45,15 @@ export interface Publication {
   groups: Record<string, MinuteSlot[] | null>
   /** Minute of the day from which it replaces older publications; 0 = the whole day */
   from: number
+  /** …and up to which ("з 10:00 до 16:00"); the end of the day when absent */
+  to?: number
   /** The operator cancelled the day's schedule; `groups` is empty */
   cancelled?: boolean
+  /**
+   * A correction to some groups ("з 6:00 до 8:00 додатково відключаються 1.1 та 1.2"): their
+   * listed slots are added to what they had, `null` makes them not known; the rest stay as they were
+   */
+  add?: boolean
 }
 
 /**
@@ -86,7 +90,18 @@ export function layerPublications(
       cancelled = true
       continue
     }
-    if (pub.from <= 0 || cancelled) {
+    if (pub.add) {
+      if (cancelled) continue
+      const next = { ...cur }
+      for (const [g, slots] of Object.entries(pub.groups)) {
+        const prev = cur[g]
+        next[g] = slots === null || prev === null ? null : [...(prev ?? []), ...slots]
+      }
+      cur = next
+      continue
+    }
+    const to = pub.to ?? 1440
+    if ((pub.from <= 0 && to >= 1440) || cancelled) {
       cur = { ...pub.groups }
       cancelled = false
       continue
@@ -95,13 +110,18 @@ export function layerPublications(
     for (const g of new Set([...Object.keys(cur), ...Object.keys(pub.groups)])) {
       const prev = cur[g]
       const now = pub.groups[g]
-      const before = (prev ?? [])
-        .filter((s) => s.start < pub.from)
-        .map((s) => ({ ...s, end: Math.min(s.end, pub.from) }))
+      // what the earlier publications had outside the window
+      const outside = (prev ?? []).flatMap((s) => [
+        ...(s.start < pub.from ? [{ ...s, end: Math.min(s.end, pub.from) }] : []),
+        ...(s.end > to ? [{ ...s, start: Math.max(s.start, to) }] : []),
+      ])
       if (now === null) next[g] = null
-      else if (now) next[g] = [...before, ...now]
+      // the hours outside the window weren't known: they still aren't
+      else if (now) next[g] = prev === null ? null : [...outside, ...now]
       else if (prev !== undefined)
-        next[g] = prev && (omitted === 'none' || prev.every((s) => s.end <= pub.from) ? before : null)
+        next[g] =
+          prev &&
+          (omitted === 'none' || prev.every((s) => s.end <= pub.from || s.start >= to) ? outside : null)
     }
     cur = next
   }
@@ -120,159 +140,108 @@ export interface PostDay {
   cancelled: boolean
 }
 
-/** Emergency (ГАВ/СГАВ) notices can name queues and hours too; they aren't the hourly schedule */
-const EMERGENCY = /аварійн|(?<!\p{L})С?ГАВ(?!\p{L})/iu
-const HOURLY = /погодинн|(?<!\p{L})ГПВ(?!\p{L})/iu
-const CANCELLED =
-  /скасов|відмін(?:ен|я)|не\s+застосов|не\s+діятим|не\s+буд\p{L}+\s+(?:діяти|застосов)|не\s+прогнозу|не\s+передбач/iu
-/** "будуть скасовані після стабілізації", "продовжують діяти": not a cancellation of the day */
-const NOT_NOW = /продовжу|після|можлив|якщо|у\s+разі/iu
-
-/** A sentence that calls the hourly schedule off, and isn't about ГАВ or the industry's ГОП */
-function cancelsSchedule(text: string): boolean {
-  // such a notice is a few lines; an article that explains the schedules mentions all of this
-  if (text.length > 1500) return false
-  return text
-    .slice(0, 700)
-    .split(/[.!?\n]+/)
-    .some(
-      (s) =>
-        HOURLY.test(s) &&
-        CANCELLED.test(s) &&
-        !EMERGENCY.test(s) &&
-        !NOT_NOW.test(s) &&
-        !/(?<!\p{L})ГОП(?!\p{L})|потужності/iu.test(s),
-    )
-}
-
-const plainLines = (html: string) =>
-  html
-    .split(/\n|<br\s*\/?>|<\/p>|<\/li>|<\/div>|<\/tr>|<\/h\d>/i)
-    .map((l) =>
-      l
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/&nbsp;/g, ' ')
-        .trim(),
-    )
-    .filter(Boolean)
-
-const hasGroups = (line: string) => Object.keys(parseGroupPost(line)).length > 0
-
-/** "станом на 22:00 17 листопада", "оновлено о 23:00, 15.11.2026": when it was said, not the day it is about */
-const STAMP_BEFORE = /(?:станом\s+на|оновлен\p{L}*)[\s,]*(?:(?:з|об?)\s+)?(?:\d{1,2}[:.]\d{2}[\s,]*)?$/iu
-/** "на 17 листопада", "на сьогодні, 15 листопада", "на вівторок, 17 листопада" */
-const FOR_BEFORE = /(?<!\p{L})на\s+(?:\p{L}+,\s*)?$/iu
-
 /**
- * The one day a piece of text names. A single date (however often) is it. Of several, the
- * times of statement ("станом на …", "оновлено …") don't count, and the one the text says the
- * schedule is "на" wins; when that doesn't settle it, `undefined`: two days, and no telling
- * which the schedule is for. `null` when the text has no date.
+ * When a post says it was issued: the time it says ("станом на 21:25", "(оновлено 21:25)") on
+ * the day it is about, or the evening before, whichever is the latest not after `now`; or, for
+ * an update "з 15:00", that time on the day when it has come. Null when it says neither.
  */
-function namedDate(text: string, ref: Date): string | null | undefined {
-  const all = findUaDates(text, ref)
-  if (!all.length) return null
-  const distinct = (list: typeof all) => [...new Set(list.map((d) => d.date))]
-  if (distinct(all).length === 1) return all[0]!.date
-  const about = all.filter((d) => !STAMP_BEFORE.test(text.slice(0, d.index)))
-  const stated = distinct(about.filter((d) => FOR_BEFORE.test(text.slice(0, d.index))))
-  if (stated.length === 1) return stated[0]
-  return !stated.length && distinct(about).length === 1 ? about[0]!.date : undefined
-}
-
-/**
- * The day a post is about: the date its title or opening names (see `namedDate`; a title or
- * opening that names two days it can't choose between gives no day at all); without one,
- * "сьогодні" / "завтра" counted from the post's own time, when only one of them is said.
- * Never the post time alone.
- */
-function postDate(title: string, header: string, body: string, ref: Date): string | null {
-  for (const text of [title, header.slice(0, 600)]) {
-    const named = namedDate(text, ref)
-    if (named !== null) return named ?? null
+export function statedTime(a: PostAnalysis, region: RegionId, date: string, now: Date): string | null {
+  const ev = gpvEvents(a, region).find((e) => (e.date ?? date) === date)
+  const limit = now.getTime() + 10 * 60_000
+  if (ev?.at) {
+    const t = kyivInstant(date, clockMinutes(ev.at))
+    return t.getTime() <= limit ? toKyivIso(t) : null
   }
-  // the lines below the opening: a second day's heading may follow the first day's groups
-  const named = findUaDate(body.slice(0, 600), ref)
-  if (named) return named
-  const said = `${title} ${header}`.toLowerCase()
-  const today = kyivDate(ref)
-  const words = [
-    /післязавтра/.test(said) && 2,
-    /(?<!після)завтра/.test(said) && 1,
-    /сьогодні/.test(said) && 0,
-  ].filter((n): n is number => n !== false)
-  return words.length === 1 ? addDays(today, words[0]!) : null
+  if (!a.statedAt) return null
+  const m = clockMinutes(a.statedAt)
+  const t = [date, addDays(date, -1)].map((d) => kyivInstant(d, m)).find((x) => x.getTime() <= limit)
+  return t ? toKyivIso(t) : null
 }
 
 /**
- * A post → the days it publishes. Usually one; a post with a second dated heading after the
- * first day's groups ("17 листопада: …  18 листопада: …") gives one part per date.
+ * The hourly-schedule events of an answer that are about `region` as a whole: a schedule for one
+ * town (an `area`, with its own numbering) is not the region's
  */
-function postParts(post: SchedulePost, ref: Date): { date: string | null; text: string }[] {
-  const lines = plainLines(post.body)
-  const first = lines.findIndex(hasGroups)
-  const header = (first === -1 ? lines : lines.slice(0, first)).join('\n')
-  // an emergency notice that lists queues is not a schedule
-  if (EMERGENCY.test(`${post.title} ${header}`) && !HOURLY.test(`${post.title} ${header}`)) return []
-  const date = postDate(post.title, header, lines.join(' '), ref)
-  if (first === -1) return [{ date, text: lines.join('\n') }]
-  const parts = [{ date, lines: lines.slice(0, first) }]
-  let seen = false
-  for (const line of lines.slice(first)) {
-    const part = parts.at(-1)!
-    if (hasGroups(line)) seen = true
-    else if (seen && !/\d{1,2}[:.]\d{2}\s*(?:[-–—−]|до|по)/.test(line)) {
-      const other = findUaDate(line, ref)
-      if (other && other !== part.date) {
-        parts.push({ date: other, lines: [line] })
-        seen = false
-        continue
-      }
-    }
-    part.lines.push(line)
-  }
-  return parts.map((p) => ({ date: p.date, text: p.lines.join('\n') }))
-}
+export const gpvEvents = (a: PostAnalysis, region: RegionId): PostEvent[] =>
+  a.events.filter((e) => e.kind === 'gpv' && e.regions.includes(region) && !e.area)
+
+/** The answer publishes a schedule (or calls one off) for `region` */
+export const hasSchedule = (a: PostAnalysis, region: RegionId) => gpvEvents(a, region).length > 0
 
 /**
- * Posts → what they say per date, for yesterday and later, dates sorted. Posts are ranked by
- * `publishedAt`; among posts with the same or no time, the one earlier in the list is newer.
- * Posts without group lines (announcements, emergency notices) are ignored, except a
- * cancellation of the hourly schedule for a date, which leaves that date not known.
+ * Analysed posts → what they say per date, for yesterday and later, dates sorted. Posts are
+ * ranked by `publishedAt`; among posts with the same time, the one earlier in the list is newer.
+ * Only `gpv` events count: a "start" or "change" lists queues and hours, a "cancel" calls the
+ * day's schedule off, which leaves that date not known.
+ *
+ * With `updates: 'layer'`, a post replaces what was published before from the time it says
+ * ("оновлено з 15:00": the event's `at`), else from its own time when it is about its own day,
+ * else the whole day.
  */
 export function postsToDays(
-  posts: readonly SchedulePost[],
+  analyzed: readonly Analyzed[],
+  region: RegionId,
   now: Date,
   opts: PostsOptions = {},
 ): Map<string, PostDay> {
-  const byDate = new Map<string, { at: number; post: number; pub: Publication }[]>()
-  const from = addDays(kyivDate(now), -1)
+  return daysOf(textPublications(analyzed, region, now, opts), opts)
+}
 
-  posts.forEach((p, post) => {
-    const at = Date.parse(p.publishedAt)
-    const ref = Number.isFinite(at) ? new Date(at) : now
-    for (const { date, text } of postParts(p, ref)) {
-      if (!date || date < from) continue
-      // a schedule is published at most a couple of days ahead; anything else is a misread
-      if (Math.abs(Date.parse(date) - Date.parse(kyivDate(ref))) > 3 * 86_400_000) continue
-      const groups = parseGroupPost(text)
-      const cancelled = !Object.keys(groups).length
-      if (cancelled && !cancelsSchedule(`${p.title}\n${text}`)) continue
+/** One publication about one date, with the post it came from (its index) and time (ms, NaN unknown) */
+export interface DatedPublication {
+  date: string
+  at: number
+  post: number
+  pub: Publication
+}
+
+/** The `gpv` events of analysed posts → publications, yesterday and later */
+export function textPublications(
+  analyzed: readonly Analyzed[],
+  region: RegionId,
+  now: Date,
+  opts: PostsOptions = {},
+): DatedPublication[] {
+  const out: DatedPublication[] = []
+  const from = addDays(kyivDate(now), -1)
+  analyzed.forEach(({ input, analysis }, post) => {
+    if (!analysis) return
+    const at = opts.timeless ? NaN : Date.parse(input.publishedAt)
+    const ref = new Date(Date.parse(input.publishedAt) || now.getTime())
+    for (const ev of gpvEvents(analysis, region)) {
+      const date = ev.date ?? kyivDate(ref)
+      if (date < from) continue
+      const cancelled = ev.action === 'cancel'
+      // hours in the post's picture, not its text: the picture reader has them
+      if (!cancelled && !ev.schedule.length) continue
+      const groups: Record<string, MinuteSlot[] | null> = {}
+      if (!cancelled) for (const q of ev.schedule) groups[q.queue] = q.intervals ? toSlots(q.intervals) : null
       const during = Number.isFinite(at) && kyivDate(ref) === date ? kyivMinuteOfDay(ref) : 0
-      const list = byDate.get(date) ?? []
-      list.push({
+      out.push({
+        date,
         at,
         post,
         pub: {
           groups,
-          from: opts.updates === 'layer' ? (opts.effectiveFrom?.(p, date) ?? during) : 0,
+          from: opts.updates === 'layer' ? (ev.at ? clockMinutes(ev.at) : during) : 0,
+          // a list for a window of the day ("з 10:00 до 16:00") leaves the hours after it alone
+          ...(opts.updates === 'layer' && ev.at && ev.until ? { to: clockMinutes(ev.until, true) } : {}),
           ...(cancelled ? { cancelled } : {}),
+          ...(ev.action === 'change' ? { add: true } : {}),
         },
       })
-      byDate.set(date, list)
     }
   })
+  return out
+}
 
+/**
+ * Publications → what they say per date, dates sorted. Ranked by time; among the same or no
+ * time, the one with the lower post index is newer (lists are newest first).
+ */
+export function daysOf(pubs: readonly DatedPublication[], opts: PostsOptions = {}): Map<string, PostDay> {
+  const byDate = new Map<string, DatedPublication[]>()
+  for (const p of pubs) byDate.set(p.date, [...(byDate.get(p.date) ?? []), p])
   const out = new Map<string, PostDay>()
   for (const date of [...byDate.keys()].sort()) {
     // oldest first
@@ -291,6 +260,39 @@ export function postsToDays(
     out.set(date, { ...day, at: newest.at, post: newest.post })
   }
   return out
+}
+
+/**
+ * Posts through the text processor, then `postsToDays`. The source fails when a post newer than
+ * every schedule read couldn't be read itself (it may be the newest schedule).
+ */
+export async function readSchedulePosts(
+  ctx: ProviderContext,
+  region: RegionId,
+  inputs: readonly PostInput[],
+  opts: PostsOptions = {},
+): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[] }> {
+  const analyzed = await analyzeAll(ctx, region, inputs)
+  failIfNewestUnread(analyzed, (a) => hasSchedule(a, region), !!opts.timeless)
+  // the newest schedule post has its hours elsewhere (a picture, a link): a text reader can't
+  // show the day, and the post before it is no longer the schedule
+  const hours = (a: Analyzed) =>
+    a.analysis ? gpvEvents(a.analysis, region).some((e) => e.action === 'cancel' || e.schedule.length) : false
+  const elsewhere = (a: Analyzed) =>
+    !!a.analysis && gpvEvents(a.analysis, region).some((e) => e.action !== 'cancel' && !e.schedule.length)
+  const order = analyzed.map((a, i) => ({ a, rank: opts.timeless ? -i : Date.parse(a.input.publishedAt) }))
+  const newestHours = Math.max(-Infinity, ...order.filter((o) => hours(o.a)).map((o) => o.rank))
+  const blind = order.find((o) => elsewhere(o.a) && !hours(o.a) && o.rank > newestHours)
+  if (blind)
+    throw new OutageError(
+      'parse',
+      `${blind.a.input.url}: the newest schedule post has its hours outside its text`,
+      {
+        region,
+        url: blind.a.input.url,
+      },
+    )
+  return { days: postsToDays(analyzed, region, ctx.now(), opts), analyzed }
 }
 
 /** One date's groups → a `DaySchedule` per group of the region */
@@ -338,18 +340,13 @@ export function daysToSource(
   return { days: out, groups }
 }
 
-/**
- * Newest post per date wins (or is layered onto the older ones, see `PostsOptions.updates`).
- * Posts without group lines (announcements, emergency notices) are ignored. Only yesterday and
- * later is kept.
- */
+/** Days read from posts → the region's schedule (the region's groups listed even when unnamed) */
 export function postsToSchedule(
   region: RegionId,
-  posts: readonly SchedulePost[],
+  days: Map<string, PostDay>,
   now: Date,
   opts: PostsOptions = {},
 ): RegionSchedule {
-  const days = postsToDays(posts, now, opts)
   // no post with a schedule: the region's groups (when known) stay listed, unknown for today
   if (!days.size) return unpublished(region, opts.groups ?? [], now)
   const groups = groupsOf(days, opts)
@@ -409,11 +406,7 @@ export async function readChannelPosts(
       `Telegram @${channel}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
       { region, url: `https://t.me/s/${channel}` },
     )
-  const days = postsToDays(
-    posts.map((p) => ({ title: '', body: p.text, publishedAt: p.at })),
-    now,
-    opts,
-  )
+  const { days } = await readSchedulePosts(ctx, region, channelInputs(posts, region), opts)
   for (const date of [...days.keys()]) if (date < today) days.delete(date)
   return { read: daysToSource(days, opts), days }
 }
