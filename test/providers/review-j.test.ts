@@ -199,3 +199,64 @@ describe('pictures', () => {
     expect(r.days.get('2026-11-18')!.groups['1.1']).toEqual([off(13, 14), off(16, 17)])
   })
 })
+
+describe('final review', () => {
+  it('a slot of a bounded update ends with the update: after it the earlier day stands', () => {
+    const day = layerPublications([
+      { from: 0, groups: { '1.1': [] } },
+      { from: 600, to: 960, groups: { '1.1': [off(15, 18)] } },
+    ])
+    expect(day.groups['1.1']).toEqual([off(15, 16)])
+  })
+
+  it('"з 14:00" in a region whose lists replace the day is still a window: the queues it leaves out are not "no outages"', async () => {
+    const text = fakeText(() => [
+      gpv(
+        { date: '2026-11-18', at: '14:00', schedule: gpvSchedule({ '1.1': '15:00-16:00' }, ['1.1']) },
+        'zaporizhzhia',
+      ),
+    ])
+    const ctx = ctxOf('2026-11-18T14:30:00+02:00', text)
+    const posts = [tg('Zaporizhzhyaoblenergo_news', 1, '2026-11-18T13:50:00+02:00', 'з 14:00')]
+    const { days } = await readSchedulePosts(ctx, 'zaporizhzhia', channelInputs(posts, 'zaporizhzhia'), {
+      omitted: 'none',
+      groups: STANDARD_GROUPS,
+    })
+    expect(days.get('2026-11-18')).toMatchObject({ based: false, groups: { '1.1': null } })
+  })
+
+  it('a correction of one queue after an unread poster does not clear the flag for the day', async () => {
+    const png = fixtureBytes('chernihiv/posters/tg-5718.jpg')
+    const posts = [
+      tg('chernigivoblenergo', 1, '2026-11-17T18:00:00+02:00', 'poster 1', 1),
+      tg('chernigivoblenergo', 2, '2026-11-17T19:00:00+02:00', 'poster 2', 1),
+      tg('chernigivoblenergo', 3, '2026-11-17T20:00:00+02:00', 'correction 1.2'),
+    ]
+    const text = fakeText((input) =>
+      input.text.startsWith('poster')
+        ? { photosAreSchedules: true, events: [gpv({ date: '2026-11-18' }, 'chernihiv')] }
+        : [
+            gpv(
+              {
+                action: 'change',
+                date: '2026-11-18',
+                schedule: gpvSchedule({ '1.2': '10:00-11:00' }, ['1.2']),
+              },
+              'chernihiv',
+            ),
+          ],
+    )
+    // the second poster is something else: unread
+    const image = fakeImage((input) =>
+      input.url.endsWith('/1')
+        ? {
+            date: '2026-11-18',
+            schedule: STANDARD_GROUPS.map((queue) => ({ queue, intervals: intervalsOf('08:00-10:00') })),
+          }
+        : undefined,
+    )
+    const ctx = ctxOf('2026-11-17T21:00:00+02:00', text, image, { 1: png, 2: png })
+    const r = await readPicturePosts(ctx, 'chernihiv', posts, { groups: STANDARD_GROUPS, updates: 'layer' })
+    expect(r.days.get('2026-11-18')!.unread).toBeDefined()
+  })
+})

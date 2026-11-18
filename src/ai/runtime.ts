@@ -188,11 +188,17 @@ export class AiRuntime {
     const keys = votes.map(key)
     const winner = votes.find((_, i) => keys.filter((k) => k === keys[i]).length >= 2)
     if (winner) return winner
-    throw new OutageError(
-      'parse',
-      `${input.url}: the readings of its emergency events disagree (${this.judge ? 'three ways' : 'no judgeProcessor'})`,
-      { region, url: input.url },
-    )
+    const message = `${input.url}: the readings of its emergency events disagree (${this.judge ? 'three ways' : 'no judgeProcessor'})`
+    // the second and third readings are asked again after a while, like any misread (the first
+    // one stays: its schedule events are used elsewhere)
+    for (const p of [this.verify, this.judge])
+      if (p)
+        await this.setQuietly(
+          sha('text', p.id, stable(input)),
+          { ok: false, code: 'parse', message, until: Date.now() + FAILED_TTL_MS },
+          FAILED_TTL_MS,
+        )
+    throw new OutageError('parse', message, { region, url: input.url })
   }
 
   /**

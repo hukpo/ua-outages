@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { postRegion } from '../../src/ai/regions.js'
 import { AiRuntime, MemoryProcessorCache } from '../../src/ai/runtime.js'
 import type { PostEvent, PostInput, ProcessedEvent } from '../../src/ai/types.js'
@@ -212,6 +212,26 @@ describe('AiRuntime: an emergency post is read twice, and a judge settles a disa
       verifyProcessor: fakeText(() => start(['2']), 'haiku'),
     })
     await expect(two.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
+  })
+
+  it('readers that disagree are asked again after 10 minutes, not answered from the cache forever', async () => {
+    const t0 = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(t0)
+    try {
+      const haiku = fakeText(() => start(['2']), 'haiku')
+      const ai = new AiRuntime({
+        textProcessor: fakeText(() => start(['1']), 'terra'),
+        verifyProcessor: haiku,
+      })
+      await expect(ai.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
+      await expect(ai.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
+      expect(haiku.calls).toHaveLength(1)
+      clock.mockReturnValue(t0 + 11 * 60_000)
+      await expect(ai.analyzeEmergencyPost('poltava', post)).rejects.toMatchObject({ code: 'parse' })
+      expect(haiku.calls).toHaveLength(2)
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it('a second reader that fails validation is no vote: the judge decides with the first', async () => {

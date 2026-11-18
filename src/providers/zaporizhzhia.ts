@@ -94,7 +94,19 @@ async function readChannel(ctx: ProviderContext, site: SiteRead | null): Promise
     for (const [date, day] of days) {
       const versions = site.versions.filter((v) => v.date === date)
       const same = versions.findIndex((v) => v.content === contentOf(date, day))
-      if (same > 0 || (same === 0 && site.read.days[date]?.publishedAt)) delete read.days[date]
+      if (same > 0 || (same === 0 && site.read.days[date]?.publishedAt)) {
+        // the site has it: the channel's copy goes, a post it couldn't read about the day stays said
+        const unread = read.days[date]?.unread
+        if (unread)
+          read.days[date] = {
+            schedules: Object.fromEntries(
+              STANDARD_GROUPS.map((g) => [g, { date, status: 'unknown' as const, intervals: [] }]),
+            ),
+            publishedAt: null,
+            unread,
+          }
+        else delete read.days[date]
+      }
     }
   return read
 }

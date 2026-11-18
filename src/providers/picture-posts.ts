@@ -163,7 +163,9 @@ export async function readPicturePosts(
   const wholeAfter = (d: string, i: number) =>
     pubs.some(
       (p) =>
-        p.date === d && p.post > i && (p.pub.cancelled || (p.pub.from <= 0 && (p.pub.to ?? 1440) >= 1440)),
+        p.date === d &&
+        p.post > i &&
+        (p.pub.cancelled || (!p.pub.add && p.pub.from <= 0 && (p.pub.to ?? 1440) >= 1440)),
     )
   const errors = new Map<string, OutageError>()
   for (const u of unread)

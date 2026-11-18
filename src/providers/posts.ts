@@ -144,7 +144,10 @@ export function layerPublications(
       ])
       // the window's own hours: a re-list posted at 14:00 keeps the morning as it was (an outage in
       // progress is listed from its start, and kept so)
-      const inside = now?.filter((s) => s.end > pub.from && s.start < to)
+      const inside = now
+        ?.filter((s) => s.end > pub.from && s.start < to)
+        // …and ends with it: after `to` the earlier publications stand
+        .map((s) => (s.end > to ? { ...s, end: to } : s))
       if (now === null) next[g] = null
       // the hours outside the window weren't known: they still aren't (a group the base didn't
       // list, when the base lists every group, is one of them)
@@ -242,10 +245,8 @@ export function scheduleDates(
     if (!e.schedule.length && !(opts.pictures && e.dateNamed)) return []
     // only a whole day stands in for an unread post: "з 14:00 до 18:00", or a list posted during
     // its day that replaces only the hours ahead, leaves the rest as the unread post may have made it
-    if (opts.updates === 'layer') {
-      if (e.at || e.until) return []
-      if (opts.layerFrom !== 'stated' && !opts.timeless && date === day) return []
-    }
+    if (e.at || e.until) return []
+    if (opts.updates === 'layer' && opts.layerFrom !== 'stated' && !opts.timeless && date === day) return []
     return [date]
   })
 }
@@ -314,16 +315,15 @@ export function textPublications(
         seq: seqOf(input, post),
         pub: {
           groups,
-          from:
-            opts.updates === 'layer'
-              ? ev.at
-                ? clockMinutes(ev.at)
-                : opts.layerFrom === 'stated'
-                  ? 0
-                  : during
+          // "з 14:00" said in the post is where it starts, in either mode; with 'layer', a post
+          // during its day otherwise starts at its own time
+          from: ev.at
+            ? clockMinutes(ev.at)
+            : opts.updates === 'layer' && opts.layerFrom !== 'stated'
+              ? during
               : 0,
           // a list for a window of the day ("з 10:00 до 16:00") leaves the hours after it alone
-          ...(opts.updates === 'layer' && ev.at && ev.until ? { to: clockMinutes(ev.until, true) } : {}),
+          ...(ev.at && ev.until ? { to: clockMinutes(ev.until, true) } : {}),
           ...(cancelled ? { cancelled } : {}),
           ...(ev.action === 'change' ? { add: true } : {}),
         },
