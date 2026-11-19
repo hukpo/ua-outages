@@ -101,9 +101,7 @@ export function zakarpattiaProvider(): Provider {
             id: `telegram:@${CHANNEL}`,
             url: `https://t.me/s/${CHANNEL}`,
             async read(ctx) {
-              const { days, url } = await readChannel(ctx)
-              for (const date of [...days.keys()]) if (date < today) days.delete(date)
-              return { ...daysToSource(days, opts), ...(url ? { url } : {}) }
+              return (await readChannel(ctx)).read(today)
             },
           },
           {

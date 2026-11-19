@@ -392,3 +392,146 @@ describe('steadyStamps', () => {
     })
   })
 })
+
+describe('mergeSources: one fold of every source', () => {
+  const d = '2026-11-05'
+  const slot = (start: number, end: number) => ({ start: start * 60, end: end * 60, kind: 'off' as const })
+
+  it("an update on one channel layers onto another channel's whole day", async () => {
+    const s = await mergeSources(ctx(), 'kharkiv', [
+      // the site's whole day, the evening before
+      spec('site', { days: { [d]: day('2026-11-04T20:00:00+02:00', { '1.1': off(d, 8 * 60, 10 * 60) }) } }),
+      // the channel: "оновлено з 14:00" for 1.1
+      spec('telegram:@x', {
+        days: {},
+        publications: [
+          {
+            date: d,
+            at: '2026-11-05T13:50:00+02:00',
+            pub: { from: 14 * 60, groups: { '1.1': [slot(18, 20)] } },
+          },
+        ],
+      }),
+    ])
+    expect(hhmm(s.schedules['1.1']![0]!)).toEqual(['08:00-10:00', '18:00-20:00'])
+    // the channel shaped the day last
+    expect(s.sources!.map((x) => x.dates)).toEqual([[], [d]])
+  })
+
+  it('an unread post flags its day until a newer whole day of any channel', async () => {
+    const unread = { days: [d], at: '2026-11-05T09:00:00+02:00', message: 'misread' }
+    const flagged = await mergeSources(ctx(), 'kharkiv', [
+      spec('site', { days: { [d]: day('2026-11-05T08:00:00+02:00', { '1.1': off(d, 0, 60) }) } }),
+      spec('telegram:@x', { days: {}, unread: [unread] }),
+    ])
+    // the day as read, flagged
+    expect(flagged.schedules['1.1']![0]!.status).toBe('scheduled')
+    expect(flagged.sources![1]!.unread).toEqual([{ date: d, message: 'misread' }])
+    const covered = await mergeSources(ctx(), 'kharkiv', [
+      spec('site', { days: { [d]: day('2026-11-05T09:30:00+02:00', { '1.1': off(d, 0, 60) }) } }),
+      spec('telegram:@x', { days: {}, unread: [unread] }),
+    ])
+    expect(covered.sources![1]!.unread).toBeUndefined()
+  })
+})
+
+describe('PR #24 review', () => {
+  const d = '2026-11-05'
+  const t = '2026-11-06'
+  const slot = (start: number, end: number) => ({ start: start * 60, end: end * 60, kind: 'off' as const })
+  const at = (h: number) => `2026-11-05T${String(h).padStart(2, '0')}:00:00+02:00`
+
+  it('"до окремого розпорядження" on one channel cancels a day only another channel published', async () => {
+    const s = await mergeSources(ctx(), 'kharkiv', [
+      spec('site', { days: { [t]: day(at(7), { '1.1': off(t, 480, 600) }) } }),
+      spec('telegram:@x', {
+        days: {},
+        publications: [
+          { date: d, at: at(9), pub: { groups: {}, from: 0, cancelled: true, untilFurtherNotice: true } },
+        ],
+      }),
+    ])
+    expect(s.schedules['1.1']!.find((x) => x.date === t)!.status).toBe('unknown')
+  })
+
+  it("a window's own rule says nothing of the hours outside it: a group the whole day left out stays unknown there", async () => {
+    const s = await mergeSources(
+      ctx(),
+      'kharkiv',
+      [
+        spec('api', { days: { [d]: day(at(7), { '1.1': off(d, 480, 600) }) } }),
+        spec('telegram:@x', {
+          days: {},
+          publications: [
+            {
+              date: d,
+              at: at(13),
+              pub: { groups: { '2.1': [slot(18, 20)] }, from: 14 * 60, omitted: 'none' },
+            },
+          ],
+        }),
+      ],
+      { groups: ['1.1', '2.1'] },
+    )
+    expect(s.schedules['2.1']![0]!.status).toBe('unknown')
+  })
+
+  it('the same list published again ("повертаємось до ГПВ") does not clear an unread change', async () => {
+    const list = { groups: { '1.1': [slot(8, 10)] }, from: 0, omitted: 'none' as const }
+    const s = await mergeSources(ctx(), 'dnipro-cek', [
+      spec('telegram:@cek', {
+        days: {},
+        publications: [
+          { date: d, at: at(8), seq: 1, pub: list },
+          { date: d, at: at(11), seq: 3, pub: { ...list, reissue: true } },
+        ],
+        unread: [{ days: [d], at: at(10), seq: 2, message: 'misread' }],
+      }),
+    ])
+    expect(s.sources![0]!.unread).toEqual([{ date: d, message: 'misread' }])
+  })
+
+  it('a window over an emergency day leaves the hours outside it unknown, not powered', async () => {
+    const s = await mergeSources(ctx(), 'kyiv', [
+      spec('api', { days: { [d]: day(at(7), { '1.1': { date: d, status: 'emergency', intervals: [] } }) } }),
+      spec('telegram:@x', {
+        days: {},
+        publications: [{ date: d, at: at(13), pub: { groups: { '1.1': [slot(18, 20)] }, from: 14 * 60 } }],
+      }),
+    ])
+    expect(s.schedules['1.1']![0]!.status).toBe('unknown')
+  })
+
+  it("an API's day on the night the clocks go back keeps its exact instants", async () => {
+    const dst = '2026-10-25'
+    const first = {
+      date: dst,
+      status: 'scheduled' as const,
+      intervals: [
+        { from: '2026-10-25T03:10:00+03:00', to: '2026-10-25T03:50:00+03:00', kind: 'off' as const },
+      ],
+    }
+    const s = await mergeSources(ctx(), 'kyiv', [
+      spec('api', { days: { [dst]: day('2026-10-24T20:00:00+03:00', { '1.1': first }) } }),
+    ])
+    expect(s.schedules['1.1']![0]!.intervals).toEqual(first.intervals)
+  })
+
+  it('a stamped newer block of the same page clears an unread block under it', async () => {
+    const s = await mergeSources(ctx(), 'zaporizhzhia', [
+      spec('site', {
+        days: {},
+        publications: [{ date: d, at: at(9), seq: 0, pub: { groups: { '1.1': [slot(8, 10)] }, from: 0 } }],
+        unread: [{ days: [d], at: null, seq: -1, message: 'misread' }],
+      }),
+    ])
+    expect(s.sources![0]!.unread).toBeUndefined()
+  })
+
+  it('the regional updatedAt is in Kyiv time, whatever the source wrote', async () => {
+    const s = await mergeSources(ctx(), 'kyiv', [
+      spec('api', { days: { [d]: day('2026-11-05T05:00:00Z', { '1.1': off(d, 0, 60) }) } }),
+    ])
+    expect(s.updatedAt).toBe('2026-11-05T07:00:00+02:00')
+  })
+})

@@ -78,8 +78,7 @@ async function readSite(ctx: ProviderContext): Promise<SourceRead> {
         region: INFO.id,
         headers: { Accept: 'application/vnd.api+json' },
       })
-      const { days } = await readSchedulePosts(ctx, INFO.id, kharkivPosts(res), POSTS)
-      return daysToSource(days, POSTS)
+      return (await readSchedulePosts(ctx, INFO.id, kharkivPosts(res), POSTS)).read
     } catch (e) {
       ctx.signal?.throwIfAborted()
       // nothing to read the posts with: another host won't change that

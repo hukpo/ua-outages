@@ -141,7 +141,6 @@ async function readChannel(ctx: ProviderContext): Promise<ChannelRead> {
       `Telegram @${CHANNEL}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
       { region, url: CHANNEL_URL },
     )
-  const { days, pictures, url } = await readPicturePosts(ctx, region, posts, POSTS)
-  for (const date of [...days.keys()]) if (date < today) days.delete(date)
-  return { ...daysToSource(days, POSTS), ...(url ? { url } : {}), posters: pictures }
+  const { pictures, read } = await readPicturePosts(ctx, region, posts, POSTS)
+  return { ...read(today), posters: pictures }
 }

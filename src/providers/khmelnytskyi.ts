@@ -249,15 +249,12 @@ function inputsOf(blocks: readonly string[], url: string, now: Date): PostInput[
 /** Announcements → what they say per date, with the operator's own time of the newest one */
 async function announced(ctx: ProviderContext, inputs: PostInput[], from: string): Promise<SourceRead> {
   const now = ctx.now()
-  const { days, analyzed } = await readSchedulePosts(ctx, INFO.id, inputs, TEXT)
-  for (const date of [...days.keys()]) if (date < from) days.delete(date)
-  return daysToSource(days, {
+  const { read } = await readSchedulePosts(ctx, INFO.id, inputs, {
     ...TEXT,
-    publishedAt: (day: PostDay, date) => {
-      const a = analyzed[day.post]?.analysis
-      return a ? statedTime(a, INFO.id, date, now) : null
-    },
+    since: from,
+    stamp: (p, a) => (a.analysis ? statedTime(a.analysis, INFO.id, p.date, now) : null),
   })
+  return read
 }
 
 /** The schedule page (text) and, for dates it has no text for, the archive's images */
@@ -273,21 +270,20 @@ async function readSite(ctx: ProviderContext): Promise<SourceRead> {
   ])
   const read = await announced(ctx, inputsOf(announcements(page), INFO.website, now), from)
   // the archive's images for the dates the page has no text for
-  const dates = latestImages(archive, from).filter((d) => !read.days[d.date])
-  if (dates.length) {
-    const opts = { groups: STANDARD_GROUPS }
-    const images = daysToSource(
-      await readSitePictures(
-        ctx,
-        region,
-        archivePictures(ctx, region, dates, (path) => `${SITE}${path}`),
-        opts,
-      ),
-      opts,
-    )
-    Object.assign(read.days, images.days)
+  const said = new Set((read.publications ?? []).map((p) => p.date))
+  const dates = latestImages(archive, from).filter((d) => !said.has(d.date))
+  if (!dates.length) return read
+  const { read: images } = await readSitePictures(
+    ctx,
+    region,
+    archivePictures(ctx, region, dates, (path) => `${SITE}${path}`),
+    { groups: STANDARD_GROUPS },
+  )
+  return {
+    ...read,
+    publications: [...(read.publications ?? []), ...(images.publications ?? [])],
+    unread: [...(read.unread ?? []), ...(images.unread ?? [])],
   }
-  return read
 }
 
 /**

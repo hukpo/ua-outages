@@ -6,8 +6,10 @@ import { OutageError } from '../errors.js'
 import { makeDay, type MinuteSlot } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionId } from '../types.js'
+import type { SourceRead } from './sources.js'
 import {
   assembleDays,
+  publicationsRead,
   type DatedPublication,
   type PostDay,
   type PostsOptions,
@@ -57,7 +59,7 @@ export async function readSitePictures(
   region: RegionId,
   pictures: readonly SitePicture[],
   opts: PostsOptions & { check?: (date: string, picture: SitePicture) => string | null } = {},
-): Promise<Map<string, PostDay>> {
+): Promise<Map<string, PostDay> & { read: SourceRead }> {
   const ai = aiOf(ctx)
   ai.requireImage(region)
   const info = postRegion(region)
@@ -141,7 +143,11 @@ export async function readSitePictures(
       if (!items.some((it) => it.days.includes(date)))
         unread(i, date, `none of the ${n} picture(s) for ${date} is a schedule`)
     }
-  return assembleDays(analyzed, pubs, items, region, now, opts)
+  // the days on their own, and for `mergeSources` the publications and what couldn't be read
+  const { check: _check, ...rest } = opts
+  return Object.assign(assembleDays(analyzed, pubs, items, region, now, opts), {
+    read: publicationsRead(analyzed, pubs, items, region, now, rest),
+  })
 }
 
 /** An archive's dated images (newest first per date) → the pictures `readSitePictures` takes */

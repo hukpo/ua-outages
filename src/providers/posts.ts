@@ -4,7 +4,7 @@ import type { PostAnalysis, PostEvent, PostInput } from '../ai/types.js'
 import { compareGroups, makeDay, unpublished, type MinuteSlot } from '../schedule.js'
 import { readChannelWindow } from '../emergency/telegram.js'
 import { addDays, kyivDate, kyivInstant, kyivMinuteOfDay, toKyivIso } from '../time.js'
-import type { DaySchedule, GroupId, RegionId, RegionSchedule } from '../types.js'
+import type { DaySchedule, DayStatus, GroupId, RegionId, RegionSchedule } from '../types.js'
 import type { ProviderContext } from './provider.js'
 import type { SourceRead } from './sources.js'
 import { OutageError } from '../errors.js'
@@ -59,6 +59,26 @@ export interface Publication {
    * listed slots are added to what they had, `null` makes them not known; the rest stay as they were
    */
   add?: boolean
+  /**
+   * What a group this publication doesn't list means (see `PostsOptions.omitted`); the fold's
+   * default when absent. Sources differ: ЦЕК lists only the groups that have outages, an API
+   * every group
+   */
+  omitted?: 'unknown' | 'none'
+  /** A whole day's groups whose status isn't `scheduled` ("no outages", emergency) */
+  status?: Record<string, DayStatus>
+  /**
+   * "скасовано до окремого розпорядження": the days after this one are cancelled too, whichever
+   * channel published them, until a newer list brings one back (see `foldPublications`)
+   */
+  untilFurtherNotice?: boolean
+  /**
+   * The same list published again ("повертаємось до ГПВ"): newer than what came between for which
+   * one stands, but no newer word on the day itself, so it doesn't stand in for an unread post
+   */
+  reissue?: boolean
+  /** The day as its source gave it (an API's instants): kept when nothing changes it after */
+  original?: Record<string, DaySchedule>
 }
 
 /**
@@ -91,14 +111,26 @@ export function layerPublications(
    * nothing named is not known, and one only a correction or a window named is not known either
    */
   based: boolean
+  /** Status of a group the whole day gave one other than `scheduled`, while nothing changed it */
+  status: Record<string, DayStatus>
+  /** What a group the whole day didn't list means */
+  omitted: 'unknown' | 'none'
 } {
   let cur: Record<string, MinuteSlot[] | null> = {}
   let cancelled = false
   let based = false
+  let status: Record<string, DayStatus> = {}
+  let baseOmitted = omitted
   for (const pub of pubs) {
+    const omitted = pub.omitted ?? baseOmitted
+    const statusBefore = status
+    status = { ...status }
+    // a group the publication changes is scheduled hours from then on
+    for (const g of Object.keys(pub.groups)) delete status[g]
     if (pub.cancelled) {
       cur = {}
       cancelled = true
+      status = {}
       continue
     }
     if (pub.add) {
@@ -107,8 +139,12 @@ export function layerPublications(
       for (const [g, slots] of Object.entries(pub.groups)) {
         const prev = cur[g]
         // added to what? without the day it adds to (no whole day, or one that didn't list the
-        // group and lists every group that has outages only with `omitted: 'none'`), not known
-        const unknownBase = prev === null || !based || (prev === undefined && omitted !== 'none')
+        // group when that day lists every group, by its own rule), not known; nor to an emergency
+        const unknownBase =
+          prev === null ||
+          !based ||
+          (prev === undefined && baseOmitted !== 'none') ||
+          statusBefore[g] === 'emergency'
         next[g] = slots === null || unknownBase ? null : [...(prev ?? []), ...slots]
       }
       cur = next
@@ -120,9 +156,12 @@ export function layerPublications(
       cur = { ...pub.groups }
       cancelled = false
       based = true
+      status = { ...pub.status }
+      baseOmitted = pub.omitted ?? baseOmitted
       continue
     }
     if (!based || cancelled) {
+      status = {}
       // part of a day with no whole day under it (or after a cancellation): the hours outside it
       // aren't known, and a day is whole or not known, so every group it or anything before named
       // is not known
@@ -148,19 +187,30 @@ export function layerPublications(
         ?.filter((s) => s.end > pub.from && s.start < to)
         // …and ends with it: after `to` the earlier publications stand
         .map((s) => (s.end > to ? { ...s, end: to } : s))
+      // an emergency's hours aren't a schedule: outside a window they aren't known
+      const emergency = statusBefore[g] === 'emergency'
       if (now === null) next[g] = null
       // the hours outside the window weren't known: they still aren't (a group the base didn't
-      // list, when the base lists every group, is one of them)
+      // list, when the base lists every group by its own rule, is one of them)
       else if (inside)
-        next[g] = prev === null || (prev === undefined && omitted !== 'none') ? null : [...outside, ...inside]
+        next[g] =
+          prev === null || emergency || (prev === undefined && baseOmitted !== 'none')
+            ? null
+            : [...outside, ...inside]
+      // a group the window doesn't list: by the window's own rule, none in it or not said
       else if (prev !== undefined)
         next[g] =
-          prev &&
-          (omitted === 'none' || prev.every((s) => s.end <= pub.from || s.start >= to) ? outside : null)
+          prev && !emergency
+            ? omitted === 'none' || prev.every((s) => s.end <= pub.from || s.start >= to)
+              ? outside
+              : null
+            : prev === null || emergency
+              ? null
+              : prev
     }
     cur = next
   }
-  return { groups: cur, cancelled, based }
+  return { groups: cur, cancelled, based, status, omitted: baseOmitted }
 }
 
 /** What the posts say about one date */
@@ -299,6 +349,7 @@ export function textPublications(
           // a list for a window of the day ("з 10:00 до 16:00") leaves the hours after it alone
           ...(ev.at && ev.until ? { to: clockMinutes(ev.until, true) } : {}),
           ...(cancelled ? { cancelled } : {}),
+          ...(cancelled && ev.untilFurtherNotice ? { untilFurtherNotice: true } : {}),
           ...(ev.action === 'change' ? { add: true } : {}),
         },
       })
@@ -485,7 +536,7 @@ export function assembleDays(
   now: Date,
   opts: PostsOptions = {},
 ): Map<string, PostDay> {
-  const all = untilFurtherNotice(pubs, analyzed, region, now, opts)
+  const all = untilFurtherNotice([...pubs], analyzed, region, now, opts)
   const unread = resolveUnread(items, all, newerThan(analyzed, opts), now)
   const days = daysOf(all, opts)
   for (const [d, item] of unread) {
@@ -497,26 +548,80 @@ export function assembleDays(
 }
 
 /**
- * Text posts through the text processor, then `assembleDays`. A post that can't be read (yet)
- * leaves the days it may be about as read, flagged
+ * What a reader of posts or pictures gives `mergeSources`: its publications as they were made and
+ * what it couldn't read, for the one fold of every channel (`foldPublications`). `since`: the
+ * oldest day given; `stamp`: the operator's own time of a day's newest publication on a page
+ * without times ("(оновлено 21:25)")
+ */
+export function publicationsRead(
+  analyzed: readonly Analyzed[],
+  pubs: readonly DatedPublication[],
+  items: readonly UnreadItem[],
+  region: RegionId,
+  now: Date,
+  opts: PostsOptions & {
+    since?: string
+    stamp?: (p: DatedPublication) => string | null
+  } = {},
+): SourceRead {
+  // "до окремого розпорядження" is carried to the fold, which reaches every channel's days
+  const all = pubs.filter((p) => !opts.since || p.date >= opts.since || p.pub.untilFurtherNotice)
+  const seq = (p: DatedPublication) => p.seq ?? -p.post
+  // on a page without times only the newest post of a day has the operator's time (every event of
+  // it, in its order): an older one stamped would pass the newer
+  const newest = new Map<string, DatedPublication>()
+  for (const p of all) {
+    const n = newest.get(p.date)
+    if (!n || seq(p) > seq(n)) newest.set(p.date, p)
+  }
+  const atOf = (p: DatedPublication) =>
+    opts.stamp && newest.get(p.date)?.post === p.post
+      ? opts.stamp(p)
+      : Number.isFinite(p.at)
+        ? toKyivIso(new Date(p.at))
+        : null
+  return {
+    days: {},
+    publications: all.map((p) => ({
+      date: p.date,
+      at: atOf(p),
+      seq: seq(p),
+      pub: { ...p.pub, omitted: p.pub.omitted ?? opts.omitted ?? 'unknown' },
+    })),
+    unread: items.map((it) => {
+      const input = analyzed[it.post]?.input
+      return {
+        days: it.days.filter((d) => !opts.since || d >= opts.since),
+        at: opts.timeless || !input ? null : input.publishedAt,
+        seq: input ? seqOf(input, it.post) : 0,
+        message: it.error.message,
+      }
+    }),
+    ...(opts.groups ? { groups: [...opts.groups] } : {}),
+  }
+}
+
+/**
+ * Text posts through the text processor: their publications and what couldn't be read
+ * (`publicationsRead` for `mergeSources`), and the days they make on their own (`assembleDays`)
  */
 export async function readSchedulePosts(
   ctx: ProviderContext,
   region: RegionId,
   inputs: readonly PostInput[],
-  opts: PostsOptions = {},
-): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[] }> {
+  opts: PostsOptions & { since?: string; stamp?: (p: DatedPublication, a: Analyzed) => string | null } = {},
+): Promise<{ days: Map<string, PostDay>; analyzed: Analyzed[]; read: SourceRead }> {
   const now = ctx.now()
   const analyzed = groundTimeless(await analyzeAll(ctx, region, inputs), region, opts)
-  const days = assembleDays(
-    analyzed,
-    textPublications(analyzed, region, now, opts),
-    textUnread(analyzed, region, now, opts),
-    region,
-    now,
-    opts,
-  )
-  return { days, analyzed }
+  const pubs = textPublications(analyzed, region, now, opts)
+  const items = textUnread(analyzed, region, now, opts)
+  const days = assembleDays(analyzed, pubs, items, region, now, opts)
+  const { stamp, ...rest } = opts
+  const read = publicationsRead(analyzed, pubs, items, region, now, {
+    ...rest,
+    ...(stamp ? { stamp: (p: DatedPublication) => stamp(p, analyzed[p.post]!) } : {}),
+  })
+  return { days, analyzed, read }
 }
 
 /**
@@ -660,7 +765,10 @@ export async function readChannelPosts(
       `Telegram @${channel}: the posts since ${toKyivIso(since)} couldn't all be read (only from ${from})`,
       { region, url: `https://t.me/s/${channel}` },
     )
-  const { days } = await readSchedulePosts(ctx, region, channelInputs(posts, region), opts)
+  const { days, read } = await readSchedulePosts(ctx, region, channelInputs(posts, region), {
+    ...opts,
+    since: today,
+  })
   for (const date of [...days.keys()]) if (date < today) days.delete(date)
-  return { read: daysToSource(days, opts), days }
+  return { read, days }
 }

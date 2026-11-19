@@ -478,3 +478,27 @@ describe('review fixes: cancellations until further notice, ties', () => {
     expect(s.schedules['1.1']!.find((d) => d.date === '2026-11-19')?.status).toBe('unknown')
   })
 })
+
+describe('publicationsRead: a page stamps every event of its newest post, in their order', () => {
+  it('a list and a correction in one article both get the stamp', async () => {
+    const { publicationsRead } = await import('../../src/providers/posts.js')
+    const pubs = [
+      { date: '2026-11-05', at: NaN, post: 0, seq: 0, pub: { groups: { '1.1': [] }, from: 0 } },
+      {
+        date: '2026-11-05',
+        at: NaN,
+        post: 0,
+        seq: 0,
+        pub: { groups: { '1.1': [{ start: 600, end: 660, kind: 'off' as const }] }, from: 0, add: true },
+      },
+    ]
+    const r = publicationsRead([] as never, pubs, [], 'zaporizhzhia', new Date('2026-11-05T12:00:00+02:00'), {
+      timeless: true,
+      stamp: () => '2026-11-05T09:00:00+02:00',
+    })
+    expect(r.publications!.map((p) => p.at)).toEqual([
+      '2026-11-05T09:00:00+02:00',
+      '2026-11-05T09:00:00+02:00',
+    ])
+  })
+})

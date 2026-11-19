@@ -2,6 +2,15 @@ import { OutageError } from '../errors.js'
 import { compareGroups } from '../schedule.js'
 import { kyivDate, toKyivIso } from '../time.js'
 import type { DaySchedule, GroupId, RegionId, RegionSchedule, SourceStatus } from '../types.js'
+import {
+  dayPublication,
+  foldOne,
+  foldPublications,
+  time,
+  withNotice,
+  type SourcedPublication,
+} from './fold.js'
+import { isWhole, type Publication } from './posts.js'
 import type { ProviderContext } from './provider.js'
 
 /**
@@ -42,10 +51,39 @@ export interface SourceRead {
       partial?: boolean
     }
   >
+  /**
+   * What a reader of posts or pictures publishes, as it was published (whole days, windows,
+   * corrections, cancellations): layered with every other channel's publications, oldest first
+   */
+  publications?: SourcePublication[]
+  /**
+   * Its posts or pictures that couldn't be read (yet): each flags the days it may be about, until
+   * a newer whole day of any channel stands in for it
+   */
+  unread?: SourceUnread[]
   /** Groups this channel knows of, listed in the result even when no day names them */
   groups?: GroupId[]
   /** Where exactly it was read (e.g. the post), when more precise than `SourceSpec.url` */
   url?: string
+}
+
+/** One publication of a channel (see `Publication`) */
+export interface SourcePublication {
+  date: string
+  /** When it was published, ISO; null when the channel doesn't say */
+  at: string | null
+  /** Among the same time, the higher is newer (a message id) */
+  seq?: number
+  pub: Publication
+}
+
+/** A post or picture of a channel that couldn't be read (yet) */
+export interface SourceUnread {
+  /** The days it may be about */
+  days: string[]
+  at: string | null
+  seq?: number
+  message: string
 }
 
 export interface SourceSpec {
@@ -120,72 +158,91 @@ export async function mergeSources(
 
   const groupSet = new Set<GroupId>(opts.groups ?? [])
   const dateSet = new Set<string>()
-  for (const r of reads) {
-    if (!r) continue
+  const pubs: SourcedPublication[] = []
+  reads.forEach((r, source) => {
+    if (!r) return
     for (const g of r.groups ?? []) groupSet.add(g)
     for (const [date, day] of Object.entries(r.days)) {
       dateSet.add(date)
       for (const g of Object.keys(day.schedules)) groupSet.add(g)
+      // a source that gives days: each is one whole publication, as of when it says
+      const pub = dayPublication(date, day.schedules, day)
+      if (pub) pubs.push({ source, date, at: time(day.publishedAt), iso: day.publishedAt, seq: 0, pub })
     }
-  }
+    for (const p of r.publications ?? []) {
+      dateSet.add(p.date)
+      for (const g of Object.keys(p.pub.groups)) groupSet.add(g)
+      pubs.push({ source, date: p.date, at: time(p.at), iso: p.at, seq: p.seq ?? 0, pub: p.pub })
+    }
+  })
+  // a post or picture that couldn't be read: its days flagged, until a newer whole day of any
+  // channel stands in for it (the same time is newer only on the same channel, by its order)
+  const today = kyivDate(ctx.now())
+  const flagged = new Map<number, Map<string, string>>()
+  reads.forEach((r, source) => {
+    for (const u of r?.unread ?? []) {
+      const at = time(u.at)
+      for (const date of u.days) {
+        if (date < today) continue
+        // with no time of its own (a page), only a newer one on its own page is known to be newer,
+        // by its place there; the same list published again is no newer word on the day
+        const covered = withNotice(pubs).some(
+          (p) =>
+            p.date === date &&
+            isWhole(p.pub) &&
+            !p.pub.reissue &&
+            (Number.isFinite(at)
+              ? p.at > at || (p.at === at && p.source === source && p.seq > (u.seq ?? 0))
+              : p.source === source && p.seq > (u.seq ?? 0)),
+        )
+        if (covered) continue
+        const mine = flagged.get(source) ?? new Map<string, string>()
+        if (!mine.has(date)) mine.set(date, u.message)
+        flagged.set(source, mine)
+        dateSet.add(date)
+      }
+    }
+  })
   const groups = [...groupSet].sort(compareGroups)
   const dates = [...dateSet].sort()
   if (!dates.length) dates.push(kyivDate(ctx.now()))
 
+  // every source's publications, together
+  const folded = foldPublications(pubs, groups)
   const schedules: Record<GroupId, DaySchedule[]> = {}
   for (const g of groups) schedules[g] = []
   let updated = -Infinity
   for (const date of dates) {
-    let winner = -1
-    let winnerAt = -Infinity
-    const published: number[] = []
-    reads.forEach((r, i) => {
-      const day = r?.days[date]
-      if (!day || !hasPublished(day)) return
-      published.push(i)
-      const at = time(day.publishedAt)
-      // strictly newer: a tie stays with the earlier spec
-      if (winner === -1 || at > winnerAt) {
-        winner = i
-        winnerAt = at
-      }
-    })
-    const won = winner === -1 ? undefined : reads[winner]!.days[date]!
-    for (const g of groups)
-      schedules[g]!.push(
-        won?.schedules[g] ? { ...won.schedules[g], date } : { date, status: 'unknown', intervals: [] },
-      )
-    if (!won) continue
-    const status = statuses[winner]!
+    const day = folded.get(date)
+    for (const g of groups) schedules[g]!.push(day?.groups[g] ?? { date, status: 'unknown', intervals: [] })
+    if (!day) continue
+    const status = statuses[day.winner]!
     status.dates.push(date)
-    if (winnerAt > updated) updated = winnerAt
-    if (winnerAt > time(status.updatedAt)) status.updatedAt = won.publishedAt
-    for (const i of published) {
-      const other = reads[i]!.days[date]!
+    if (day.at > updated) updated = day.at
+    if (day.at > time(status.updatedAt)) status.updatedAt = day.iso
+    // another source that published the day another way: behind, or the trace if the newer is wrong
+    for (const i of day.sources) {
+      if (i === day.winner) continue
+      const own = foldOne(pubs, i, date, groups)
       // a schedule on one channel and a cancellation on the other is a disagreement too
-      if (i !== winner && (!won.cancelled !== !other.cancelled || differ(won.schedules, other.schedules)))
-        statuses[i]!.disagrees = true
+      if (own.cancelled !== day.cancelled || differ(day.groups, own.days)) statuses[i]!.disagrees = true
     }
   }
   // the days a channel couldn't read, and why
   reads.forEach((r, i) => {
-    const unread = Object.entries(r?.days ?? {})
-      .filter(([, d]) => d.unread)
-      .map(([date, d]) => ({ date, message: d.unread! }))
-      .sort((a, b) => a.date.localeCompare(b.date))
+    const unread = [
+      ...Object.entries(r?.days ?? {})
+        .filter(([, d]) => d.unread)
+        .map(([date, d]) => ({ date, message: d.unread! })),
+      ...[...(flagged.get(i) ?? [])].map(([date, message]) => ({ date, message })),
+    ].sort((a, b) => a.date.localeCompare(b.date))
     if (unread.length) statuses[i]!.unread = unread
   })
   // a channel that won no day still says when it last published something
-  reads.forEach((r, i) => {
-    if (!r || statuses[i]!.dates.length) return
-    let newest = -Infinity
-    for (const day of Object.values(r.days)) {
-      const at = time(day.publishedAt)
-      if (hasPublished(day) && at > newest) {
-        newest = at
-        statuses[i]!.updatedAt = day.publishedAt
-      }
-    }
+  statuses.forEach((status, i) => {
+    if (status.dates.length) return
+    const newest = pubs.filter((p) => p.source === i).sort((a, b) => b.at - a.at)[0]
+    if (newest && Number.isFinite(newest.at)) status.updatedAt = newest.iso ?? toKyivIso(new Date(newest.at))
   })
 
   return {
@@ -196,15 +253,6 @@ export async function mergeSources(
     fetchedAt: toKyivIso(ctx.now()),
     sources: statuses,
   }
-}
-
-const hasPublished = (day: SourceRead['days'][string]) =>
-  !!day.cancelled || !!day.partial || Object.values(day.schedules).some((d) => d.status !== 'unknown')
-
-/** Instant of a `publishedAt`; none (or unreadable) sorts before every real one */
-function time(iso: string | null): number {
-  const t = iso ? Date.parse(iso) : NaN
-  return Number.isFinite(t) ? t : -Infinity
 }
 
 /** Two channels' versions of one day differ in a group both have published */
